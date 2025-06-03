@@ -188,6 +188,12 @@ const MainScreen = {
 			} else {
 				this.screentype = this.views[view];
 			}
+			var urlParams = new URLSearchParams(window.location.search);
+			var redirect = urlParams.get("redirect");
+			if (redirect) {
+				this.doRedirect(redirect);
+				return;
+			}
 			if (sugarizer.modules.history.get().length <= 1 && window.isNewUser) {
 				window.isNewUser = undefined;
 				this.startTutorial();
@@ -239,6 +245,38 @@ const MainScreen = {
 
 		clearSearchField() {
 			this.$refs.searchfield.searchQuery = '';
+		},
+
+		doRedirect(redirect) {
+			let redirectUrl = new URL(decodeURIComponent(redirect));
+			if (window.location.origin == redirectUrl.origin) {
+				let activityExist = false;
+				let activityId = redirectUrl.searchParams.get("a");
+				if (activityId) {
+					activityExist = (sugarizer.modules.activities.getById(activityId) != sugarizer.modules.activities.genericActivity());
+				}
+				if (activityExist) {
+					let objectId = redirectUrl.searchParams.get("o");
+					if (objectId) {
+						let data = datastore.find(activityId).filter(function(o) {
+							return o.objectId == objectId;
+						});
+						if (data.length == 0) {
+							redirectUrl.searchParams.delete("o");
+							redirectUrl.searchParams.set("n", sugarizer.modules.activities.getById(activityId).name);
+							console.log("Redirect object not found"); 
+						}
+					} else {
+						redirectUrl.searchParams.set("n", sugarizer.modules.activities.getById(activityId).name);
+					}
+					window.location = decodeURIComponent(redirectUrl.href);
+					return;
+				} else {
+					console.log("Redirect activity not found");
+				}
+			} else {
+				console.log("Redirect to a different server");
+			}
 		},
 
 		startTutorial() {

@@ -158,7 +158,10 @@ const LoginScreen = {
 		if (sugarizer.constant.platform.android && sugarizer.getClientPlatform() === sugarizer.constant.mobileType) {
 			AndroidFullScreen.immersiveMode(function() {}, function() {});
 		}
-		this.tutorialSteps
+		if (new URLSearchParams(window.location.search).get("redirect")) {
+			sugarizer.modules.humane.log(this.$t("LoginRedirect"));
+			return;
+		}
 	},
 
 	watch: {
