@@ -22,9 +22,12 @@
         <script src="lib/buffer.js"></script>
         <script src="lib/gltf.js"></script>
 	    <script src="lib/OBJLoader.js"></script>
+	
 
 		<link rel="stylesheet" href="css/activity.css" />
         <link rel="stylesheet" href="css/leaderboard.css" /> <!-- External CSS for the leaderboard -->
+		<link rel="stylesheet" href="css/introjs.css">
+		<script src="lib/intro.js"></script>
 		<script data-main="js/loader" src="lib/require.js"></script>
 		<script type="text/javascript" src="../../cordova.js"></script>
 	</head>
@@ -35,26 +38,46 @@
 				class="toolbutton"
 				id="activity-button"
 				title="My Activity"
+				data-l10n-id="ActivityTitle"
 			></button>
 
-			<button class="toolbutton" id="network-button" title="Network"></button>
+			<button 
+				class="toolbutton" 
+				id="network-button" 
+				title="Network" 
+				data-l10n-id="network" 
+			></button>
 
-			<button
-					class="toolbutton"
-					id="color-button-fill"
-					title="Fill Color"
-				></button>
+			<div class="seprator-line"></div>
 
-			<button
-					class="toolbutton"
-					id="zoom-button"
-					title="zoom palette"
-				></button>
+			<button 
+				class="toolbutton body-icon" 
+				id="model-button" 
+				title="Select a Model"
+				data-l10n-id="SelectModel"
+			></button>
 
 			<button
 				class="toolbutton"
 				id="settings-button"
 				title="settings"
+				data-l10n-id="Settings"
+			></button>
+
+			<button
+				class="toolbutton"
+				id="color-button-fill"
+				title="Fill Color"
+				data-l10n-id="FillColor"
+			></button>
+
+			<div class="seprator-line"></div>
+
+			<button
+				class="toolbutton"
+				id="zoom-button"
+				title="zoom palette"
+				data-l10n-id="ZoomPalette"
 			></button>
 
 			<!-- Add more buttons here -->
@@ -64,14 +87,32 @@
 				class="toolbutton pull-right"
 				id="stop-button"
 				title="Stop"
+				data-l10n-id="Stop"
+			></button>
+
+			<button 
+				class="toolbutton pull-right" 
+				id="fullscreen-button" 
+				title="Fullscreen"
+				data-l10n-id="Fullscreen"
+			></button>
+
+			<button 
+				class="toolbutton pull-right" 
+				id="help-button" 
+				title="Tutorial"
+				data-l10n-id="Tutorial"
 			></button>
 		</div>
 		<div id="canvas">
 			<!-- <button id="throw-button">Throw the Dice</button> -->
 			<div id="score-container">
 				<!-- <p id="total-score">Total Score: <span id="score">0</span> </p> -->
-				<div class="arrow-container">
-					<button id="up-button" class="arrow-button"></button>
+				<div class="arrow-container" id="orientation-buttons">
+					<button 
+						id="up-button" 
+						class="arrow-button"
+					></button>
 					<div class="left-right-buttons">
 						<button
 							id="left-button"
@@ -82,7 +123,10 @@
 							class="arrow-button right"
 						></button>
 					</div>
-					<button id="down-button" class="arrow-button down"></button>
+					<button 
+						id="down-button" 
+						class="arrow-button down"
+					></button>
 				</div>
 			</div>
 
@@ -104,5 +148,11 @@
 			</table>
 		</div>
 
+		<button 
+			class="toolbutton" 
+			id="unfullscreen-button" 
+			title="Unfullscreen"
+			data-l10n-id="Unfullscreen"
+		></button>
 	</body>
 </html>

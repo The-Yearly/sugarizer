@@ -42,6 +42,33 @@ body {
 	border-radius: 5.5px;
 }
 
+#main-toolbar #help-button {
+	background-image: url(../icons/help.svg);
+}
+
+#fullscreen-button {
+    background-image: url(../icons/view-fullscreen.svg);
+}
+
+#unfullscreen-button {
+    background-image: url(../icons/view-return.svg);
+    border: 0;
+    border-radius: 0px;
+    margin: 1px;
+    width: 45px;
+    height: 45px;
+    top: 10px;
+    right: 20px;
+    position: fixed;
+    visibility: hidden;
+    z-index: 1000;
+}
+
+#unfullscreen-button.visible {
+    visibility: visible;
+    opacity: 1;
+}
+
 #canvas {
     overflow: hidden;
 }
@@ -79,6 +106,18 @@ body {
 
 .active {
     background-color: #656565 !important;
+}
+
+.seprator-line {
+    background-color: #808080;
+    background-position: center;
+    width: 2px;
+    margin-left: 5px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+    height: 45px;
+    display: inline-block;
+    vertical-align: bottom;
 }
 
 #game-container {
@@ -152,12 +191,65 @@ body {
     outline: none;
 }
 
-#settings-button {
+.model-palette .toolbutton.active {
+    background-color: #808080;
+    border-radius: 5px;
+}
+
+#model-button {
     height: 45px;
     width: 45xpx;
     background-size: cover;
     background-repeat: no-repeat;
-    background-image: url(../icons/settings.svg);
+    background-image: url(../icons/model-skeleton.svg);
+    outline: none;
+}
+
+#model-skeleton-button {
+    background-image: url(../icons/model-skeleton.svg);
+    width: 50px;
+    height: 50px;
+    background-color: #000000;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+#model-body-button {
+    background-image: url(../icons/model-body.svg);
+    width: 50px;
+    height: 50px;
+    background-color: #000000;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+#model-organs-button {
+    background-image: url(../icons/model-organs.svg);
+    width: 50px;
+    height: 50px;
+    background-color: #000000;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+#model-button.skeleton-icon {
+    background-image: url(../icons/model-skeleton.svg);
+}
+
+#model-button.body-icon {
+    background-image: url(../icons/model-body.svg);
+}
+
+#model-button.organs-icon {
+    background-image: url(../icons/model-organs.svg);
+}
+
+#settings-button {
+    height: 45px;
+    width: 45px;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-image: url(../icons/mode-paint.svg);
     outline: none;
 }
 
@@ -205,6 +297,39 @@ body {
     height: 100%;
     box-sizing: border-box;
     padding: 10px;
+}
+
+.settings-palette{
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.settings-button{
+    all : unset;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 24px;
+    width: calc(100% - 40px); /* Adjust width accounting for padding */
+}
+
+.settings-button.active {
+    background-color: #808080;
+    /* border-radius: 5px; */
+}
+
+.settings-button:hover {
+    background-color: #808080;
+    /* border-radius: 5px; */
+}
+
+.settings-button img {
+    width: 40px;
+    height: 40px;
 }
 
 #left-arrow,
@@ -258,10 +383,173 @@ body {
     background-color: #e9ecef;
     font-weight: bold;
 }
+.custom-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #f9f9f9;
+    padding: 30px;
+    border: 3px solid #007bff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.paint-modal {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #2c3e50;
+    color: #ffffff;
+    padding: 12px 16px;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1001;
+    font-size: 14px;
+    font-weight: 600;
+    width: 200px;
+    min-height: 20px;
+    max-height: 80px;
+    word-wrap: break-word;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+}
+
+.paint-modal.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 
 .leaderboard tr:last-child td {
     border-bottom: none;
 }
 
+/* UI styling for introJs-tutorial */
+.introjs-overlay {
+    background-color: #000 !important;
+    opacity: .8 !important;
+}
 
+.introjs-tooltip {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    border-radius: 6px !important;
+    padding: 2px 1px !important;
+    font-size: 14px !important;
+}
 
+.introjs-helperLayer {
+    background: inherit !important;
+    opacity: 0.6 !important;
+}
+
+.customTooltip .introjs-tooltip-header {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #ffffff;
+    text-shadow: none;
+    background-color: #808080;
+    margin: 0;
+    padding: 0px 10px;
+    border-bottom: 1px solid #ebebeb;
+    border-radius: 5px 5px 0 0;
+}
+
+.customTooltip .introjs-tooltip-title {
+    font-size: 14px;
+    padding: 0px 8px;
+    font-weight: 800;
+}
+
+.customTooltip .introjs-tooltiptext {
+    color: #000000;
+    line-height: 1.42857143;
+}
+
+.customTooltip .introjs-skipbutton {
+    float: right;
+    cursor: pointer;
+    background-image: url(../icons/dialog-cancel.svg);
+    width: 25px;
+    height: 25px;
+    background-size: 25px 25px;
+    margin-top: 2px;
+    padding: 0px;
+    white-space: nowrap;
+    color: transparent;
+    line-height: 27px;
+}
+
+.customTooltip .introjs-nextbutton::before {
+    content: "";
+    margin-right: 6px;
+    background-image: url(../icons/go-right.svg);
+    width: 20px;
+    height: 20px;
+    background-size: 20px 20px;
+}
+
+.customTooltip .introjs-prevbutton::before {
+    content: "";
+    margin-right: 6px;
+    background-image: url(../icons/go-left.svg);
+    width: 20px;
+    height: 20px;
+    background-size: 20px 20px;
+}
+
+.customTooltip .introjs-tooltipbuttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    border-top: 0px;
+    padding: 0px;
+    text-align: center;
+    white-space: normal;
+}
+
+.customTooltip .introjs-button {
+    text-shadow: none;
+    border-radius: 22px;
+    margin: 5px 8px 8px 8px;
+    width: fit-content;
+    background-color: #808080 !important;
+    display: flex !important;
+    align-items: center !important;
+    color: white !important;
+    padding: 6px 20px 6px 10px;
+    border: 0px;
+}
+
+.customTooltip .introjs-button:focus {
+    -webkit-box-shadow: 0 0 0 0rem rgba(158, 158, 158, .5);
+    box-shadow: 0 0 0 0rem rgba(158, 158, 158, .5);
+    border: 0px;
+    background-color: #808080 !important;
+}
+
+.customTooltip .introjs-disabled {
+    color: black !important;
+    border: 0px;
+    opacity: .65;
+}
+
+.customTooltip .introjs-disabled:focus {
+    -webkit-box-shadow: 0 0 0 0rem rgba(158, 158, 158, .5);
+    box-shadow: 0 0 0 0rem rgba(158, 158, 158, .5);
+    border: 0px; 
+}
