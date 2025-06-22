@@ -448,27 +448,42 @@ define([
 		}
 
 		function removeCurrentModel() {
-			if (currentModel) {
-				scene.remove(currentModel);
 
-				// Clean up model resources
-				currentModel.traverse((child) => {
-					if (child.isMesh) {
-						if (child.geometry) {
-							child.geometry.dispose();
+			const modelNamesToRemove = ['skeleton', 'human-body', 'organs'];
+			const childrenToRemove = [];
+
+			scene.children.forEach(child => {
+				if (child.name && modelNamesToRemove.includes(child.name)) {
+					console.log(`Found model to remove by name: ${child.name}`);
+					childrenToRemove.push(child);
+				}
+			});
+
+			// Remove found models
+			childrenToRemove.forEach(child => {
+				console.log(`Removing model: ${child.name}`);
+				scene.remove(child);
+
+				// Clean up resources
+				child.traverse((node) => {
+					if (node.isMesh) {
+						console.log(`Disposing mesh from ${child.name}: ${node.name}`);
+						if (node.geometry) {
+							node.geometry.dispose();
 						}
-						if (child.material) {
-							if (Array.isArray(child.material)) {
-								child.material.forEach(material => material.dispose());
+						if (node.material) {
+							if (Array.isArray(node.material)) {
+								node.material.forEach(material => material.dispose());
 							} else {
-								child.material.dispose();
+								node.material.dispose();
 							}
 						}
 					}
 				});
+			});
 
-				currentModel = null;
-			}
+			// Clear the currentModel reference
+			currentModel = null;
 		}
 
 		function switchModel(modelKey) {
@@ -485,19 +500,15 @@ define([
 			// Save current model's paint data before switching
 			if (currentModelName && currentModel) {
 				modelPaintData[currentModelName] = [...partsColored];
-				console.log(`Saved paint data for ${currentModelName}:`, modelPaintData[currentModelName]);
 			}
 
 			removeCurrentModel();
 			currentModelName = modelKey;
-
-			// Update body parts for new model
 			updateBodyPartsForModel(modelKey);
 
 			// Restore paint data for new model
 			if (modelPaintData[modelKey] && modelPaintData[modelKey].length > 0) {
 				partsColored = [...modelPaintData[modelKey]];
-				console.log(`Restored paint data for ${modelKey}:`, partsColored);
 			}
 
 			// Update toolbar icon
