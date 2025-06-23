@@ -589,8 +589,20 @@ define([
 
 		document.addEventListener('mode-selected', function (event) {
 			const selectedMode = event.detail.mode;
-			currentModeIndex = selectedMode;
-			updateModeText();
+
+			if (currentModeIndex !== selectedMode) {
+				currentModeIndex = selectedMode;
+				updateModeText();
+
+				// Broadcast mode change to other users in shared mode
+				if (presence && isHost) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: selectedMode,
+					});
+				}
+			}
 		});
 
 		// Link presence palette
@@ -689,6 +701,14 @@ define([
 			if (msg.action == "modeChange") {
 				const newModeIndex = msg.content;
 				if (currentModeIndex !== newModeIndex) {
+					// Stop current mode activities before switching
+					if (isTourActive) {
+						stopTourMode();
+					}
+					if (isDoctorActive) {
+						stopDoctorMode();
+					}
+
 					currentModeIndex = newModeIndex;
 					updateModeText();
 				}
@@ -756,6 +776,13 @@ define([
 				// Send full paint data instead of just current model data
 				sendFullPaintDataToNewUser();
 
+				// Send current mode to new user
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "modeChange",
+					content: currentModeIndex,
+				});
+
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
 					action: "init",
@@ -775,8 +802,6 @@ define([
 		};
 
 		const modeTextElem = document.getElementById("mode-text");
-		const leftArrow = document.getElementById("left-arrow");
-		const rightArrow = document.getElementById("right-arrow");
 
 		function updateModeText() {
 			// If switching from Tour mode, stop it
@@ -847,6 +872,18 @@ define([
 				const part = bodyParts[tourIndex];
 				const position = part.position;
 
+				// Broadcast tour step to other users if host
+				if (presence && isHost) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "tourStep",
+						content: {
+							index: tourIndex,
+							partName: part.name
+						},
+					});
+				}
+
 				// Find the mesh for the current body part
 				const currentMesh = currentModel.getObjectByName(part.mesh);
 
@@ -857,7 +894,6 @@ define([
 
 				// Highlight current mesh
 				if (currentMesh) {
-					// Store original material if not already stored
 					if (!currentMesh.userData.originalMaterial) {
 						currentMesh.userData.originalMaterial = currentMesh.material.clone();
 					}
@@ -896,6 +932,49 @@ define([
 		function stopTourMode() {
 			camera.position.set(0, 10, 20);
 			camera.lookAt(0, 0, 0);
+		}
+
+		function syncTourStep(index, partName) {
+			if (!isTourActive) return;
+			
+			tourIndex = index;
+			const part = bodyParts.find(p => p.name === partName);
+			if (!part) return;
+			
+			// Restore previous mesh color
+			if (previousMesh) {
+				previousMesh.material = previousMesh.userData.originalMaterial.clone();
+			}
+			
+			// Find and highlight current mesh
+			const currentMesh = currentModel.getObjectByName(part.mesh);
+			if (currentMesh) {
+				if (!currentMesh.userData.originalMaterial) {
+					currentMesh.userData.originalMaterial = currentMesh.material.clone();
+				}
+				
+				currentMesh.material = new THREE.MeshStandardMaterial({
+					color: new THREE.Color("#ffff00"),
+					side: THREE.DoubleSide,
+					transparent: true,
+					opacity: 0.8,
+					depthTest: true,
+					depthWrite: true,
+					emissive: new THREE.Color("#ffff00"),
+					emissiveIntensity: 0.2
+				});
+				
+				previousMesh = currentMesh;
+			}
+			
+			// Move camera to part position
+			const position = part.position;
+			camera.position.set(position[0], position[1], position[2] + 5);
+			camera.lookAt(position[0], position[1], position[2]);
+			camera.updateProjectionMatrix();
+			
+			// Show modal
+			showModal(l10n.get(part.name));
 		}
 
 		function startDoctorMode() {
