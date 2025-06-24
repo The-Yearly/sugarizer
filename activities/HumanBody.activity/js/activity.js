@@ -871,6 +871,7 @@ define([
 
 				const part = bodyParts[tourIndex];
 				const position = part.position;
+				const isFrontView = part.frontView !== undefined ? part.frontView : true; // Default to front view
 
 				// Broadcast tour step to other users if host
 				if (presence && isHost) {
@@ -912,9 +913,17 @@ define([
 					previousMesh = currentMesh;
 				}
 
-				// Zoom to the body part's position
-				camera.position.set(position[0], position[1], position[2] + 5);
-				camera.lookAt(position[0], position[1], position[2]);
+				// Position camera based on frontView boolean
+				if (isFrontView) {
+					// Position camera in front (positive Z)
+					camera.position.set(position[0], position[1], position[2] + 5);
+					camera.lookAt(position[0], position[1], position[2]);
+				} else {
+					// Position camera behind (negative Z) for back view
+					camera.position.set(position[0], position[1], position[2] - 5);
+					camera.lookAt(position[0], position[1], position[2]);
+				}
+
 				camera.updateProjectionMatrix();
 
 				// Display the name of the part using the modal
@@ -935,19 +944,23 @@ define([
 		}
 
 		function syncTourStep(index, partName) {
-			if (!isTourActive) return;
-			
-			tourIndex = index;
-			const part = bodyParts.find(p => p.name === partName);
+			if (!isTourActive || !currentModel) return;
+
+			const part = bodyParts[index];
 			if (!part) return;
-			
+
+			const position = part.position;
+			const isFrontView = part.frontView !== undefined ? part.frontView : true;
+
+			// Find and highlight the mesh
+			const currentMesh = currentModel.getObjectByName(part.mesh);
+
 			// Restore previous mesh color
 			if (previousMesh) {
 				previousMesh.material = previousMesh.userData.originalMaterial.clone();
 			}
-			
-			// Find and highlight current mesh
-			const currentMesh = currentModel.getObjectByName(part.mesh);
+
+			// Highlight current mesh
 			if (currentMesh) {
 				if (!currentMesh.userData.originalMaterial) {
 					currentMesh.userData.originalMaterial = currentMesh.material.clone();
@@ -963,18 +976,25 @@ define([
 					emissive: new THREE.Color("#ffff00"),
 					emissiveIntensity: 0.2
 				});
-				
+
 				previousMesh = currentMesh;
 			}
-			
-			// Move camera to part position
-			const position = part.position;
-			camera.position.set(position[0], position[1], position[2] + 5);
-			camera.lookAt(position[0], position[1], position[2]);
+
+			// Position camera based on frontView boolean
+			if (isFrontView) {
+				// Position camera in front (positive Z)
+				camera.position.set(position[0], position[1], position[2] + 5);
+				camera.lookAt(position[0], position[1], position[2]);
+			} else {
+				// Position camera behind (negative Z) for back view
+				camera.position.set(position[0], position[1], position[2] - 5);
+				camera.lookAt(position[0], position[1], position[2]);
+			}
+
 			camera.updateProjectionMatrix();
-			
-			// Show modal
-			showModal(l10n.get(part.name));
+
+			// Display the name of the part
+			showModal(l10n.get(partName));
 		}
 
 		function startDoctorMode() {
@@ -1541,10 +1561,34 @@ define([
 
 		// handle the click event for doctor mode checks if the clicked object is the correct body part
 		function handleDoctorMode(object) {
+			// Store original material if not already stored
+			if (!object.userData.originalMaterial) {
+				object.userData.originalMaterial = object.material.clone();
+			}
+
 			if (presence) {
 				const targetMeshName = bodyParts[presenceCorrectIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - color green temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#00ff00"), // Green
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#00ff00"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
 					if (ifDoctorHost) {
 						firstAnswer = true;
 						let target = players.findIndex(
@@ -1577,23 +1621,82 @@ define([
 					presenceIndex++;
 					setTimeout(startDoctorModePresence, 1500);
 				} else {
-					showModal(l10n.get("Wrong"));
+					// Wrong answer - color red temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#ff0000"), // Red
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#ff0000"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
+					// Show "Wrong" modal for incorrect answers
+					// showModal(l10n.get("Wrong"));
 				}
 			} else {
+				// Single player mode
 				const targetMeshName = bodyParts[currentBodyPartIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - color green temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#00ff00"), // Green
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#00ff00"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
 					showModal(
 						l10n.get("Correct") + " " +
 						(bodyParts[++currentBodyPartIndex] ?
 							l10n.get("NextPart", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) : "")
 					);
 				} else {
-					showModal(
-						bodyParts[++currentBodyPartIndex]?
-							l10n.get("TryToFind", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) :
-							""
-					);
+					// Wrong answer - color red temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#ff0000"), // Red
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#ff0000"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
+					// showModal(
+					// 	bodyParts[++currentBodyPartIndex] ?
+					// 		l10n.get("TryToFind", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) :
+					// 		""
+					// );
 				}
 
 				if (currentBodyPartIndex >= bodyParts.length) {
