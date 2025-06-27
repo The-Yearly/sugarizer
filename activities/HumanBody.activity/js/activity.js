@@ -343,7 +343,6 @@ define([
 				name,
 				position = { x: 0, y: 0, z: 0 },
 				scale = { x: 1, y: 1, z: 1 },
-				color = null,
 				callback = null
 			} = options;
 
@@ -357,11 +356,11 @@ define([
 					model.position.set(position.x, position.y, position.z);
 					model.scale.set(scale.x, scale.y, scale.z);
 
-					let meshCount = 0;
+					// Get the correct paint data for this model
+					const currentPaintData = modelPaintData[name] || partsColored;
+
 					model.traverse((node) => {
 						if (node.isMesh) {
-							meshCount++;
-
 							// Ensure geometry is properly set up
 							const geometry = node.geometry;
 
@@ -383,10 +382,32 @@ define([
 								nonIndexedGeometry.computeBoundingSphere();
 							}
 
-							// Set up material
+							// Store original material
 							node.userData.originalMaterial = node.material.clone();
 
-							if (!node.material.isMeshStandardMaterial) {
+							// Find saved color for this part
+							const savedColor = currentPaintData.find(
+								([partName]) => partName === node.name
+							);
+
+							// Apply saved color if exists, otherwise use default material
+							if (savedColor) {
+								const [, color] = savedColor;
+								if (color !== "#000000" && color !== "#ffffff") {
+									node.material = new THREE.MeshStandardMaterial({
+										color: new THREE.Color(color),
+										side: THREE.DoubleSide,
+										transparent: false,
+										opacity: 1.0,
+										depthTest: true,
+										depthWrite: true
+									});
+								} else {
+									// Use original material for default colors
+									node.material = node.userData.originalMaterial.clone();
+								}
+							} else {
+								// Use standard material for new meshes
 								node.material = new THREE.MeshStandardMaterial({
 									color: node.material.color || new THREE.Color(0xe7e7e7),
 									side: THREE.DoubleSide,
@@ -397,25 +418,6 @@ define([
 								});
 							}
 
-							// Apply saved colors
-							if (name === "skeleton") {
-								const part = partsColored.find(
-									([partName, partColor]) => partName === node.name
-								);
-								if (part) {
-									const [, partColor] = part;
-									if (partColor !== "#000000" && partColor !== "#ffffff") {
-										node.material = new THREE.MeshStandardMaterial({
-											color: new THREE.Color(partColor),
-											side: THREE.DoubleSide,
-											transparent: false,
-											opacity: 1.0,
-											depthTest: true,
-											depthWrite: true
-										});
-									}
-								}
-							}
 							node.visible = true;
 							node.castShadow = true;
 							node.receiveShadow = true;
@@ -624,6 +626,14 @@ define([
 					function (groupId) {
 						console.log("Activity shared");
 						isHost = true;
+
+						// Save current model's paint data before sharing
+						if (currentModelName && currentModel) {
+							modelPaintData[currentModelName] = [...partsColored];
+						}
+
+						// Send full paint data to any new users
+						sendFullPaintDataToNewUser();
 					}
 				);
 				network.onDataReceived(onNetworkDataReceived);
@@ -645,6 +655,7 @@ define([
 					...availableModels.body,
 					callback: (loadedModel) => {
 						currentModel = loadedModel;
+						applyModelColors(loadedModel, modelToLoad);
 					}
 				});
 			}
@@ -755,25 +766,47 @@ define([
 
 		function sendFullPaintDataToNewUser() {
 			if (presence && isHost) {
+				// Ensure we have current model's paint data
+				if (currentModelName) {
+					if (!modelPaintData[currentModelName]) {
+						modelPaintData[currentModelName] = [];
+					}
+					modelPaintData[currentModelName] = [...partsColored];
+				}
+
 				// Send model-specific paint data
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
 					action: "syncAllPaintData",
 					content: {
 						modelPaintData: modelPaintData,
-						currentModel: currentModelName
+						currentModel: currentModelName,
+						cameraPosition: camera.position,
+						cameraTarget: orbit.target,
+						cameraFov: camera.fov
 					},
 				});
 			}
-		}
+		};
 
 		var onNetworkUserChanged = function (msg) {
-			players.push([msg.user.name, 0]);
+
+			if (players.length === 0) {
+				players.push([username, 0]); // Add current user as first player
+			}
+			
+			// Add new user to players array if not already present
+			const existingPlayerIndex = players.findIndex(p => p[0] === msg.user.name);
+			if (existingPlayerIndex === -1) {
+				players.push([msg.user.name, 0]);
+			}
+		
 			if (isDoctorActive) {
 				showLeaderboard();
 			}
+			
 			if (isHost) {
-				// Send full paint data instead of just current model data
+				// Send full paint data to new user
 				sendFullPaintDataToNewUser();
 
 				// Send current mode to new user
@@ -783,6 +816,14 @@ define([
 					content: currentModeIndex,
 				});
 
+				// Send current model info
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "switchModel",
+					content: currentModelName,
+				});
+
+				// Send initialization data
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
 					action: "init",
@@ -872,6 +913,7 @@ define([
 				const part = bodyParts[tourIndex];
 				const position = part.position;
 				const isFrontView = part.frontView !== undefined ? part.frontView : true; // Default to front view
+				const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
 
 				// Broadcast tour step to other users if host
 				if (presence && isHost) {
@@ -913,8 +955,12 @@ define([
 					previousMesh = currentMesh;
 				}
 
-				// Position camera based on frontView boolean
-				if (isFrontView) {
+				// Position camera based on view type
+				if (isSideView) {
+					// Position camera from the side (positive X for right side view)
+					camera.position.set(position[0] + 5, position[1], position[2]);
+					camera.lookAt(position[0], position[1], position[2]);
+				} else if (isFrontView) {
 					// Position camera in front (positive Z)
 					camera.position.set(position[0], position[1], position[2] + 5);
 					camera.lookAt(position[0], position[1], position[2]);
@@ -951,6 +997,7 @@ define([
 
 			const position = part.position;
 			const isFrontView = part.frontView !== undefined ? part.frontView : true;
+			const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
 
 			// Find and highlight the mesh
 			const currentMesh = currentModel.getObjectByName(part.mesh);
@@ -965,7 +1012,7 @@ define([
 				if (!currentMesh.userData.originalMaterial) {
 					currentMesh.userData.originalMaterial = currentMesh.material.clone();
 				}
-				
+
 				currentMesh.material = new THREE.MeshStandardMaterial({
 					color: new THREE.Color("#ffff00"),
 					side: THREE.DoubleSide,
@@ -980,8 +1027,12 @@ define([
 				previousMesh = currentMesh;
 			}
 
-			// Position camera based on frontView boolean
-			if (isFrontView) {
+			// Position camera based on view type
+			if (isSideView) {
+				// Position camera from the side (positive X for right side view)
+				camera.position.set(position[0] + 5, position[1], position[2]);
+				camera.lookAt(position[0], position[1], position[2]);
+			} else if (isFrontView) {
 				// Position camera in front (positive Z)
 				camera.position.set(position[0], position[1], position[2] + 5);
 				camera.lookAt(position[0], position[1], position[2]);
@@ -1115,9 +1166,11 @@ define([
 
 
 		const clickZoom = (value, zoomType) => {
-			if (value >= 5 && zoomType === "zoomIn") {
+			if (zoomType === "zoomIn" && value > 5) {
+				// Allow zoom in as long as FOV is greater than 5
 				return value - 5;
-			} else if (value <= 75 && zoomType === "zoomOut") {
+			} else if (zoomType === "zoomOut" && value < 75) {
+				// Allow zoom out as long as FOV is less than 75
 				return value + 5;
 			} else {
 				return value;
@@ -1589,6 +1642,9 @@ define([
 						}
 					}, 1000);
 
+					// Show "Correct!" modal first
+					showModal(l10n.get("Correct"));
+
 					if (ifDoctorHost) {
 						firstAnswer = true;
 						let target = players.findIndex(
@@ -1605,6 +1661,12 @@ define([
 							}
 						);
 						showLeaderboard();
+
+						// Increment presenceIndex and start next question after delay
+						presenceIndex++;
+						setTimeout(() => {
+							startDoctorModePresence();
+						}, 2000); // 2 second delay before showing next question
 					}
 
 					if (!ifDoctorHost) {
@@ -1616,10 +1678,6 @@ define([
 							}
 						);
 					}
-
-					showModal(l10n.get("CorrectButFastest"));
-					presenceIndex++;
-					setTimeout(startDoctorModePresence, 1500);
 				} else {
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
@@ -1667,11 +1725,21 @@ define([
 						}
 					}, 1000);
 
-					showModal(
-						l10n.get("Correct") + " " +
-						(bodyParts[++currentBodyPartIndex] ?
-							l10n.get("NextPart", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) : "")
-					);
+					// Show "Correct!" modal first
+					showModal(l10n.get("Correct"));
+
+					// Increment the body part index
+					currentBodyPartIndex++;
+
+					// After delay, show next part or game over
+					setTimeout(() => {
+						if (currentBodyPartIndex < bodyParts.length) {
+							showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
+						} else {
+							showModal(l10n.get("GameOver"));
+							stopDoctorMode();
+						}
+					}, 2000); // 2 second delay before showing next question
 				} else {
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
@@ -1692,16 +1760,8 @@ define([
 						}
 					}, 1000);
 
-					// showModal(
-					// 	bodyParts[++currentBodyPartIndex] ?
-					// 		l10n.get("TryToFind", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) :
-					// 		""
-					// );
-				}
-
-				if (currentBodyPartIndex >= bodyParts.length) {
-					showModal(l10n.get("GameOver"));
-					stopDoctorMode();
+					// Show "Wrong" modal for incorrect answers
+					// showModal(l10n.get("Wrong"));
 				}
 			}
 		}

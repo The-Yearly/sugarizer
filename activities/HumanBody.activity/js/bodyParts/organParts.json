@@ -3,7 +3,7 @@
   { "name": "Eye", "mesh": "Eye_Eye_0001", "position": [0.01, 4.87, 0.82], "frontView": true },
   { "name": "Mouth", "mesh": "mouth", "position": [-0.01, 4.21, 0.73], "frontView": true },
   { "name": "Trachea", "mesh": "windpipe001", "position": [0, 2.67, 2.2], "frontView": true },
-  { "name": "Esophagus", "mesh": "food_pipe", "position": [-0.03, 1.71, -0.08], "frontView": false },
+  { "name": "Esophagus", "mesh": "food_pipe", "position": [-0.03, 1.71, -0.08], "frontView": false, "sideView": true },
   { "name": "SpinalCord", "mesh": "Spinal_chord", "position": [-0.01, 1.66, -0.75], "frontView": false },
   { "name": "Lungs", "mesh": "lungs001", "position": [0.03, 1.07, 2], "frontView": true },
   { "name": "Heart", "mesh": "heart", "position": [0.05, 1.75, 0.59], "frontView": true },
