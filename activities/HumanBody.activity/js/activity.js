@@ -790,17 +790,19 @@ define([
 		};
 
 		var onNetworkUserChanged = function (msg) {
-
 			if (players.length === 0) {
-				players.push([username, 0]); // Add current user as first player
+				// Add current user as first player with color
+				players.push([username, 0, currentenv.user.colorvalue]); 
 			}
 			
 			// Add new user to players array if not already present
 			const existingPlayerIndex = players.findIndex(p => p[0] === msg.user.name);
+
 			if (existingPlayerIndex === -1) {
-				players.push([msg.user.name, 0]);
+				// Include the user's color in the player data
+				players.push([msg.user.name, 0, msg.user.colorvalue]);
 			}
-		
+
 			if (isDoctorActive) {
 				showLeaderboard();
 			}
@@ -1085,23 +1087,57 @@ define([
 			let playerScores = players;
 			var tableBody = document.querySelector(".leaderboard tbody");
 
+			// Clear existing content
 			tableBody.innerHTML = "";
+
+			// Sort players by score (descending)
+			playerScores.sort((a, b) => b[1] - a[1]);
+
+			// Add each user with their icon and score
 			for (var i = 0; i < playerScores.length; i++) {
 				var playerName = playerScores[i][0]; // Get player name
 				var playerScore = playerScores[i][1]; // Get player score
+				var playerColor = playerScores[i][2] || currentenv.user.colorvalue; // Get player color or fallback to current user color
 
-				// Create a new row
-				var tableBody = document.querySelector(".leaderboard tbody");
-				var newRow = tableBody.insertRow();
+				// Create table row
+				var row = document.createElement("tr");
 
-				// Create new cells for player name and score
-				var nameCell = newRow.insertCell(0);
-				var scoreCell = newRow.insertCell(1);
+				// Create icon cell
+				var iconCell = document.createElement("td");
+				iconCell.style.textAlign = "center";
+				iconCell.style.padding = "5px";
 
-				// Set the text content for the cells
+				// Create icon with user's actual color
+				var iconElement = document.createElement("div");
+				iconElement.style.width = "30px";
+				iconElement.style.height = "30px";
+				iconElement.style.backgroundImage = `url(${generateXOLogoWithColor(playerColor)})`;
+				iconElement.style.backgroundSize = "contain";
+				iconElement.style.display = "inline-block";
+
+				// Create name cell
+				var nameCell = document.createElement("td");
 				nameCell.textContent = playerName;
-				scoreCell.textContent = playerScore;
+				nameCell.style.color = "#000000";
+				nameCell.style.padding = "5px";
+
+				// Add elements to row
+				iconCell.appendChild(iconElement);
+				row.appendChild(iconCell);
+				row.appendChild(nameCell);
+				tableBody.appendChild(row);
 			}
+		}
+
+		// Add this function to generate XO logos with colors (similar to Memorize)
+		function generateXOLogoWithColor(color) {
+			var xoLogo = '<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC \'-//W3C//DTD SVG 1.1//EN\'  \'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\' [<!ENTITY stroke_color "#010101"><!ENTITY fill_color "#FFFFFF">]><svg enable-background="new 0 0 55 55" height="55px" version="1.1" viewBox="0 0 55 55" width="55px" x="0px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" y="0px"><g display="block" id="stock-xo_1_"><path d="M33.233,35.1l10.102,10.1c0.752,0.75,1.217,1.783,1.217,2.932   c0,2.287-1.855,4.143-4.146,4.143c-1.145,0-2.178-0.463-2.932-1.211L27.372,40.961l-10.1,10.1c-0.75,0.75-1.787,1.211-2.934,1.211   c-2.284,0-4.143-1.854-4.143-4.141c0-1.146,0.465-2.184,1.212-2.934l10.104-10.102L11.409,24.995   c-0.747-0.748-1.212-1.785-1.212-2.93c0-2.289,1.854-4.146,4.146-4.146c1.143,0,2.18,0.465,2.93,1.214l10.099,10.102l10.102-10.103   c0.754-0.749,1.787-1.214,2.934-1.214c2.289,0,4.146,1.856,4.146,4.145c0,1.146-0.467,2.18-1.217,2.932L33.233,35.1z" fill="&fill_color;" stroke="&stroke_color;" stroke-width="3.5"/><circle cx="27.371" cy="10.849" fill="&fill_color;" r="8.122" stroke="&stroke_color;" stroke-width="3.5"/></g></svg>';
+
+			var coloredLogo = xoLogo;
+			coloredLogo = coloredLogo.replace("#010101", color.stroke);
+			coloredLogo = coloredLogo.replace("#FFFFFF", color.fill);
+
+			return "data:image/svg+xml;base64," + btoa(coloredLogo);
 		}
 
 		// Initialize the mode text
@@ -1647,22 +1683,7 @@ define([
 
 					if (ifDoctorHost) {
 						firstAnswer = true;
-						let target = players.findIndex(
-							(innerArray) => innerArray[0] === username
-						);
-						console.log("the doctor is in");
-						players[target][1]++;
-						presence.sendMessage(
-							presence.getSharedInfo().id,
-							{
-								user: presence.getUserInfo(),
-								action: "update",
-								content: players,
-							}
-						);
-						showLeaderboard();
-
-						// Increment presenceIndex and start next question after delay
+						// Remove score incrementing logic
 						presenceIndex++;
 						setTimeout(() => {
 							startDoctorModePresence();
@@ -1697,12 +1718,9 @@ define([
 							object.material = object.userData.originalMaterial.clone();
 						}
 					}, 1000);
-
-					// Show "Wrong" modal for incorrect answers
-					// showModal(l10n.get("Wrong"));
 				}
 			} else {
-				// Single player mode
+				// Single player mode (keep existing logic but remove score tracking)
 				const targetMeshName = bodyParts[currentBodyPartIndex].mesh;
 
 				if (object.name === targetMeshName) {
@@ -1759,9 +1777,6 @@ define([
 							object.material = object.userData.originalMaterial.clone();
 						}
 					}, 1000);
-
-					// Show "Wrong" modal for incorrect answers
-					// showModal(l10n.get("Wrong"));
 				}
 			}
 		}
