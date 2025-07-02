@@ -1,7 +1,140 @@
 #main-toolbar #activity-button {
-  background-image: url(../activity/activity-icon.svg);
+	background-image: url(../activity/activity-icon.svg);
 }
 
 body {
+	margin: 0;
+	overflow: hidden;
 	height: 100vh;
+}
+
+/* icons for toolbar button */
+#main-toolbar #network-button {
+	background-image: url(../lib/sugar-web/graphics/icons/actions/zoom-home.svg);
+}
+
+#private-button {
+	background-image: url(../lib/sugar-web/graphics/icons/actions/zoom-home.svg);
+	width: 47px;
+	height: 47px;
+	margin: 4px 2px;
+	color: white;
+	color: transparent;
+	background-color: transparent;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: contain;
+	border: 0;
+	border-radius: 5.5px;
+}
+
+#shared-button {
+	background-image: url(../lib/sugar-web/graphics/icons/actions/zoom-neighborhood.svg);
+	width: 47px;
+	height: 47px;
+	margin: 4px 2px;
+	color: white;
+	color: transparent;
+	background-color: transparent;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: contain;
+	border: 0;
+	border-radius: 5.5px;
+}
+
+#main-toolbar #help-button {
+	background-image: url(../icons/help.svg);
+}
+
+#play-button {
+	background-image: url(../icons/play.svg);
+}
+
+#addStickman-button {
+	background-image: url(../icons/stickman-new.svg);
+}
+
+#speed-button {
+	background-image: url(../icons/speed.svg);
+}
+
+#template-button {
+	background-image: url(../icons/stickman-template.svg);
+}
+
+#import-button {
+	background-image: url(../icons/video-import.svg);
+}
+
+#export-button {
+	background-image: url(../icons/video-export.svg);
+}
+
+#fullscreen-button {
+	background-image: url(../icons/view-fullscreen.svg);
+}
+
+#unfullscreen-button {
+	background-image: url(../icons/view-return.svg);
+	border: 0;
+	border-radius: 0px;
+	margin: 1px;
+	width: 45px;
+	height: 45px;
+	top: 10px;
+	right: 20px;
+	position: fixed;
+	visibility: hidden;
+	z-index: 1000;
+}
+
+#unfullscreen-button.visible {
+	visibility: visible;
+	opacity: 1;
+}
+
+/* vertical seprator line in toolbar */
+.seprator-line {
+	background-color: #808080;
+	background-position: center;
+	width: 2px;
+	margin-left: 5px;
+	margin-right: 4px;
+	margin-bottom: 4px;
+	height: 45px;
+	display: inline-block;
+	vertical-align: bottom;
+}
+
+/* Stickman canvas */
+
+#stickman-canvas{
+	height: 100%;
+}
+
+/* timeline */
+.timeline {
+	position: absolute;
+	bottom: 0px;
+	left: 0px;
+	height: 50px;
+	width: 100%;
+	min-height: 50px;
+	background: #c0c0c0;
+	border-top: 3px solid #282828;
+	padding: 1rem;
+	display: flex;
+	align-items: center;
+	/* overflow-x: scroll; */
+	overflow-y: hidden;
+	white-space: nowrap;
+	/* scrollbar-width: thin; */
+	/* scrollbar-color: #888 #f1f1f1; */
+	/* Add smooth scrolling */
+	scroll-behavior: smooth;
+	/* Ensure content doesn't wrap */
+	flex-wrap: nowrap;
+	/* Add padding for scrollbar */
+	padding-bottom: 12px; 
 }
