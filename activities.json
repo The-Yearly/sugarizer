@@ -57,5 +57,6 @@
 	{"id": "org.sugarlabs.Planets", "name": "Planets", "version": 1, "directory": "activities/Planets.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null},
 	{"id": "org.sugarlabs.Implode", "name": "Implode", "version": 1, "directory": "activities/Implode.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null},
 	{"id": "org.sugarlabs.Measure", "name": "Measure", "version": 1, "directory": "activities/Measure.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null},
-	{"id": "org.sugarlabs.ChartActivity", "name": "Chart", "version": 1, "directory": "activities/Chart.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null}
+	{"id": "org.sugarlabs.ChartActivity", "name": "Chart", "version": 1, "directory": "activities/Chart.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null},
+	{"id": "org.sugarlabs.StickmanAnimator", "name": "Stickman Animator", "version": 1, "directory": "activities/StickmanAnimator.activity", "icon": "activity/activity-icon.svg", "favorite": true, "activityId": null}
 ]
