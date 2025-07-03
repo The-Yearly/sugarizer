@@ -450,7 +450,6 @@ define([
 		}
 
 		function removeCurrentModel() {
-
 			const modelNamesToRemove = ['skeleton', 'human-body', 'organs'];
 			const childrenToRemove = [];
 
@@ -469,7 +468,7 @@ define([
 				// Clean up resources
 				child.traverse((node) => {
 					if (node.isMesh) {
-						console.log(`Disposing mesh from ${child.name}: ${node.name}`);
+						// console.log(`Disposing mesh from ${child.name}: ${node.name}`);
 						if (node.geometry) {
 							node.geometry.dispose();
 						}
@@ -504,7 +503,15 @@ define([
 				modelPaintData[currentModelName] = [...partsColored];
 			}
 
+			// Stop any ongoing tour before switching models
+			if (isTourActive && tourTimer) {
+				clearTimeout(tourTimer);
+				tourTimer = null;
+			}
+
+			// Remove current model before loading new one
 			removeCurrentModel();
+
 			currentModelName = modelKey;
 			updateBodyPartsForModel(modelKey);
 
@@ -534,6 +541,11 @@ define([
 				callback: (loadedModel) => {
 					currentModel = loadedModel;
 					applyModelColors(loadedModel, modelKey);
+
+					// Restart tour if we're in tour mode
+					if (isTourActive) {
+						startTourMode();
+					}
 				}
 			});
 		}
@@ -649,22 +661,27 @@ define([
 				partsColored = msg.content[0];
 				players = msg.content[1];
 				console.log(partsColored);
-				// Load the human body model
-				currentModelName = "body";
-				loadModel({
-					...availableModels.body,
-					callback: (loadedModel) => {
-						currentModel = loadedModel;
-						applyModelColors(loadedModel, modelToLoad);
-					}
-				});
+
+				// Update the model palette to show the correct active button
+				if (paletteModel.updateActiveModel) {
+					paletteModel.updateActiveModel(currentModelName);
+				}
+
+				// Update the settings palette to show the correct active mode
+				updateSettingsIconBasedOnMode(currentModeIndex);
 			}
 
 			if (msg.action == "nextQuestion") {
-				if (bodyParts[msg.content]) {
-					presenceCorrectIndex = msg.content;
-					currentBodyPartIndex = msg.content;
+				presenceCorrectIndex = msg.content.questionIndex;
+				currentBodyPartIndex = msg.content.questionIndex;
 
+				// Update players array with latest scores
+				if (msg.content.players) {
+					players = msg.content.players;
+					showLeaderboard();
+				}
+
+				if (bodyParts[presenceCorrectIndex]) {
 					showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceCorrectIndex].name) }));
 				}
 			}
@@ -675,23 +692,47 @@ define([
 			}
 
 			if (msg.action == "answer") {
-				console.log("answering")
+				console.log("Received answer from", msg.user.name);
+
+				// Only host processes answers
 				if (!ifDoctorHost || !firstAnswer) {
 					return;
 				}
-				let target = players.findIndex(
-					(innerArray) => innerArray[0] === msg.user.name
-				);
-				players[target][1]++;
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "update",
-					content: players,
-				});
-				console.log(msg.user.name + " was the fastest");
-				console.log(players);
+
+				// Only process if this is the correct answer for the current question
+				if (msg.content.correctIndex === presenceCorrectIndex) {
+					let targetPlayerIndex = players.findIndex(
+						(player) => player[0] === msg.content.userName
+					);
+
+					if (targetPlayerIndex !== -1) {
+						players[targetPlayerIndex][1]++; // Increment score
+						firstAnswer = false; // Only first correct answer gets points
+
+						console.log(msg.user.name + " answered correctly");
+						console.log("Updated scores:", players);
+
+						// Send updated scores to all players
+						if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+							presence.sendMessage(presence.getSharedInfo().id, {
+								user: presence.getUserInfo(),
+								action: "scoreUpdate",
+								content: players,
+							});
+						}
+
+						// Move to next question after a delay
+						setTimeout(() => {
+							presenceIndex++;
+							startDoctorModePresence();
+						}, 2000);
+					}
+				}
+			}
+
+			if (msg.action == "scoreUpdate") {
+				players = msg.content;
 				showLeaderboard();
-				presenceIndex++;
 			}
 
 			if (msg.action == "startDoctor") {
@@ -792,9 +833,9 @@ define([
 		var onNetworkUserChanged = function (msg) {
 			if (players.length === 0) {
 				// Add current user as first player with color
-				players.push([username, 0, currentenv.user.colorvalue]); 
+				players.push([username, 0, currentenv.user.colorvalue]);
 			}
-			
+
 			// Add new user to players array if not already present
 			const existingPlayerIndex = players.findIndex(p => p[0] === msg.user.name);
 
@@ -806,39 +847,44 @@ define([
 			if (isDoctorActive) {
 				showLeaderboard();
 			}
-			
+
 			if (isHost) {
 				// Send full paint data to new user
 				sendFullPaintDataToNewUser();
 
-				// Send current mode to new user
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "modeChange",
-					content: currentModeIndex,
-				});
+				// Send current mode to new user - with safety check
+				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: currentModeIndex,
+					});
 
-				// Send current model info
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "switchModel",
-					content: currentModelName,
-				});
+					// Send current model info
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "switchModel",
+						content: currentModelName,
+					});
 
-				// Send initialization data
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "init",
-					content: [partsColored, players],
-				});
+					// Send initialization data
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "init",
+						content: [partsColored, players],
+					});
+				}
 			}
 
 			if (isDoctorActive) {
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "startDoctor",
-					content: players,
-				});
+				// Send doctor mode start message - with safety check
+				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "startDoctor",
+						content: players,
+					});
+				}
 				ifDoctorHost = true;
 				startDoctorModePresence();
 			}
@@ -889,6 +935,40 @@ define([
 				} else {
 					console.log("starting doctor mode");
 					startDoctorMode();
+				}
+			}
+		}
+
+		function updateSettingsIconBasedOnMode(modeIndex) {
+			const settingsButton = document.getElementById("settings-button");
+			if (!settingsButton) return;
+
+			const modeIcons = {
+				0: 'paint',
+				1: 'compass',
+				2: 'doctor'
+			};
+
+			const iconName = modeIcons[modeIndex] || 'paint';
+			settingsButton.style.backgroundImage = `url(icons/mode-${iconName}.svg)`;
+
+			// Also update the active button in the settings palette
+			const palette = document.getElementById("settings-palette");
+			if (palette) {
+				const buttons = {
+					0: palette.querySelector("#paint-button"),
+					1: palette.querySelector("#tour-button"),
+					2: palette.querySelector("#doctor-button")
+				};
+
+				// Remove active class from all buttons
+				Object.values(buttons).forEach(btn => {
+					if (btn) btn.classList.remove('active');
+				});
+
+				// Add active class to current mode button
+				if (buttons[modeIndex]) {
+					buttons[modeIndex].classList.add('active');
 				}
 			}
 		}
@@ -1052,26 +1132,54 @@ define([
 
 		function startDoctorMode() {
 			currentBodyPartIndex = 0;
+			presenceIndex = 0;
+			presenceCorrectIndex = 0;
+			firstAnswer = true;
+
+			// Initialize players array if empty
+			if (players.length === 0 && presence) {
+				players.push([presence.getUserInfo().name, 0, presence.getUserInfo().colorvalue]);
+			}
+
 			if (bodyParts[currentBodyPartIndex]) {
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
+				showLeaderboard();
 			}
 		}
 
 		function startDoctorModePresence() {
-			presence.sendMessage(presence.getSharedInfo().id, {
-				user: presence.getUserInfo(),
-				action: "nextQuestion",
-				content: presenceIndex,
-			});
+			// Check if game is over
+			if (presenceIndex >= bodyParts.length) {
+				showModal(l10n.get("GameOverAll"));
+				return;
+			}
+
+			// Set up new question
 			presenceCorrectIndex = presenceIndex;
 			currentBodyPartIndex = presenceIndex;
+			firstAnswer = true; // Reset for new question
 
+			// Send next question to all players - with safety check
+			if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "nextQuestion",
+					content: {
+						questionIndex: presenceIndex,
+						players: players // Send updated scores
+					},
+				});
+			}
+
+			// Show the question
 			if (bodyParts[presenceIndex]) {
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceIndex].name) }));
-			} else {
-				showModal(l10n.get("GameOverAll"));
 			}
+
+			// Update leaderboard
+			showLeaderboard();
 		}
+		
 
 		function stopDoctorMode() {
 			if (modal) {
@@ -1121,10 +1229,18 @@ define([
 				nameCell.style.color = "#000000";
 				nameCell.style.padding = "5px";
 
+				// Create score cell
+				var scoreCell = document.createElement("td");
+				scoreCell.textContent = playerScore;
+				scoreCell.style.color = "#000000";
+				scoreCell.style.padding = "5px";
+				scoreCell.style.textAlign = "center";
+
 				// Add elements to row
 				iconCell.appendChild(iconElement);
 				row.appendChild(iconCell);
 				row.appendChild(nameCell);
+				row.appendChild(scoreCell);
 				tableBody.appendChild(row);
 			}
 		}
@@ -1585,7 +1701,6 @@ define([
 			showPaintModal(bodyPartName, userName);
 		}
 
-
 		// handle the click event for painting
 		function handlePaintMode(object) {
 			if (!object.userData.originalMaterial) {
@@ -1649,6 +1764,7 @@ define([
 		}
 
 		// handle the click event for doctor mode checks if the clicked object is the correct body part
+
 		function handleDoctorMode(object) {
 			// Store original material if not already stored
 			if (!object.userData.originalMaterial) {
@@ -1682,20 +1798,34 @@ define([
 					showModal(l10n.get("Correct"));
 
 					if (ifDoctorHost) {
-						firstAnswer = true;
-						// Remove score incrementing logic
+						// Host handles scoring and progression
+						if (firstAnswer) {
+							// Increment score for the host's correct answer
+							let hostPlayerIndex = players.findIndex(
+								(player) => player[0] === presence.getUserInfo().name
+							);
+							if (hostPlayerIndex !== -1) {
+								players[hostPlayerIndex][1]++;
+							}
+							firstAnswer = false;
+						}
+
+						// Move to next question
 						presenceIndex++;
 						setTimeout(() => {
 							startDoctorModePresence();
-						}, 2000); // 2 second delay before showing next question
-					}
-
-					if (!ifDoctorHost) {
+						}, 2000);
+					} else {
+						// Non-host sends answer to host
 						presence.sendMessage(
 							presence.getSharedInfo().id,
 							{
 								user: presence.getUserInfo(),
 								action: "answer",
+								content: {
+									correctIndex: presenceCorrectIndex,
+									userName: presence.getUserInfo().name
+								}
 							}
 						);
 					}
@@ -1757,7 +1887,7 @@ define([
 							showModal(l10n.get("GameOver"));
 							stopDoctorMode();
 						}
-					}, 2000); // 2 second delay before showing next question
+					}, 2000);
 				} else {
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
