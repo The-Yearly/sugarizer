@@ -548,6 +548,20 @@ define([
 					}
 				}
 			});
+
+			if (isDoctorActive) {
+				// Reset doctor mode state
+				currentBodyPartIndex = 0;
+				presenceIndex = 0;
+
+				// Update body parts for new model
+				updateBodyPartsForModel(modelKey);
+
+				// Show new question for the first part of new model
+				if (bodyParts.length > 0) {
+					showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[0].name) }));
+				}
+			}
 		}
 		
 		// apply saved colors based on model type
@@ -1143,7 +1157,7 @@ define([
 
 			if (bodyParts[currentBodyPartIndex]) {
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
-				showLeaderboard();
+				// showLeaderboard();
 			}
 		}
 
