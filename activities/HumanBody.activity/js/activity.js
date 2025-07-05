@@ -296,11 +296,14 @@ define([
 
 			if (environment.sharedId) {
 				console.log("Shared instance");
+				window.sharedActivity = true; // Set global flag
+				window.isHost = false; // Default to false until we know
 				presence = activity.getPresenceObject(function (
 					error,
 					network
 				) {
 					network.onDataReceived(onNetworkDataReceived);
+					network.onSharedActivityUserChanged(onNetworkUserChanged);
 				});
 			}
 		});
@@ -652,6 +655,8 @@ define([
 					function (groupId) {
 						console.log("Activity shared");
 						isHost = true;
+						window.isHost = true; // Set global flag
+						window.sharedActivity = true; // Set global flag
 
 						// Save current model's paint data before sharing
 						if (currentModelName && currentModel) {
