@@ -782,9 +782,13 @@ define([
 
 					currentModeIndex = newModeIndex;
 					updateModeText();
+
+					// Dispatch event to update settings palette icon
+					document.dispatchEvent(new CustomEvent('mode-changed', {
+						detail: { mode: newModeIndex }
+					}));
 				}
 			}
-
 			if (msg.action == "paint") {
 				const { objectName, color, bodyPartName, modelName } = msg.content;
 				applyPaintFromNetwork(objectName, color, bodyPartName, msg.user.name, modelName);
@@ -990,6 +994,11 @@ define([
 					buttons[modeIndex].classList.add('active');
 				}
 			}
+
+			// Dispatch event to ensure all instances are synced
+			document.dispatchEvent(new CustomEvent('mode-changed', {
+				detail: { mode: modeIndex }
+			}));
 		}
 		
 		function startTourMode() {

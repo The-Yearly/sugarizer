@@ -48,6 +48,25 @@ define([
 
 				// Don't pop down the palette automatically
 				self.autoPopDown = false;
+
+				// Listen for mode changes from host
+				document.addEventListener('mode-changed', function (event) {
+					var modeIndex = event.detail.mode;
+					var modeIcons = {
+						0: 'paint',
+						1: 'compass',
+						2: 'doctor'
+					};
+					updateSettingsIcon(modeIcons[modeIndex] || 'paint');
+
+					// Update active button in palette
+					var buttons = {
+						0: paintButton,
+						1: tourButton,
+						2: doctorButton
+					};
+					setActiveButton(buttons[modeIndex]);
+				});
 			} else {
 				// Set paint mode as default active mode for host/local users
 				updateSettingsIcon('paint');
