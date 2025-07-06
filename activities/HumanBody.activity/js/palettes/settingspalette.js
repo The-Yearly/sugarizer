@@ -33,17 +33,53 @@ define([
 				if (activeButton) activeButton.classList.add('active');
 			}
 
-			// Set paint mode as default active mode
-			updateSettingsIcon('paint');
-			setActiveButton(paintButton);
-			// Dispatch mode-selected event for paint mode
-			document.dispatchEvent(new CustomEvent('mode-selected', { 
-				detail: { mode: 0 } 
-			}));
+			// Check if in shared mode and not host
+			var isSharedNonHost = window.sharedActivity && !window.isHost;
 
-			if (paintButton) {
+			if (isSharedNonHost) {
+				// Disable all mode buttons for non-host users
+				allButtons.forEach(button => {
+					if (button) {
+						button.disabled = true;
+						button.style.opacity = "0.5";
+						button.style.cursor = "not-allowed";
+					}
+				});
+
+				// Don't pop down the palette automatically
+				self.autoPopDown = false;
+
+				// Listen for mode changes from host
+				document.addEventListener('mode-changed', function (event) {
+					var modeIndex = event.detail.mode;
+					var modeIcons = {
+						0: 'paint',
+						1: 'compass',
+						2: 'doctor'
+					};
+					updateSettingsIcon(modeIcons[modeIndex] || 'paint');
+
+					// Update active button in palette
+					var buttons = {
+						0: paintButton,
+						1: tourButton,
+						2: doctorButton
+					};
+					setActiveButton(buttons[modeIndex]);
+				});
+			} else {
+				// Set paint mode as default active mode for host/local users
+				updateSettingsIcon('paint');
+				setActiveButton(paintButton);
+				// Dispatch mode-selected event for paint mode
+				document.dispatchEvent(new CustomEvent('mode-selected', {
+					detail: { mode: 0 }
+				}));
+			}
+
+			if (paintButton && !isSharedNonHost) {
 				paintButton.addEventListener("click", function () {
-					document.dispatchEvent(new CustomEvent('mode-selected', 
+					document.dispatchEvent(new CustomEvent('mode-selected',
 						{ detail: { mode: 0 } }
 					));
 					updateSettingsIcon('paint');
@@ -52,20 +88,20 @@ define([
 				});
 			}
 
-			if (tourButton) {
+			if (tourButton && !isSharedNonHost) {
 				tourButton.addEventListener("click", function () {
-					document.dispatchEvent(new CustomEvent('mode-selected', 
+					document.dispatchEvent(new CustomEvent('mode-selected',
 						{ detail: { mode: 1 } }
 					));
-					 updateSettingsIcon('compass');
-					 setActiveButton(tourButton);
+					updateSettingsIcon('compass');
+					setActiveButton(tourButton);
 					self.popDown();
 				});
 			}
 
-			if (doctorButton) {
+			if (doctorButton && !isSharedNonHost) {
 				doctorButton.addEventListener("click", function () {
-					document.dispatchEvent(new CustomEvent('mode-selected', 
+					document.dispatchEvent(new CustomEvent('mode-selected',
 						{ detail: { mode: 2 } }
 					));
 					updateSettingsIcon('doctor');

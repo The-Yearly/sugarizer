@@ -296,11 +296,14 @@ define([
 
 			if (environment.sharedId) {
 				console.log("Shared instance");
+				window.sharedActivity = true; // Set global flag
+				window.isHost = false; // Default to false until we know
 				presence = activity.getPresenceObject(function (
 					error,
 					network
 				) {
 					network.onDataReceived(onNetworkDataReceived);
+					network.onSharedActivityUserChanged(onNetworkUserChanged);
 				});
 			}
 		});
@@ -343,7 +346,6 @@ define([
 				name,
 				position = { x: 0, y: 0, z: 0 },
 				scale = { x: 1, y: 1, z: 1 },
-				color = null,
 				callback = null
 			} = options;
 
@@ -357,11 +359,11 @@ define([
 					model.position.set(position.x, position.y, position.z);
 					model.scale.set(scale.x, scale.y, scale.z);
 
-					let meshCount = 0;
+					// Get the correct paint data for this model
+					const currentPaintData = modelPaintData[name] || partsColored;
+
 					model.traverse((node) => {
 						if (node.isMesh) {
-							meshCount++;
-
 							// Ensure geometry is properly set up
 							const geometry = node.geometry;
 
@@ -383,10 +385,32 @@ define([
 								nonIndexedGeometry.computeBoundingSphere();
 							}
 
-							// Set up material
+							// Store original material
 							node.userData.originalMaterial = node.material.clone();
 
-							if (!node.material.isMeshStandardMaterial) {
+							// Find saved color for this part
+							const savedColor = currentPaintData.find(
+								([partName]) => partName === node.name
+							);
+
+							// Apply saved color if exists, otherwise use default material
+							if (savedColor) {
+								const [, color] = savedColor;
+								if (color !== "#000000" && color !== "#ffffff") {
+									node.material = new THREE.MeshStandardMaterial({
+										color: new THREE.Color(color),
+										side: THREE.DoubleSide,
+										transparent: false,
+										opacity: 1.0,
+										depthTest: true,
+										depthWrite: true
+									});
+								} else {
+									// Use original material for default colors
+									node.material = node.userData.originalMaterial.clone();
+								}
+							} else {
+								// Use standard material for new meshes
 								node.material = new THREE.MeshStandardMaterial({
 									color: node.material.color || new THREE.Color(0xe7e7e7),
 									side: THREE.DoubleSide,
@@ -397,25 +421,6 @@ define([
 								});
 							}
 
-							// Apply saved colors
-							if (name === "skeleton") {
-								const part = partsColored.find(
-									([partName, partColor]) => partName === node.name
-								);
-								if (part) {
-									const [, partColor] = part;
-									if (partColor !== "#000000" && partColor !== "#ffffff") {
-										node.material = new THREE.MeshStandardMaterial({
-											color: new THREE.Color(partColor),
-											side: THREE.DoubleSide,
-											transparent: false,
-											opacity: 1.0,
-											depthTest: true,
-											depthWrite: true
-										});
-									}
-								}
-							}
 							node.visible = true;
 							node.castShadow = true;
 							node.receiveShadow = true;
@@ -448,27 +453,41 @@ define([
 		}
 
 		function removeCurrentModel() {
-			if (currentModel) {
-				scene.remove(currentModel);
+			const modelNamesToRemove = ['skeleton', 'human-body', 'organs'];
+			const childrenToRemove = [];
 
-				// Clean up model resources
-				currentModel.traverse((child) => {
-					if (child.isMesh) {
-						if (child.geometry) {
-							child.geometry.dispose();
+			scene.children.forEach(child => {
+				if (child.name && modelNamesToRemove.includes(child.name)) {
+					console.log(`Found model to remove by name: ${child.name}`);
+					childrenToRemove.push(child);
+				}
+			});
+
+			// Remove found models
+			childrenToRemove.forEach(child => {
+				console.log(`Removing model: ${child.name}`);
+				scene.remove(child);
+
+				// Clean up resources
+				child.traverse((node) => {
+					if (node.isMesh) {
+						// console.log(`Disposing mesh from ${child.name}: ${node.name}`);
+						if (node.geometry) {
+							node.geometry.dispose();
 						}
-						if (child.material) {
-							if (Array.isArray(child.material)) {
-								child.material.forEach(material => material.dispose());
+						if (node.material) {
+							if (Array.isArray(node.material)) {
+								node.material.forEach(material => material.dispose());
 							} else {
-								child.material.dispose();
+								node.material.dispose();
 							}
 						}
 					}
 				});
+			});
 
-				currentModel = null;
-			}
+			// Clear the currentModel reference
+			currentModel = null;
 		}
 
 		function switchModel(modelKey) {
@@ -485,19 +504,23 @@ define([
 			// Save current model's paint data before switching
 			if (currentModelName && currentModel) {
 				modelPaintData[currentModelName] = [...partsColored];
-				console.log(`Saved paint data for ${currentModelName}:`, modelPaintData[currentModelName]);
 			}
 
-			removeCurrentModel();
-			currentModelName = modelKey;
+			// Stop any ongoing tour before switching models
+			if (isTourActive && tourTimer) {
+				clearTimeout(tourTimer);
+				tourTimer = null;
+			}
 
-			// Update body parts for new model
+			// Remove current model before loading new one
+			removeCurrentModel();
+
+			currentModelName = modelKey;
 			updateBodyPartsForModel(modelKey);
 
 			// Restore paint data for new model
 			if (modelPaintData[modelKey] && modelPaintData[modelKey].length > 0) {
 				partsColored = [...modelPaintData[modelKey]];
-				console.log(`Restored paint data for ${modelKey}:`, partsColored);
 			}
 
 			// Update toolbar icon
@@ -521,8 +544,27 @@ define([
 				callback: (loadedModel) => {
 					currentModel = loadedModel;
 					applyModelColors(loadedModel, modelKey);
+
+					// Restart tour if we're in tour mode
+					if (isTourActive) {
+						startTourMode();
+					}
 				}
 			});
+
+			if (isDoctorActive) {
+				// Reset doctor mode state
+				currentBodyPartIndex = 0;
+				presenceIndex = 0;
+
+				// Update body parts for new model
+				updateBodyPartsForModel(modelKey);
+
+				// Show new question for the first part of new model
+				if (bodyParts.length > 0) {
+					showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[0].name) }));
+				}
+			}
 		}
 		
 		// apply saved colors based on model type
@@ -578,8 +620,20 @@ define([
 
 		document.addEventListener('mode-selected', function (event) {
 			const selectedMode = event.detail.mode;
-			currentModeIndex = selectedMode;
-			updateModeText();
+
+			if (currentModeIndex !== selectedMode) {
+				currentModeIndex = selectedMode;
+				updateModeText();
+
+				// Broadcast mode change to other users in shared mode
+				if (presence && isHost) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: selectedMode,
+					});
+				}
+			}
 		});
 
 		// Link presence palette
@@ -601,6 +655,16 @@ define([
 					function (groupId) {
 						console.log("Activity shared");
 						isHost = true;
+						window.isHost = true; // Set global flag
+						window.sharedActivity = true; // Set global flag
+
+						// Save current model's paint data before sharing
+						if (currentModelName && currentModel) {
+							modelPaintData[currentModelName] = [...partsColored];
+						}
+
+						// Send full paint data to any new users
+						sendFullPaintDataToNewUser();
 					}
 				);
 				network.onDataReceived(onNetworkDataReceived);
@@ -616,21 +680,27 @@ define([
 				partsColored = msg.content[0];
 				players = msg.content[1];
 				console.log(partsColored);
-				// Load the human body model
-				currentModelName = "body";
-				loadModel({
-					...availableModels.body,
-					callback: (loadedModel) => {
-						currentModel = loadedModel;
-					}
-				});
+
+				// Update the model palette to show the correct active button
+				if (paletteModel.updateActiveModel) {
+					paletteModel.updateActiveModel(currentModelName);
+				}
+
+				// Update the settings palette to show the correct active mode
+				updateSettingsIconBasedOnMode(currentModeIndex);
 			}
 
 			if (msg.action == "nextQuestion") {
-				if (bodyParts[msg.content]) {
-					presenceCorrectIndex = msg.content;
-					currentBodyPartIndex = msg.content;
+				presenceCorrectIndex = msg.content.questionIndex;
+				currentBodyPartIndex = msg.content.questionIndex;
 
+				// Update players array with latest scores
+				if (msg.content.players) {
+					players = msg.content.players;
+					showLeaderboard();
+				}
+
+				if (bodyParts[presenceCorrectIndex]) {
 					showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceCorrectIndex].name) }));
 				}
 			}
@@ -641,23 +711,47 @@ define([
 			}
 
 			if (msg.action == "answer") {
-				console.log("answering")
+				console.log("Received answer from", msg.user.name);
+
+				// Only host processes answers
 				if (!ifDoctorHost || !firstAnswer) {
 					return;
 				}
-				let target = players.findIndex(
-					(innerArray) => innerArray[0] === msg.user.name
-				);
-				players[target][1]++;
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "update",
-					content: players,
-				});
-				console.log(msg.user.name + " was the fastest");
-				console.log(players);
+
+				// Only process if this is the correct answer for the current question
+				if (msg.content.correctIndex === presenceCorrectIndex) {
+					let targetPlayerIndex = players.findIndex(
+						(player) => player[0] === msg.content.userName
+					);
+
+					if (targetPlayerIndex !== -1) {
+						players[targetPlayerIndex][1]++; // Increment score
+						firstAnswer = false; // Only first correct answer gets points
+
+						console.log(msg.user.name + " answered correctly");
+						console.log("Updated scores:", players);
+
+						// Send updated scores to all players
+						if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+							presence.sendMessage(presence.getSharedInfo().id, {
+								user: presence.getUserInfo(),
+								action: "scoreUpdate",
+								content: players,
+							});
+						}
+
+						// Move to next question after a delay
+						setTimeout(() => {
+							presenceIndex++;
+							startDoctorModePresence();
+						}, 2000);
+					}
+				}
+			}
+
+			if (msg.action == "scoreUpdate") {
+				players = msg.content;
 				showLeaderboard();
-				presenceIndex++;
 			}
 
 			if (msg.action == "startDoctor") {
@@ -678,11 +772,23 @@ define([
 			if (msg.action == "modeChange") {
 				const newModeIndex = msg.content;
 				if (currentModeIndex !== newModeIndex) {
+					// Stop current mode activities before switching
+					if (isTourActive) {
+						stopTourMode();
+					}
+					if (isDoctorActive) {
+						stopDoctorMode();
+					}
+
 					currentModeIndex = newModeIndex;
 					updateModeText();
+
+					// Dispatch event to update settings palette icon
+					document.dispatchEvent(new CustomEvent('mode-changed', {
+						detail: { mode: newModeIndex }
+					}));
 				}
 			}
-
 			if (msg.action == "paint") {
 				const { objectName, color, bodyPartName, modelName } = msg.content;
 				applyPaintFromNetwork(objectName, color, bodyPartName, msg.user.name, modelName);
@@ -724,48 +830,90 @@ define([
 
 		function sendFullPaintDataToNewUser() {
 			if (presence && isHost) {
+				// Ensure we have current model's paint data
+				if (currentModelName) {
+					if (!modelPaintData[currentModelName]) {
+						modelPaintData[currentModelName] = [];
+					}
+					modelPaintData[currentModelName] = [...partsColored];
+				}
+
 				// Send model-specific paint data
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
 					action: "syncAllPaintData",
 					content: {
 						modelPaintData: modelPaintData,
-						currentModel: currentModelName
+						currentModel: currentModelName,
+						cameraPosition: camera.position,
+						cameraTarget: orbit.target,
+						cameraFov: camera.fov
 					},
 				});
 			}
-		}
+		};
 
 		var onNetworkUserChanged = function (msg) {
-			players.push([msg.user.name, 0]);
+			if (players.length === 0) {
+				// Add current user as first player with color
+				players.push([username, 0, currentenv.user.colorvalue]);
+			}
+
+			// Add new user to players array if not already present
+			const existingPlayerIndex = players.findIndex(p => p[0] === msg.user.name);
+
+			if (existingPlayerIndex === -1) {
+				// Include the user's color in the player data
+				players.push([msg.user.name, 0, msg.user.colorvalue]);
+			}
+
 			if (isDoctorActive) {
 				showLeaderboard();
 			}
+
 			if (isHost) {
-				// Send full paint data instead of just current model data
+				// Send full paint data to new user
 				sendFullPaintDataToNewUser();
 
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "init",
-					content: [partsColored, players],
-				});
+				// Send current mode to new user - with safety check
+				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: currentModeIndex,
+					});
+
+					// Send current model info
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "switchModel",
+						content: currentModelName,
+					});
+
+					// Send initialization data
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "init",
+						content: [partsColored, players],
+					});
+				}
 			}
 
 			if (isDoctorActive) {
-				presence.sendMessage(presence.getSharedInfo().id, {
-					user: presence.getUserInfo(),
-					action: "startDoctor",
-					content: players,
-				});
+				// Send doctor mode start message - with safety check
+				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "startDoctor",
+						content: players,
+					});
+				}
 				ifDoctorHost = true;
 				startDoctorModePresence();
 			}
 		};
 
 		const modeTextElem = document.getElementById("mode-text");
-		const leftArrow = document.getElementById("left-arrow");
-		const rightArrow = document.getElementById("right-arrow");
 
 		function updateModeText() {
 			// If switching from Tour mode, stop it
@@ -813,6 +961,45 @@ define([
 				}
 			}
 		}
+
+		function updateSettingsIconBasedOnMode(modeIndex) {
+			const settingsButton = document.getElementById("settings-button");
+			if (!settingsButton) return;
+
+			const modeIcons = {
+				0: 'paint',
+				1: 'compass',
+				2: 'doctor'
+			};
+
+			const iconName = modeIcons[modeIndex] || 'paint';
+			settingsButton.style.backgroundImage = `url(icons/mode-${iconName}.svg)`;
+
+			// Also update the active button in the settings palette
+			const palette = document.getElementById("settings-palette");
+			if (palette) {
+				const buttons = {
+					0: palette.querySelector("#paint-button"),
+					1: palette.querySelector("#tour-button"),
+					2: palette.querySelector("#doctor-button")
+				};
+
+				// Remove active class from all buttons
+				Object.values(buttons).forEach(btn => {
+					if (btn) btn.classList.remove('active');
+				});
+
+				// Add active class to current mode button
+				if (buttons[modeIndex]) {
+					buttons[modeIndex].classList.add('active');
+				}
+			}
+
+			// Dispatch event to ensure all instances are synced
+			document.dispatchEvent(new CustomEvent('mode-changed', {
+				detail: { mode: modeIndex }
+			}));
+		}
 		
 		function startTourMode() {
 			tourIndex = 0;
@@ -835,6 +1022,20 @@ define([
 
 				const part = bodyParts[tourIndex];
 				const position = part.position;
+				const isFrontView = part.frontView !== undefined ? part.frontView : true; // Default to front view
+				const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+
+				// Broadcast tour step to other users if host
+				if (presence && isHost) {
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "tourStep",
+						content: {
+							index: tourIndex,
+							partName: part.name
+						},
+					});
+				}
 
 				// Find the mesh for the current body part
 				const currentMesh = currentModel.getObjectByName(part.mesh);
@@ -846,7 +1047,6 @@ define([
 
 				// Highlight current mesh
 				if (currentMesh) {
-					// Store original material if not already stored
 					if (!currentMesh.userData.originalMaterial) {
 						currentMesh.userData.originalMaterial = currentMesh.material.clone();
 					}
@@ -865,9 +1065,21 @@ define([
 					previousMesh = currentMesh;
 				}
 
-				// Zoom to the body part's position
-				camera.position.set(position[0], position[1], position[2] + 5);
-				camera.lookAt(position[0], position[1], position[2]);
+				// Position camera based on view type
+				if (isSideView) {
+					// Position camera from the side (positive X for right side view)
+					camera.position.set(position[0] + 5, position[1], position[2]);
+					camera.lookAt(position[0], position[1], position[2]);
+				} else if (isFrontView) {
+					// Position camera in front (positive Z)
+					camera.position.set(position[0], position[1], position[2] + 5);
+					camera.lookAt(position[0], position[1], position[2]);
+				} else {
+					// Position camera behind (negative Z) for back view
+					camera.position.set(position[0], position[1], position[2] - 5);
+					camera.lookAt(position[0], position[1], position[2]);
+				}
+
 				camera.updateProjectionMatrix();
 
 				// Display the name of the part using the modal
@@ -887,28 +1099,115 @@ define([
 			camera.lookAt(0, 0, 0);
 		}
 
+		function syncTourStep(index, partName) {
+			if (!isTourActive || !currentModel) return;
+
+			const part = bodyParts[index];
+			if (!part) return;
+
+			const position = part.position;
+			const isFrontView = part.frontView !== undefined ? part.frontView : true;
+			const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+
+			// Find and highlight the mesh
+			const currentMesh = currentModel.getObjectByName(part.mesh);
+
+			// Restore previous mesh color
+			if (previousMesh) {
+				previousMesh.material = previousMesh.userData.originalMaterial.clone();
+			}
+
+			// Highlight current mesh
+			if (currentMesh) {
+				if (!currentMesh.userData.originalMaterial) {
+					currentMesh.userData.originalMaterial = currentMesh.material.clone();
+				}
+
+				currentMesh.material = new THREE.MeshStandardMaterial({
+					color: new THREE.Color("#ffff00"),
+					side: THREE.DoubleSide,
+					transparent: true,
+					opacity: 0.8,
+					depthTest: true,
+					depthWrite: true,
+					emissive: new THREE.Color("#ffff00"),
+					emissiveIntensity: 0.2
+				});
+
+				previousMesh = currentMesh;
+			}
+
+			// Position camera based on view type
+			if (isSideView) {
+				// Position camera from the side (positive X for right side view)
+				camera.position.set(position[0] + 5, position[1], position[2]);
+				camera.lookAt(position[0], position[1], position[2]);
+			} else if (isFrontView) {
+				// Position camera in front (positive Z)
+				camera.position.set(position[0], position[1], position[2] + 5);
+				camera.lookAt(position[0], position[1], position[2]);
+			} else {
+				// Position camera behind (negative Z) for back view
+				camera.position.set(position[0], position[1], position[2] - 5);
+				camera.lookAt(position[0], position[1], position[2]);
+			}
+
+			camera.updateProjectionMatrix();
+
+			// Display the name of the part
+			showModal(l10n.get(partName));
+		}
+
 		function startDoctorMode() {
 			currentBodyPartIndex = 0;
+			presenceIndex = 0;
+			presenceCorrectIndex = 0;
+			firstAnswer = true;
+
+			// Initialize players array if empty
+			if (players.length === 0 && presence) {
+				players.push([presence.getUserInfo().name, 0, presence.getUserInfo().colorvalue]);
+			}
+
 			if (bodyParts[currentBodyPartIndex]) {
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
+				// showLeaderboard();
 			}
 		}
 
 		function startDoctorModePresence() {
-			presence.sendMessage(presence.getSharedInfo().id, {
-				user: presence.getUserInfo(),
-				action: "nextQuestion",
-				content: presenceIndex,
-			});
+			// Check if game is over
+			if (presenceIndex >= bodyParts.length) {
+				showModal(l10n.get("GameOverAll"));
+				return;
+			}
+
+			// Set up new question
 			presenceCorrectIndex = presenceIndex;
 			currentBodyPartIndex = presenceIndex;
+			firstAnswer = true; // Reset for new question
 
+			// Send next question to all players - with safety check
+			if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "nextQuestion",
+					content: {
+						questionIndex: presenceIndex,
+						players: players // Send updated scores
+					},
+				});
+			}
+
+			// Show the question
 			if (bodyParts[presenceIndex]) {
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceIndex].name) }));
-			} else {
-				showModal(l10n.get("GameOverAll"));
 			}
+
+			// Update leaderboard
+			showLeaderboard();
 		}
+		
 
 		function stopDoctorMode() {
 			if (modal) {
@@ -924,23 +1223,65 @@ define([
 			let playerScores = players;
 			var tableBody = document.querySelector(".leaderboard tbody");
 
+			// Clear existing content
 			tableBody.innerHTML = "";
+
+			// Sort players by score (descending)
+			playerScores.sort((a, b) => b[1] - a[1]);
+
+			// Add each user with their icon and score
 			for (var i = 0; i < playerScores.length; i++) {
 				var playerName = playerScores[i][0]; // Get player name
 				var playerScore = playerScores[i][1]; // Get player score
+				var playerColor = playerScores[i][2] || currentenv.user.colorvalue; // Get player color or fallback to current user color
 
-				// Create a new row
-				var tableBody = document.querySelector(".leaderboard tbody");
-				var newRow = tableBody.insertRow();
+				// Create table row
+				var row = document.createElement("tr");
 
-				// Create new cells for player name and score
-				var nameCell = newRow.insertCell(0);
-				var scoreCell = newRow.insertCell(1);
+				// Create icon cell
+				var iconCell = document.createElement("td");
+				iconCell.style.textAlign = "center";
+				iconCell.style.padding = "5px";
 
-				// Set the text content for the cells
+				// Create icon with user's actual color
+				var iconElement = document.createElement("div");
+				iconElement.style.width = "30px";
+				iconElement.style.height = "30px";
+				iconElement.style.backgroundImage = `url(${generateXOLogoWithColor(playerColor)})`;
+				iconElement.style.backgroundSize = "contain";
+				iconElement.style.display = "inline-block";
+
+				// Create name cell
+				var nameCell = document.createElement("td");
 				nameCell.textContent = playerName;
+				nameCell.style.color = "#000000";
+				nameCell.style.padding = "5px";
+
+				// Create score cell
+				var scoreCell = document.createElement("td");
 				scoreCell.textContent = playerScore;
+				scoreCell.style.color = "#000000";
+				scoreCell.style.padding = "5px";
+				scoreCell.style.textAlign = "center";
+
+				// Add elements to row
+				iconCell.appendChild(iconElement);
+				row.appendChild(iconCell);
+				row.appendChild(nameCell);
+				row.appendChild(scoreCell);
+				tableBody.appendChild(row);
 			}
+		}
+
+		// Add this function to generate XO logos with colors (similar to Memorize)
+		function generateXOLogoWithColor(color) {
+			var xoLogo = '<?xml version="1.0" ?><!DOCTYPE svg  PUBLIC \'-//W3C//DTD SVG 1.1//EN\'  \'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\' [<!ENTITY stroke_color "#010101"><!ENTITY fill_color "#FFFFFF">]><svg enable-background="new 0 0 55 55" height="55px" version="1.1" viewBox="0 0 55 55" width="55px" x="0px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" y="0px"><g display="block" id="stock-xo_1_"><path d="M33.233,35.1l10.102,10.1c0.752,0.75,1.217,1.783,1.217,2.932   c0,2.287-1.855,4.143-4.146,4.143c-1.145,0-2.178-0.463-2.932-1.211L27.372,40.961l-10.1,10.1c-0.75,0.75-1.787,1.211-2.934,1.211   c-2.284,0-4.143-1.854-4.143-4.141c0-1.146,0.465-2.184,1.212-2.934l10.104-10.102L11.409,24.995   c-0.747-0.748-1.212-1.785-1.212-2.93c0-2.289,1.854-4.146,4.146-4.146c1.143,0,2.18,0.465,2.93,1.214l10.099,10.102l10.102-10.103   c0.754-0.749,1.787-1.214,2.934-1.214c2.289,0,4.146,1.856,4.146,4.145c0,1.146-0.467,2.18-1.217,2.932L33.233,35.1z" fill="&fill_color;" stroke="&stroke_color;" stroke-width="3.5"/><circle cx="27.371" cy="10.849" fill="&fill_color;" r="8.122" stroke="&stroke_color;" stroke-width="3.5"/></g></svg>';
+
+			var coloredLogo = xoLogo;
+			coloredLogo = coloredLogo.replace("#010101", color.stroke);
+			coloredLogo = coloredLogo.replace("#FFFFFF", color.fill);
+
+			return "data:image/svg+xml;base64," + btoa(coloredLogo);
 		}
 
 		// Initialize the mode text
@@ -1005,9 +1346,11 @@ define([
 
 
 		const clickZoom = (value, zoomType) => {
-			if (value >= 5 && zoomType === "zoomIn") {
+			if (zoomType === "zoomIn" && value > 5) {
+				// Allow zoom in as long as FOV is greater than 5
 				return value - 5;
-			} else if (value <= 75 && zoomType === "zoomOut") {
+			} else if (zoomType === "zoomOut" && value < 75) {
+				// Allow zoom out as long as FOV is less than 75
 				return value + 5;
 			} else {
 				return value;
@@ -1386,7 +1729,6 @@ define([
 			showPaintModal(bodyPartName, userName);
 		}
 
-
 		// handle the click event for painting
 		function handlePaintMode(object) {
 			if (!object.userData.originalMaterial) {
@@ -1450,65 +1792,149 @@ define([
 		}
 
 		// handle the click event for doctor mode checks if the clicked object is the correct body part
+
 		function handleDoctorMode(object) {
+			// Store original material if not already stored
+			if (!object.userData.originalMaterial) {
+				object.userData.originalMaterial = object.material.clone();
+			}
+
 			if (presence) {
 				const targetMeshName = bodyParts[presenceCorrectIndex].mesh;
 
 				if (object.name === targetMeshName) {
-					if (ifDoctorHost) {
-						firstAnswer = true;
-						let target = players.findIndex(
-							(innerArray) => innerArray[0] === username
-						);
-						console.log("the doctor is in");
-						players[target][1]++;
-						presence.sendMessage(
-							presence.getSharedInfo().id,
-							{
-								user: presence.getUserInfo(),
-								action: "update",
-								content: players,
-							}
-						);
-						showLeaderboard();
-					}
+					// Correct answer - color green temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#00ff00"), // Green
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#00ff00"),
+						emissiveIntensity: 0.3
+					});
 
-					if (!ifDoctorHost) {
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
+					// Show "Correct!" modal first
+					showModal(l10n.get("Correct"));
+
+					if (ifDoctorHost) {
+						// Host handles scoring and progression
+						if (firstAnswer) {
+							// Increment score for the host's correct answer
+							let hostPlayerIndex = players.findIndex(
+								(player) => player[0] === presence.getUserInfo().name
+							);
+							if (hostPlayerIndex !== -1) {
+								players[hostPlayerIndex][1]++;
+							}
+							firstAnswer = false;
+						}
+
+						// Move to next question
+						presenceIndex++;
+						setTimeout(() => {
+							startDoctorModePresence();
+						}, 2000);
+					} else {
+						// Non-host sends answer to host
 						presence.sendMessage(
 							presence.getSharedInfo().id,
 							{
 								user: presence.getUserInfo(),
 								action: "answer",
+								content: {
+									correctIndex: presenceCorrectIndex,
+									userName: presence.getUserInfo().name
+								}
 							}
 						);
 					}
-
-					showModal(l10n.get("CorrectButFastest"));
-					presenceIndex++;
-					setTimeout(startDoctorModePresence, 1500);
 				} else {
-					showModal(l10n.get("Wrong"));
+					// Wrong answer - color red temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#ff0000"), // Red
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#ff0000"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
 				}
 			} else {
+				// Single player mode (keep existing logic but remove score tracking)
 				const targetMeshName = bodyParts[currentBodyPartIndex].mesh;
 
 				if (object.name === targetMeshName) {
-					showModal(
-						l10n.get("Correct") + " " +
-						(bodyParts[++currentBodyPartIndex] ?
-							l10n.get("NextPart", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) : "")
-					);
-				} else {
-					showModal(
-						bodyParts[++currentBodyPartIndex]?
-							l10n.get("TryToFind", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }) :
-							""
-					);
-				}
+					// Correct answer - color green temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#00ff00"), // Green
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#00ff00"),
+						emissiveIntensity: 0.3
+					});
 
-				if (currentBodyPartIndex >= bodyParts.length) {
-					showModal(l10n.get("GameOver"));
-					stopDoctorMode();
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
+
+					// Show "Correct!" modal first
+					showModal(l10n.get("Correct"));
+
+					// Increment the body part index
+					currentBodyPartIndex++;
+
+					// After delay, show next part or game over
+					setTimeout(() => {
+						if (currentBodyPartIndex < bodyParts.length) {
+							showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
+						} else {
+							showModal(l10n.get("GameOver"));
+							stopDoctorMode();
+						}
+					}, 2000);
+				} else {
+					// Wrong answer - color red temporarily
+					object.material = new THREE.MeshStandardMaterial({
+						color: new THREE.Color("#ff0000"), // Red
+						side: THREE.DoubleSide,
+						transparent: false,
+						opacity: 1.0,
+						depthTest: true,
+						depthWrite: true,
+						emissive: new THREE.Color("#ff0000"),
+						emissiveIntensity: 0.3
+					});
+
+					// Restore original color after 1 second
+					setTimeout(() => {
+						if (object.userData.originalMaterial) {
+							object.material = object.userData.originalMaterial.clone();
+						}
+					}, 1000);
 				}
 			}
 		}
