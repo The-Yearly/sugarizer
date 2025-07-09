@@ -31,9 +31,9 @@
 
 		<button 
 			class="toolbutton" 
-			id="play-button" 
-			title="Play" 
-			data-l10n-id="Play"
+			id="play-pause-button" 
+			title="Play/Pause" 
+			data-l10n-id="PlayPause"
 		></button>
 
 		<button 
@@ -106,9 +106,9 @@
 	</div>
 
 	<!-- The content of your activity goes inside the canvas -->
-	<div id="canvas-cot">
-		<div id="stickman-canvas"><div>
-		<div class="timeline" id="timeline">Timeline</div>
+	<div id="canvas">
+		<canvas id="stickman-canvas"></canvas>
+		<div class="timeline" id="timeline"></div>
 		<div id="bottom-right-buttons">
 			<button 
 				class="" 
@@ -117,7 +117,7 @@
 				data-l10n-id="AddFrame"
 			></button>
 		</div>
-	</div>
+	</canvas>
 </body>
 
 </html>

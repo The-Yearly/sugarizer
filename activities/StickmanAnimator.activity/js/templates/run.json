@@ -1,0 +1,30 @@
+{
+	"frames": [
+		[
+			{"x": 200, "y": 160, "name": "head"},
+			{"x": 200, "y": 200, "name": "body"},
+			{"x": 200, "y": 225, "name": "hips"},
+			{"x": 170, "y": 250, "name": "leftKnee"},
+			{"x": 170, "y": 275, "name": "leftFoot"},
+			{"x": 230, "y": 250, "name": "rightKnee"},
+			{"x": 230, "y": 275, "name": "rightFoot"},
+			{"x": 170, "y": 200, "name": "leftElbow"},
+			{"x": 170, "y": 220, "name": "leftHand"},
+			{"x": 230, "y": 200, "name": "rightElbow"},
+			{"x": 230, "y": 220, "name": "rightHand"}
+		],
+		[
+			{"x": 200, "y": 162, "name": "head"},
+			{"x": 200, "y": 202, "name": "body"},
+			{"x": 200, "y": 227, "name": "hips"},
+			{"x": 220, "y": 240, "name": "leftKnee"},
+			{"x": 230, "y": 260, "name": "leftFoot"},
+			{"x": 180, "y": 250, "name": "rightKnee"},
+			{"x": 160, "y": 270, "name": "rightFoot"},
+			{"x": 230, "y": 190, "name": "leftElbow"},
+			{"x": 245, "y": 200, "name": "leftHand"},
+			{"x": 170, "y": 190, "name": "rightElbow"},
+			{"x": 155, "y": 200, "name": "rightHand"}
+		]
+	]
+}
