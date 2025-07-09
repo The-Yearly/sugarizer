@@ -826,6 +826,17 @@ define([
 				const { index, partName } = msg.content;
 				syncTourStep(index, partName);
 			}
+
+			if (msg.action == "restoreMaterials") {
+				// Only process if it's for the current model
+				if (msg.content.modelName === currentModelName && currentModel) {
+					currentModel.traverse((node) => {
+						if (node.isMesh && node.userData.originalMaterial) {
+							node.material = node.userData.originalMaterial.clone();
+						}
+					});
+				}
+			}
 		};
 
 		function sendFullPaintDataToNewUser() {
@@ -1095,8 +1106,29 @@ define([
 		}
 
 		function stopTourMode() {
+			// Restore all materials to their original state
+			if (currentModel) {
+				currentModel.traverse((node) => {
+					if (node.isMesh && node.userData.originalMaterial) {
+						node.material = node.userData.originalMaterial.clone();
+					}
+				});
+			}
+
+			// Reset camera to default position
 			camera.position.set(0, 10, 20);
 			camera.lookAt(0, 0, 0);
+
+			// Broadcast material restoration in shared mode
+			if (presence && isHost) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "restoreMaterials",
+					content: {
+						modelName: currentModelName
+					}
+				});
+			}
 		}
 
 		function syncTourStep(index, partName) {
@@ -1725,8 +1757,6 @@ define([
 				object.material = object.userData.originalMaterial.clone();
 			}
 
-			// Show modal with user info
-			showPaintModal(bodyPartName, userName);
 		}
 
 		// handle the click event for painting
