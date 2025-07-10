@@ -58,6 +58,9 @@ define([
 		let previousMesh = null;
 		let tourTimer = null;
 
+		let failedAttempts = 0;
+		const REMINDER_AFTER_ATTEMPTS = 3; // Show reminder after 3 failed attempts
+
 		// Body parts data for different models
 		let bodyPartsData = {
 			skeleton: [],
@@ -1195,6 +1198,7 @@ define([
 			presenceIndex = 0;
 			presenceCorrectIndex = 0;
 			firstAnswer = true;
+			failedAttempts = 0;
 
 			// Initialize players array if empty
 			if (players.length === 0 && presence) {
@@ -1208,6 +1212,8 @@ define([
 		}
 
 		function startDoctorModePresence() {
+			failedAttempts = 0;
+
 			// Check if game is over
 			if (presenceIndex >= bodyParts.length) {
 				showModal(l10n.get("GameOverAll"));
@@ -1833,6 +1839,9 @@ define([
 				const targetMeshName = bodyParts[presenceCorrectIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - reset failed attempts counter
+					failedAttempts = 0;
+
 					// Correct answer - color green temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#00ff00"), // Green
@@ -1888,6 +1897,15 @@ define([
 						);
 					}
 				} else {
+					// Wrong answer - increment failed attempts
+					failedAttempts++;
+
+					// Show reminder if needed
+					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
+						const currentPart = bodyParts[presenceCorrectIndex];
+						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+					}
+
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#ff0000"), // Red
@@ -1912,6 +1930,9 @@ define([
 				const targetMeshName = bodyParts[currentBodyPartIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - reset failed attempts counter
+					failedAttempts = 0;
+
 					// Correct answer - color green temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#00ff00"), // Green
@@ -1947,6 +1968,15 @@ define([
 						}
 					}, 2000);
 				} else {
+					// Wrong answer - increment failed attempts
+					failedAttempts++;
+
+					// Show reminder if needed
+					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
+						const currentPart = bodyParts[currentBodyPartIndex];
+						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+					}
+
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#ff0000"), // Red
