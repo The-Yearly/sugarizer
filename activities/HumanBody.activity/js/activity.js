@@ -58,6 +58,9 @@ define([
 		let previousMesh = null;
 		let tourTimer = null;
 
+		let failedAttempts = 0;
+		const REMINDER_AFTER_ATTEMPTS = 3; // Show reminder after 3 failed attempts
+
 		// Body parts data for different models
 		let bodyPartsData = {
 			skeleton: [],
@@ -826,6 +829,17 @@ define([
 				const { index, partName } = msg.content;
 				syncTourStep(index, partName);
 			}
+
+			if (msg.action == "restoreMaterials") {
+				// Only process if it's for the current model
+				if (msg.content.modelName === currentModelName && currentModel) {
+					currentModel.traverse((node) => {
+						if (node.isMesh && node.userData.originalMaterial) {
+							node.material = node.userData.originalMaterial.clone();
+						}
+					});
+				}
+			}
 		};
 
 		function sendFullPaintDataToNewUser() {
@@ -1014,7 +1028,7 @@ define([
 				if (tourIndex >= bodyParts.length || !isTourActive) {
 					// Restore previous mesh color before stopping
 					if (previousMesh) {
-						previousMesh.material = previousMesh.userData.originalMaterial.clone();
+						restoreMeshColor(previousMesh);
 					}
 					stopTourMode(); // Stop the tour if all parts have been shown
 					return;
@@ -1022,8 +1036,8 @@ define([
 
 				const part = bodyParts[tourIndex];
 				const position = part.position;
-				const isFrontView = part.frontView !== undefined ? part.frontView : true; // Default to front view
-				const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+				const isFrontView = part.frontView !== undefined ? part.frontView : true;
+				const isSideView = part.sideView !== undefined ? part.sideView : false;
 
 				// Broadcast tour step to other users if host
 				if (presence && isHost) {
@@ -1042,7 +1056,7 @@ define([
 
 				// Restore previous mesh color
 				if (previousMesh) {
-					previousMesh.material = previousMesh.userData.originalMaterial.clone();
+					restoreMeshColor(previousMesh);
 				}
 
 				// Highlight current mesh
@@ -1051,8 +1065,12 @@ define([
 						currentMesh.userData.originalMaterial = currentMesh.material.clone();
 					}
 
+					// Store current color
+					currentMesh.userData.currentColor = getCurrentMeshColor(currentMesh).clone();
+
+					// Apply highlight color
 					currentMesh.material = new THREE.MeshStandardMaterial({
-						color: new THREE.Color("#ffff00"),
+						color: new THREE.Color("#ffff00"), 
 						side: THREE.DoubleSide,
 						transparent: true,
 						opacity: 0.8,
@@ -1088,15 +1106,36 @@ define([
 				tourIndex++;
 
 				// Set a timeout to move to the next part after a delay
-				setTimeout(tourNextPart, 3000);
+				tourTimer = setTimeout(tourNextPart, 3000);
 			}
 
 			tourNextPart(); // Start the tour
 		}
 
 		function stopTourMode() {
+			// Restore all materials to their original state
+			if (currentModel) {
+				currentModel.traverse((node) => {
+					if (node.isMesh) {
+						restoreMeshColor(node);
+					}
+				});
+			}
+
+			// Reset camera to default position
 			camera.position.set(0, 10, 20);
 			camera.lookAt(0, 0, 0);
+
+			// Broadcast material restoration in shared mode
+			if (presence && isHost) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "restoreMaterials",
+					content: {
+						modelName: currentModelName
+					}
+				});
+			}
 		}
 
 		function syncTourStep(index, partName) {
@@ -1107,24 +1146,28 @@ define([
 
 			const position = part.position;
 			const isFrontView = part.frontView !== undefined ? part.frontView : true;
-			const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+			const isSideView = part.sideView !== undefined ? part.sideView : false;
 
 			// Find and highlight the mesh
 			const currentMesh = currentModel.getObjectByName(part.mesh);
 
-			// Restore previous mesh color
+			// Restore previous mesh to its original or painted color
 			if (previousMesh) {
-				previousMesh.material = previousMesh.userData.originalMaterial.clone();
+				restoreMeshColor(previousMesh);
 			}
 
-			// Highlight current mesh
+			// Highlight current mesh while preserving any painted color
 			if (currentMesh) {
 				if (!currentMesh.userData.originalMaterial) {
 					currentMesh.userData.originalMaterial = currentMesh.material.clone();
 				}
 
+				// Store current color before highlighting
+				currentMesh.userData.currentColor = getCurrentMeshColor(currentMesh).clone();
+
+				// Apply highlight color
 				currentMesh.material = new THREE.MeshStandardMaterial({
-					color: new THREE.Color("#ffff00"),
+					color: new THREE.Color("#ffff00"), 
 					side: THREE.DoubleSide,
 					transparent: true,
 					opacity: 0.8,
@@ -1163,6 +1206,7 @@ define([
 			presenceIndex = 0;
 			presenceCorrectIndex = 0;
 			firstAnswer = true;
+			failedAttempts = 0;
 
 			// Initialize players array if empty
 			if (players.length === 0 && presence) {
@@ -1176,6 +1220,8 @@ define([
 		}
 
 		function startDoctorModePresence() {
+			failedAttempts = 0;
+
 			// Check if game is over
 			if (presenceIndex >= bodyParts.length) {
 				showModal(l10n.get("GameOverAll"));
@@ -1725,8 +1771,6 @@ define([
 				object.material = object.userData.originalMaterial.clone();
 			}
 
-			// Show modal with user info
-			showPaintModal(bodyPartName, userName);
 		}
 
 		// handle the click event for painting
@@ -1791,6 +1835,23 @@ define([
 			}
 		}
 
+		function getCurrentMeshColor(mesh) {
+			// Check if this part has been painted
+			const paintedPart = partsColored.find(([name]) => name === mesh.name);
+
+			if (paintedPart) {
+				return new THREE.Color(paintedPart[1]);
+			}
+
+			// Return original material color if available
+			if (mesh.userData.originalMaterial) {
+				return mesh.userData.originalMaterial.color.clone();
+			}
+
+			// Default fallback
+			return mesh.material.color.clone();
+		}
+
 		// handle the click event for doctor mode checks if the clicked object is the correct body part
 
 		function handleDoctorMode(object) {
@@ -1799,10 +1860,17 @@ define([
 				object.userData.originalMaterial = object.material.clone();
 			}
 
+			// Store current color
+			const currentColor = getCurrentMeshColor(object);
+			object.userData.currentColor = currentColor.clone(); 
+
 			if (presence) {
 				const targetMeshName = bodyParts[presenceCorrectIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - reset failed attempts counter
+					failedAttempts = 0;
+
 					// Correct answer - color green temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#00ff00"), // Green
@@ -1810,16 +1878,12 @@ define([
 						transparent: false,
 						opacity: 1.0,
 						depthTest: true,
-						depthWrite: true,
-						emissive: new THREE.Color("#00ff00"),
-						emissiveIntensity: 0.3
+						depthWrite: true
 					});
 
 					// Restore original color after 1 second
 					setTimeout(() => {
-						if (object.userData.originalMaterial) {
-							object.material = object.userData.originalMaterial.clone();
-						}
+						restoreMeshColor(object);
 					}, 1000);
 
 					// Show "Correct!" modal first
@@ -1858,6 +1922,15 @@ define([
 						);
 					}
 				} else {
+					// Wrong answer - increment failed attempts
+					failedAttempts++;
+
+					// Show reminder if needed
+					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
+						const currentPart = bodyParts[presenceCorrectIndex];
+						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+					}
+
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#ff0000"), // Red
@@ -1865,23 +1938,22 @@ define([
 						transparent: false,
 						opacity: 1.0,
 						depthTest: true,
-						depthWrite: true,
-						emissive: new THREE.Color("#ff0000"),
-						emissiveIntensity: 0.3
+						depthWrite: true
 					});
 
 					// Restore original color after 1 second
 					setTimeout(() => {
-						if (object.userData.originalMaterial) {
-							object.material = object.userData.originalMaterial.clone();
-						}
+						restoreMeshColor(object);
 					}, 1000);
 				}
 			} else {
-				// Single player mode (keep existing logic but remove score tracking)
+				// Single player mode
 				const targetMeshName = bodyParts[currentBodyPartIndex].mesh;
 
 				if (object.name === targetMeshName) {
+					// Correct answer - reset failed attempts counter
+					failedAttempts = 0;
+
 					// Correct answer - color green temporarily
 					object.material = new THREE.MeshStandardMaterial({
 						color: new THREE.Color("#00ff00"), // Green
@@ -1889,16 +1961,12 @@ define([
 						transparent: false,
 						opacity: 1.0,
 						depthTest: true,
-						depthWrite: true,
-						emissive: new THREE.Color("#00ff00"),
-						emissiveIntensity: 0.3
+						depthWrite: true
 					});
 
 					// Restore original color after 1 second
 					setTimeout(() => {
-						if (object.userData.originalMaterial) {
-							object.material = object.userData.originalMaterial.clone();
-						}
+						restoreMeshColor(object);
 					}, 1000);
 
 					// Show "Correct!" modal first
@@ -1917,26 +1985,57 @@ define([
 						}
 					}, 2000);
 				} else {
+					// Wrong answer - increment failed attempts
+					failedAttempts++;
+
+					// Show reminder if needed
+					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
+						const currentPart = bodyParts[currentBodyPartIndex];
+						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+					}
+
 					// Wrong answer - color red temporarily
 					object.material = new THREE.MeshStandardMaterial({
-						color: new THREE.Color("#ff0000"), // Red
+						color: new THREE.Color("#ff0000"), // Pure red
 						side: THREE.DoubleSide,
 						transparent: false,
 						opacity: 1.0,
 						depthTest: true,
-						depthWrite: true,
-						emissive: new THREE.Color("#ff0000"),
-						emissiveIntensity: 0.3
+						depthWrite: true
 					});
 
 					// Restore original color after 1 second
 					setTimeout(() => {
-						if (object.userData.originalMaterial) {
-							object.material = object.userData.originalMaterial.clone();
-						}
+						restoreMeshColor(object);
 					}, 1000);
 				}
 			}
+		}
+
+		function restoreMeshColor(mesh) {
+			if (!mesh.userData.currentColor) return;
+			
+			// Check if this part has been painted
+			const paintedPart = partsColored.find(([name]) => name === mesh.name);
+			
+			if (paintedPart) {
+				const paintedColor = paintedPart[1];
+				mesh.material = new THREE.MeshStandardMaterial({
+					color: new THREE.Color(paintedColor),
+					side: THREE.DoubleSide,
+					transparent: false,
+					opacity: 1.0,
+					depthTest: true,
+					depthWrite: true
+				});
+			} else {
+				// Restore original material 
+				if (mesh.userData.originalMaterial) {
+					mesh.material = mesh.userData.originalMaterial.clone();
+				}
+			}
+
+			delete mesh.userData.currentColor;
 		}
 
 		function onMouseClick(event) {
