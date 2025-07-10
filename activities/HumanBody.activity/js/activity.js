@@ -1028,7 +1028,7 @@ define([
 				if (tourIndex >= bodyParts.length || !isTourActive) {
 					// Restore previous mesh color before stopping
 					if (previousMesh) {
-						previousMesh.material = previousMesh.userData.originalMaterial.clone();
+						restoreMeshColor(previousMesh);
 					}
 					stopTourMode(); // Stop the tour if all parts have been shown
 					return;
@@ -1036,8 +1036,8 @@ define([
 
 				const part = bodyParts[tourIndex];
 				const position = part.position;
-				const isFrontView = part.frontView !== undefined ? part.frontView : true; // Default to front view
-				const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+				const isFrontView = part.frontView !== undefined ? part.frontView : true;
+				const isSideView = part.sideView !== undefined ? part.sideView : false;
 
 				// Broadcast tour step to other users if host
 				if (presence && isHost) {
@@ -1056,7 +1056,7 @@ define([
 
 				// Restore previous mesh color
 				if (previousMesh) {
-					previousMesh.material = previousMesh.userData.originalMaterial.clone();
+					restoreMeshColor(previousMesh);
 				}
 
 				// Highlight current mesh
@@ -1065,8 +1065,12 @@ define([
 						currentMesh.userData.originalMaterial = currentMesh.material.clone();
 					}
 
+					// Store current color
+					currentMesh.userData.currentColor = getCurrentMeshColor(currentMesh).clone();
+
+					// Apply highlight color
 					currentMesh.material = new THREE.MeshStandardMaterial({
-						color: new THREE.Color("#ffff00"),
+						color: new THREE.Color("#ffff00"), 
 						side: THREE.DoubleSide,
 						transparent: true,
 						opacity: 0.8,
@@ -1102,7 +1106,7 @@ define([
 				tourIndex++;
 
 				// Set a timeout to move to the next part after a delay
-				setTimeout(tourNextPart, 3000);
+				tourTimer = setTimeout(tourNextPart, 3000);
 			}
 
 			tourNextPart(); // Start the tour
@@ -1113,19 +1117,7 @@ define([
 			if (currentModel) {
 				currentModel.traverse((node) => {
 					if (node.isMesh) {
-						if (partsColored.some(([name]) => name === node.name)) {
-							const paintedColor = partsColored.find(([name]) => name === node.name)[1];
-							node.material = new THREE.MeshStandardMaterial({
-								color: new THREE.Color(paintedColor),
-								side: THREE.DoubleSide,
-								transparent: false,
-								opacity: 1.0,
-								depthTest: true,
-								depthWrite: true
-							});
-						} else if (node.userData.originalMaterial) {
-							node.material = node.userData.originalMaterial.clone();
-						}
+						restoreMeshColor(node);
 					}
 				});
 			}
@@ -1154,26 +1146,14 @@ define([
 
 			const position = part.position;
 			const isFrontView = part.frontView !== undefined ? part.frontView : true;
-			const isSideView = part.sideView !== undefined ? part.sideView : false; // Default to false
+			const isSideView = part.sideView !== undefined ? part.sideView : false;
 
 			// Find and highlight the mesh
 			const currentMesh = currentModel.getObjectByName(part.mesh);
 
 			// Restore previous mesh to its original or painted color
 			if (previousMesh) {
-				if (partsColored.some(([name]) => name === previousMesh.name)) {
-					const paintedColor = partsColored.find(([name]) => name === previousMesh.name)[1];
-					previousMesh.material = new THREE.MeshStandardMaterial({
-						color: new THREE.Color(paintedColor),
-						side: THREE.DoubleSide,
-						transparent: false,
-						opacity: 1.0,
-						depthTest: true,
-						depthWrite: true
-					});
-				} else if (previousMesh.userData.originalMaterial) {
-					previousMesh.material = previousMesh.userData.originalMaterial.clone();
-				}
+				restoreMeshColor(previousMesh);
 			}
 
 			// Highlight current mesh while preserving any painted color
@@ -1182,10 +1162,12 @@ define([
 					currentMesh.userData.originalMaterial = currentMesh.material.clone();
 				}
 
-				const currentColor = getCurrentMeshColor(currentMesh);
+				// Store current color before highlighting
+				currentMesh.userData.currentColor = getCurrentMeshColor(currentMesh).clone();
 
+				// Apply highlight color
 				currentMesh.material = new THREE.MeshStandardMaterial({
-					color: currentColor,
+					color: new THREE.Color("#ffff00"), 
 					side: THREE.DoubleSide,
 					transparent: true,
 					opacity: 0.8,
