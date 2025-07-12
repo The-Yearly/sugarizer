@@ -798,10 +798,26 @@ define([
 			if (msg.action == "modeChange") {
 				const newModeIndex = msg.content;
 				if (currentModeIndex !== newModeIndex) {
-					// Stop current mode activities before switching
+
 					if (isTourActive) {
-						stopTourMode();
+						camera.position.set(0, 10, 20);
+						camera.lookAt(0, 0, 0);
+						camera.updateProjectionMatrix();
+
+						if (currentModel) {
+							currentModel.traverse((node) => {
+								if (node.isMesh) {
+									restoreMeshColor(node);
+								}
+							});
+						}
+
+						if (tourTimer) {
+							clearTimeout(tourTimer);
+							tourTimer = null;
+						}
 					}
+
 					if (isDoctorActive) {
 						stopDoctorMode();
 					}
@@ -815,6 +831,7 @@ define([
 					}));
 				}
 			}
+
 			if (msg.action == "paint") {
 				const { objectName, color, bodyPartName, modelName } = msg.content;
 				applyPaintFromNetwork(objectName, color, bodyPartName, msg.user.name, modelName);
@@ -892,7 +909,26 @@ define([
 			if (msg.action == "tourStop") {
 				if (isTourActive) {
 					isTourActive = false;
-					stopTourMode();
+
+					const newCameraPosition = msg.content.cameraPosition || { x: 0, y: 10, z: 20 };
+					const newCameraTarget = msg.content.cameraTarget || { x: 0, y: 0, z: 0 };
+
+					camera.position.set(newCameraPosition.x, newCameraPosition.y, newCameraPosition.z);
+					camera.lookAt(newCameraTarget.x, newCameraTarget.y, newCameraTarget.z);
+					camera.updateProjectionMatrix();
+
+					if (currentModel) {
+						currentModel.traverse((node) => {
+							if (node.isMesh) {
+								restoreMeshColor(node);
+							}
+						});
+					}
+
+					if (tourTimer) {
+						clearTimeout(tourTimer);
+						tourTimer = null;
+					}
 				}
 			}
 
@@ -996,13 +1032,11 @@ define([
 		const modeTextElem = document.getElementById("mode-text");
 
 		function updateModeText() {
-			// If switching from Tour mode, stop it
-			if (isTourActive && currentModeIndex !== 2) {
+			if (isTourActive && currentModeIndex !== 1) {
 				stopTourMode();
 			}
 
-			// If switching from Doctor mode, stop it
-			if (isDoctorActive && currentModeIndex !== 3) {
+			if (isDoctorActive && currentModeIndex !== 2) { 
 				stopDoctorMode();
 			}
 
@@ -1210,6 +1244,7 @@ define([
 			// Reset camera to default position
 			camera.position.set(0, 10, 20);
 			camera.lookAt(0, 0, 0);
+			camera.updateProjectionMatrix();
 
 			// Clear any existing tour timer
 			if (tourTimer) {
@@ -1223,7 +1258,9 @@ define([
 					user: presence.getUserInfo(),
 					action: "tourStop",
 					content: {
-						modelName: currentModelName
+						modelName: currentModelName,
+						cameraPosition: { x: 0, y: 10, z: 20 },
+						cameraTarget: { x: 0, y: 0, z: 0 }
 					}
 				});
 			}
