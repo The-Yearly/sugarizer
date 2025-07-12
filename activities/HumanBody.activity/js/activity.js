@@ -1036,8 +1036,9 @@ define([
 				stopTourMode();
 			}
 
-			if (isDoctorActive && currentModeIndex !== 2) { 
+			if (isDoctorActive && currentModeIndex !== 2) {
 				stopDoctorMode();
+				hideLeaderboard();
 			}
 
 			const modeKey = modes[currentModeIndex];
@@ -1397,6 +1398,14 @@ define([
 			if (modal) {
 				document.body.removeChild(modal);
 				modal = null;
+			}
+			hideLeaderboard();
+		}
+
+		function hideLeaderboard() {
+			var leaderboard = document.getElementById("leaderboard");
+			if (leaderboard) {
+				leaderboard.style.display = "none";
 			}
 		}
 
