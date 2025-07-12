@@ -53,6 +53,7 @@ define([
 		let ifDoctorHost = false;
 		let firstAnswer = true;
 		let numModals = 0;
+		let shownParts = []; // track which parts have been shown in the current session
 
 		let tourIndex = 0;
 		let previousMesh = null;
@@ -615,6 +616,21 @@ define([
 			}
 		}
 
+		function getRandomUnshownPartIndex() {
+			const availableIndices = bodyParts
+				.map((_, index) => index)
+				.filter(index => !shownParts.includes(index));
+
+			if (availableIndices.length === 0) {
+				// All parts have been shown, reset and start again
+				shownParts = [];
+				return Math.floor(Math.random() * bodyParts.length);
+			}
+
+			const randomIndex = Math.floor(Math.random() * availableIndices.length);
+			return availableIndices[randomIndex];
+		}
+
 		document.addEventListener('model-selected', function (event) {
 			const selectedModel = event.detail.model;
 			console.log('Model selected:', selectedModel);
@@ -696,6 +712,13 @@ define([
 			if (msg.action == "nextQuestion") {
 				presenceCorrectIndex = msg.content.questionIndex;
 				currentBodyPartIndex = msg.content.questionIndex;
+
+				// Update shownParts if provided
+				if (msg.content.shownParts) {
+					shownParts = msg.content.shownParts;
+				} else {
+					shownParts.push(msg.content.questionIndex);
+				}
 
 				// Update players array with latest scores
 				if (msg.content.players) {
@@ -825,9 +848,52 @@ define([
 				}
 			}
 
+			if (msg.action == "tourStart") {
+				if (!isTourActive) {
+					isTourActive = true;
+					currentModeIndex = 1; // Tour mode
+					updateModeText();
+				}
+
+				shownParts = msg.content.shownParts || [];
+				tourIndex = msg.content.currentIndex || 0;
+
+				// Clear any existing tour timer
+				if (tourTimer) {
+					clearTimeout(tourTimer);
+					tourTimer = null;
+				}
+
+				// Start syncing with host
+				if (bodyParts[tourIndex]) {
+					const part = bodyParts[tourIndex];
+					syncTourStep(
+						tourIndex,
+						part.name,
+						shownParts,
+						part.position,
+						part.frontView,
+						part.sideView
+					);
+				}
+			}
+
 			if (msg.action == "tourStep") {
-				const { index, partName } = msg.content;
-				syncTourStep(index, partName);
+				syncTourStep(
+					msg.content.index,
+					msg.content.partName,
+					msg.content.shownParts,
+					msg.content.position,
+					msg.content.isFrontView,
+					msg.content.isSideView
+				);
+			}
+
+			if (msg.action == "tourStop") {
+				if (isTourActive) {
+					isTourActive = false;
+					stopTourMode();
+				}
 			}
 
 			if (msg.action == "restoreMaterials") {
@@ -1016,7 +1082,8 @@ define([
 		}
 		
 		function startTourMode() {
-			tourIndex = 0;
+			shownParts = []; // Reset shown parts
+			tourIndex = getRandomUnshownPartIndex();
 			previousMesh = null;
 
 			// Clear any existing tour timer
@@ -1024,8 +1091,20 @@ define([
 				clearTimeout(tourTimer);
 			}
 
+			// Broadcast tour start to all users if host
+			if (presence && isHost) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "tourStart",
+					content: {
+						shownParts: shownParts,
+						currentIndex: tourIndex
+					},
+				});
+			}
+
 			function tourNextPart() {
-				if (tourIndex >= bodyParts.length || !isTourActive) {
+				if (shownParts.length >= bodyParts.length || !isTourActive) {
 					// Restore previous mesh color before stopping
 					if (previousMesh) {
 						restoreMeshColor(previousMesh);
@@ -1034,6 +1113,8 @@ define([
 					return;
 				}
 
+				tourIndex = getRandomUnshownPartIndex();
+				shownParts.push(tourIndex);
 				const part = bodyParts[tourIndex];
 				const position = part.position;
 				const isFrontView = part.frontView !== undefined ? part.frontView : true;
@@ -1046,7 +1127,11 @@ define([
 						action: "tourStep",
 						content: {
 							index: tourIndex,
-							partName: part.name
+							partName: part.name,
+							shownParts: shownParts,
+							position: position,
+							isFrontView: isFrontView,
+							isSideView: isSideView
 						},
 					});
 				}
@@ -1126,11 +1211,17 @@ define([
 			camera.position.set(0, 10, 20);
 			camera.lookAt(0, 0, 0);
 
-			// Broadcast material restoration in shared mode
+			// Clear any existing tour timer
+			if (tourTimer) {
+				clearTimeout(tourTimer);
+				tourTimer = null;
+			}
+
+			// Broadcast tour stop in shared mode
 			if (presence && isHost) {
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
-					action: "restoreMaterials",
+					action: "tourStop",
 					content: {
 						modelName: currentModelName
 					}
@@ -1138,15 +1229,21 @@ define([
 			}
 		}
 
-		function syncTourStep(index, partName) {
+		function syncTourStep(index, partName, receivedShownParts = [], position, isFrontView, isSideView) {
 			if (!isTourActive || !currentModel) return;
+
+			if (receivedShownParts && receivedShownParts.length > 0) {
+				shownParts = [...receivedShownParts];
+			} else {
+				shownParts.push(index);
+			}
 
 			const part = bodyParts[index];
 			if (!part) return;
 
-			const position = part.position;
-			const isFrontView = part.frontView !== undefined ? part.frontView : true;
-			const isSideView = part.sideView !== undefined ? part.sideView : false;
+			const partPosition = position || part.position;
+			const partIsFrontView = isFrontView !== undefined ? isFrontView : (part.frontView !== undefined ? part.frontView : true);
+			const partIsSideView = isSideView !== undefined ? isSideView : (part.sideView !== undefined ? part.sideView : false);
 
 			// Find and highlight the mesh
 			const currentMesh = currentModel.getObjectByName(part.mesh);
@@ -1181,18 +1278,18 @@ define([
 			}
 
 			// Position camera based on view type
-			if (isSideView) {
+			if (partIsSideView) {
 				// Position camera from the side (positive X for right side view)
-				camera.position.set(position[0] + 5, position[1], position[2]);
-				camera.lookAt(position[0], position[1], position[2]);
-			} else if (isFrontView) {
+				camera.position.set(partPosition[0] + 5, partPosition[1], partPosition[2]);
+				camera.lookAt(partPosition[0], partPosition[1], partPosition[2]);
+			} else if (partIsFrontView) {
 				// Position camera in front (positive Z)
-				camera.position.set(position[0], position[1], position[2] + 5);
-				camera.lookAt(position[0], position[1], position[2]);
+				camera.position.set(partPosition[0], partPosition[1], partPosition[2] + 5);
+				camera.lookAt(partPosition[0], partPosition[1], partPosition[2]);
 			} else {
 				// Position camera behind (negative Z) for back view
-				camera.position.set(position[0], position[1], position[2] - 5);
-				camera.lookAt(position[0], position[1], position[2]);
+				camera.position.set(partPosition[0], partPosition[1], partPosition[2] - 5);
+				camera.lookAt(partPosition[0], partPosition[1], partPosition[2]);
 			}
 
 			camera.updateProjectionMatrix();
@@ -1202,9 +1299,10 @@ define([
 		}
 
 		function startDoctorMode() {
-			currentBodyPartIndex = 0;
-			presenceIndex = 0;
-			presenceCorrectIndex = 0;
+			shownParts = []; // Reset shown parts
+			currentBodyPartIndex = getRandomUnshownPartIndex();
+			presenceIndex = currentBodyPartIndex;
+			presenceCorrectIndex = currentBodyPartIndex;
 			firstAnswer = true;
 			failedAttempts = 0;
 
@@ -1214,23 +1312,25 @@ define([
 			}
 
 			if (bodyParts[currentBodyPartIndex]) {
+				shownParts.push(currentBodyPartIndex);
 				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
-				// showLeaderboard();
 			}
 		}
 
 		function startDoctorModePresence() {
 			failedAttempts = 0;
 
-			// Check if game is over
-			if (presenceIndex >= bodyParts.length) {
+			// Check if all parts have been shown
+			if (shownParts.length >= bodyParts.length) {
 				showModal(l10n.get("GameOverAll"));
 				return;
 			}
 
-			// Set up new question
-			presenceCorrectIndex = presenceIndex;
-			currentBodyPartIndex = presenceIndex;
+			// Get a new random part
+			presenceCorrectIndex = getRandomUnshownPartIndex();
+			currentBodyPartIndex = presenceCorrectIndex;
+			presenceIndex = presenceCorrectIndex;
+			shownParts.push(presenceCorrectIndex);
 			firstAnswer = true; // Reset for new question
 
 			// Send next question to all players - with safety check
@@ -1239,15 +1339,16 @@ define([
 					user: presence.getUserInfo(),
 					action: "nextQuestion",
 					content: {
-						questionIndex: presenceIndex,
-						players: players // Send updated scores
+						questionIndex: presenceCorrectIndex,
+						players: players, // Send updated scores
+						shownParts: shownParts // Send the full array of shown parts
 					},
 				});
 			}
 
 			// Show the question
-			if (bodyParts[presenceIndex]) {
-				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceIndex].name) }));
+			if (bodyParts[presenceCorrectIndex]) {
+				showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[presenceCorrectIndex].name) }));
 			}
 
 			// Update leaderboard
