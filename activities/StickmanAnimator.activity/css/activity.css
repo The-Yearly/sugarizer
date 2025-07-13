@@ -115,11 +115,11 @@ body {
 	background-image: url(../icons/plus-circle.svg);
 }
 
-#bottom-right-buttons{
-	position: fixed;
-	bottom: 0px;
-	right: 0px;
-	height: 84px;
+#bottom-right-buttons {
+	/* position: fixed; */
+	/* bottom: 0px; */
+	/* right: 0px; */
+	height: 100%;
 	width: 84px;
 	background-color: #282828;
 	display: flex;
@@ -159,13 +159,13 @@ body {
 	vertical-align: bottom;
 }
 
-#canvas{
+#canvas {
 	width: 100vw;
 	overflow-x: hidden;
 }
 
 /* Stickman canvas */
-#stickman-canvas{
+#stickman-canvas {
 	height: calc(100vh - 100px);
 	background-color: #ffffff;
 	width: 100%;
@@ -173,14 +173,22 @@ body {
 }
 
 /* timeline */
-.timeline {
-	position: absolute;
+.bottomContainer {
+	width: 100vw;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	position: absolute; 
 	bottom: 0px;
 	left: 0px;
+	border-top: 3px solid #282828;
+	background-color: #282828;
+}
+
+.timeline {
 	width: 100%;
 	min-height: 50px;
 	background: #c0c0c0;
-	border-top: 3px solid #282828;
 	padding: 10px;
 	display: flex;
 	align-items: center;
@@ -220,7 +228,7 @@ body {
 	width: 100%;
 }
 
-.template-button{
+.template-button {
 	all: unset;
 	color: white;
 	padding: 10px 20px;
