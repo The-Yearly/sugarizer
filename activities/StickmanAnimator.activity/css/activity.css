@@ -116,9 +116,6 @@ body {
 }
 
 #bottom-right-buttons {
-	/* position: fixed; */
-	/* bottom: 0px; */
-	/* right: 0px; */
 	height: 100%;
 	width: 84px;
 	background-color: #282828;
@@ -187,14 +184,32 @@ body {
 
 .timeline {
 	width: 100%;
-	min-height: 50px;
-	background: #c0c0c0;
+	min-height: 70px;
+	background: #d0d0d0;
 	padding: 10px;
 	display: flex;
 	align-items: center;
+	overflow-x: auto;
 	overflow-y: hidden;
 	white-space: nowrap;
 	flex-wrap: nowrap;
+}
+
+.timeline::-webkit-scrollbar {
+	height: 8px;
+}
+
+.timeline::-webkit-scrollbar-track {
+	background: #f1f1f1;
+}
+
+.timeline::-webkit-scrollbar-thumb {
+	background: #888;
+	border-radius: 4px;
+}
+
+.timeline::-webkit-scrollbar-thumb:hover {
+	background: #555;
 }
 
 
@@ -203,23 +218,44 @@ body {
 	background-position: center;
 	background-repeat: no-repeat;
 	background-size: contain;
-	background-color: #282828;
+	background-color: #ff4444;
 	border: none;
 	width: 20px;
 	height: 20px;
 	position: absolute;
-	top: -4px;
-	right: -4px;
+	top: -6px;
+	right: -6px;
 	cursor: pointer;
 	border-radius: 50%;
+	opacity: 0.8;
+	transition: opacity 0.2s ease;
 }
 
 
-/* Update frame container to be relative positioned */
 .frame-container {
 	position: relative;
 	display: inline-block;
-	margin-right: 5px;
+	margin-right: 8px;
+	margin-bottom: 4px;
+}
+
+.frame {
+	border: 2px solid #666;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	margin: 2px;
+}
+
+.frame:hover {
+	border-color: #999;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.frame.active {
+	border: 3px solid #282828;
+	box-shadow: 0 0 8px rgba(207, 87, 123, 0.5);
+	background-color: #ffffff;
 }
 
 .template-palette {

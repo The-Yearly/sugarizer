@@ -27,7 +27,7 @@ define([
 
 		// Joint connections with proper distances
 		const jointConnections = [
-			{ from: 0, to: 1, length: 15 },    // head to body (reduced neck length)
+			{ from: 0, to: 1, length: 15 },    // head to body 
 			{ from: 1, to: 11, length: 25 },   // body to middle
 			{ from: 11, to: 2, length: 25 },   // middle to hips
 			{ from: 2, to: 3, length: 35 },    // hips to left knee
@@ -70,7 +70,6 @@ define([
 		}
 
 		function initEvents() {
-			// Canvas events
 			canvas.addEventListener('mousedown', handleMouseDown);
 			canvas.addEventListener('mousemove', handleMouseMove);
 			canvas.addEventListener('mouseup', handleMouseUp);
@@ -117,26 +116,24 @@ define([
 
 		function createDefaultStickman() {
 			joints = [
-				{ x: 200, y: 150, name: 'head' },      // 0 - head
-				{ x: 200, y: 165, name: 'body' },      // 1 - body (shoulders) - closer to head
-				{ x: 200, y: 220, name: 'hips' },      // 2 - hips
-				{ x: 185, y: 250, name: 'leftKnee' },  // 3 - left knee
-				{ x: 180, y: 280, name: 'leftFoot' },  // 4 - left foot
-				{ x: 215, y: 250, name: 'rightKnee' }, // 5 - right knee
-				{ x: 220, y: 280, name: 'rightFoot' }, // 6 - right foot
-				{ x: 175, y: 175, name: 'leftElbow' }, // 7 - left elbow
-				{ x: 160, y: 200, name: 'leftHand' },  // 8 - left hand
-				{ x: 225, y: 175, name: 'rightElbow' },// 9 - right elbow
-				{ x: 240, y: 200, name: 'rightHand' }, // 10 - right hand
-				{ x: 200, y: 192, name: 'middle' }     // 11 - middle (drag joint)
+				{ x: 200, y: 150, name: 'head' },            // 0 - head
+				{ x: 200, y: 165, name: 'body' },            // 1 - body
+				{ x: 200, y: 220, name: 'hips' },            // 2 - hips
+				{ x: 185, y: 250, name: 'leftKnee' },        // 3 - left knee
+				{ x: 180, y: 280, name: 'leftFoot' },        // 4 - left foot
+				{ x: 215, y: 250, name: 'rightKnee' },       // 5 - right knee
+				{ x: 220, y: 280, name: 'rightFoot' },       // 6 - right foot
+				{ x: 175, y: 175, name: 'leftElbow' },       // 7 - left elbow
+				{ x: 160, y: 200, name: 'leftHand' },        // 8 - left hand
+				{ x: 225, y: 175, name: 'rightElbow' },      // 9 - right elbow
+				{ x: 240, y: 200, name: 'rightHand' },       // 10 - right hand
+				{ x: 200, y: 192, name: 'middle' }           // 11 - middle (drag joint)
 			];
 
-			// Update middle joint position based on body and hips
 			updateMiddleJoint();
 		}
 
 		function updateMiddleJoint() {
-			// Always calculate middle joint position based on body and hips
 			joints[11].x = (joints[1].x + joints[2].x) / 2;
 			joints[11].y = (joints[1].y + joints[2].y) / 2;
 		}
@@ -150,10 +147,13 @@ define([
 				const templateData = await response.json();
 
 				frames = JSON.parse(JSON.stringify(templateData.frames));
-				// Add middle joint to existing templates if not present
 				frames.forEach(frame => {
 					if (frame.length === 11) {
-						frame.push({ x: (frame[1].x + frame[2].x) / 2, y: (frame[1].y + frame[2].y) / 2, name: 'middle' });
+						frame.push({ 
+							x: (frame[1].x + frame[2].x) / 2, 
+							y: (frame[1].y + frame[2].y) / 2, 
+							name: 'middle' 
+						});
 					}
 				});
 
@@ -211,23 +211,50 @@ define([
 					currentFrame = index;
 					joints = JSON.parse(JSON.stringify(frame));
 					updateMiddleJoint();
-					updateTimeline();
+					updateTimeline(); 
+					render();
 				});
 
 				frameContainer.appendChild(previewCanvas);
 				frameContainer.appendChild(deleteBtn);
 				timeline.appendChild(frameContainer);
 			});
+
+			// Auto-scroll to active frame if it's not visible
+			scrollToActiveFrame();
+		}
+
+		function scrollToActiveFrame() {
+			const timeline = document.getElementById('timeline');
+			const activeFrame = timeline.querySelector('.frame.active');
+
+			if (activeFrame) {
+				const timelineRect = timeline.getBoundingClientRect();
+				const activeFrameRect = activeFrame.getBoundingClientRect();
+
+				if (activeFrameRect.right > timelineRect.right || activeFrameRect.left < timelineRect.left) {
+					activeFrame.scrollIntoView({
+						behavior: 'smooth',
+						block: 'nearest',
+						inline: 'center'
+					});
+				}
+			}
 		}
 
 		function createPreviewCanvas(frame, index) {
 			const previewCanvas = document.createElement('canvas');
 			previewCanvas.width = 60;
 			previewCanvas.height = 60;
-			previewCanvas.className = `frame ${index === currentFrame ? 'active' : ''}`;
+
+			// active class for current frame
+			const isActive = index === currentFrame;
+			previewCanvas.className = `frame ${isActive ? 'active' : ''}`;
 
 			const previewCtx = previewCanvas.getContext('2d');
-			previewCtx.fillStyle = '#ffffff';
+
+			// different background colors for active frame
+			previewCtx.fillStyle = isActive ? '#e6f3ff' : '#ffffff';
 			previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
 			const stickmanHeight = Math.max(...frame.map(p => p.y)) - Math.min(...frame.map(p => p.y));
@@ -266,7 +293,6 @@ define([
 		// DRAWING FUNCTIONS
 
 		function drawStickmanPreview(ctx, frame) {
-			// Simplified version for timeline previews
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 2;
 			ctx.lineCap = 'round';
@@ -274,76 +300,53 @@ define([
 
 			drawStickmanSkeleton(ctx, frame);
 
-			// Draw small red joints for preview (excluding middle joint)
 			ctx.fillStyle = '#ff0000';
 			frame.forEach((joint, index) => {
 				if (index === 11) return; // Skip middle joint in preview
 				ctx.beginPath();
 				if (index === 0) {
-					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2); // Head slightly larger
+					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2); 
 				} else {
-					ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2); // Body joints
+					ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2); 
 				}
 				ctx.fill();
 			});
 		}
 
 		function drawStickman() {
-			// Draw skeleton first (behind joints)
+			// draw skeleton first
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 3;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 			drawStickmanSkeleton(ctx, joints);
 
-			// Draw joints on top (Pivot style - red circles)
+			// Draw joints on top
 			joints.forEach((joint, index) => {
-				// Skip middle joint for normal display
+				// skip middle joint for normal display
 				if (index === 11) return;
 
-				// Different colors for different joint types
-				if (index === 0) {
-					// Head joint - slightly larger
-					ctx.fillStyle = '#ff0000';
-					ctx.strokeStyle = '#cc0000';
-					ctx.lineWidth = 2;
-					ctx.beginPath();
-					ctx.arc(joint.x, joint.y, 6, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
-				} else {
-					// Body joints
-					ctx.fillStyle = '#ff0000';
-					ctx.strokeStyle = '#cc0000';
-					ctx.lineWidth = 1.5;
-					ctx.beginPath();
-					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
-				}
+				ctx.fillStyle = '#ff0000';
+				ctx.strokeStyle = '#cc0000';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
+				
 			});
 
-			// Draw middle joint (drag joint) with smaller size
+			// Draw middle joint (drag joint)
 			const middleJoint = joints[11];
 			ctx.fillStyle = '#00ff00';
 			ctx.strokeStyle = '#00cc00';
 			ctx.lineWidth = 1.5;
 			ctx.beginPath();
-			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2); // Reduced from 8 to 5
+			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2);
 			ctx.fill();
 			ctx.stroke();
 
-			// Add cross pattern to indicate drag functionality (smaller)
-			ctx.strokeStyle = '#ffffff';
-			ctx.lineWidth = 1;
-			ctx.beginPath();
-			ctx.moveTo(middleJoint.x - 3, middleJoint.y);
-			ctx.lineTo(middleJoint.x + 3, middleJoint.y);
-			ctx.moveTo(middleJoint.x, middleJoint.y - 3);
-			ctx.lineTo(middleJoint.x, middleJoint.y + 3);
-			ctx.stroke();
-
-			// Highlight selected joint
+			// highlight selected joint
 			if (selectedJoint && selectedJoint !== joints[11]) {
 				ctx.strokeStyle = '#ffff00';
 				ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
@@ -357,11 +360,11 @@ define([
 
 		function drawStickmanSkeleton(ctx, frame) {
 			ctx.strokeStyle = '#000000';
-			ctx.lineWidth = 8;
+			ctx.lineWidth = 10;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 
-			// Draw body line (head to body to middle to hips)
+			// draw body line (head to body to middle to hips)
 			ctx.beginPath();
 			ctx.moveTo(frame[0].x, frame[0].y);
 			ctx.lineTo(frame[1].x, frame[1].y);
@@ -371,44 +374,44 @@ define([
 			ctx.lineTo(frame[2].x, frame[2].y);
 			ctx.stroke();
 
-			// Draw left leg
+			// draw left leg
 			ctx.beginPath();
 			ctx.moveTo(frame[2].x, frame[2].y); // hips
 			ctx.lineTo(frame[3].x, frame[3].y); // left knee
 			ctx.lineTo(frame[4].x, frame[4].y); // left foot
 			ctx.stroke();
 
-			// Draw right leg
+			// draw right leg
 			ctx.beginPath();
 			ctx.moveTo(frame[2].x, frame[2].y); // hips
 			ctx.lineTo(frame[5].x, frame[5].y); // right knee
 			ctx.lineTo(frame[6].x, frame[6].y); // right foot
 			ctx.stroke();
 
-			// Draw left arm
+			// draw left arm
 			ctx.beginPath();
 			ctx.moveTo(frame[1].x, frame[1].y); // body
 			ctx.lineTo(frame[7].x, frame[7].y); // left elbow
 			ctx.lineTo(frame[8].x, frame[8].y); // left hand
 			ctx.stroke();
 
-			// Draw right arm
+			// draw right arm
 			ctx.beginPath();
-			ctx.moveTo(frame[1].x, frame[1].y); // body
-			ctx.lineTo(frame[9].x, frame[9].y); // right elbow
-			ctx.lineTo(frame[10].x, frame[10].y); // right hand
+			ctx.moveTo(frame[1].x, frame[1].y);    // body
+			ctx.lineTo(frame[9].x, frame[9].y);    // right elbow
+			ctx.lineTo(frame[10].x, frame[10].y);  // right hand
 			ctx.stroke();
 
-			// Draw head circle (filled)
+			// draw head circle (solid black)
 			ctx.beginPath();
-			ctx.arc(frame[0].x, frame[0].y, 12, 0, Math.PI * 2);
-			ctx.fillStyle = '#ffffff';  // White fill
+			ctx.arc(frame[0].x, frame[0].y, 15, 0, Math.PI * 2);
+			ctx.fillStyle = '#000000'; 
 			ctx.fill();
-			ctx.stroke();
+
 		}
 
 		function maintainJointDistances(movedJointIndex) {
-			// Skip distance maintenance for middle joint as it's calculated
+			// Skip distance maintenance for middle joint 
 			if (movedJointIndex === 11) return;
 
 			// Get all connections for this joint
@@ -416,7 +419,6 @@ define([
 				conn.from === movedJointIndex || conn.to === movedJointIndex
 			);
 
-			// Process each connection
 			connections.forEach(conn => {
 				const otherJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
 
@@ -431,7 +433,6 @@ define([
 				const dy = movedJoint.y - otherJoint.y;
 				const currentDistance = Math.sqrt(dx * dx + dy * dy);
 
-				// Only adjust if distance is significantly different
 				if (Math.abs(currentDistance - conn.length) > 1.0) {
 					// Adjust the connected joint to maintain the proper distance
 					const ratio = conn.length / currentDistance;
@@ -516,7 +517,6 @@ define([
 				// Find the index of the selected joint
 				const selectedIndex = joints.indexOf(selectedJoint);
 
-				// Move the joint to mouse position
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
 
@@ -549,25 +549,22 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			// Check middle joint first (smaller hit area)
 			const middleJoint = joints[11];
 			if (middleJoint) {
 				const dx = middleJoint.x - x;
 				const dy = middleJoint.y - y;
 				const distance = Math.sqrt(dx * dx + dy * dy);
-				if (distance < 8) { // Reduced from 12 to 8
+				if (distance < 8) { 
 					return middleJoint;
 				}
 			}
 
-			// Check other joints in reverse order so head (larger) gets priority
 			for (let i = joints.length - 2; i >= 0; i--) {
 				const joint = joints[i];
 				const dx = joint.x - x;
 				const dy = joint.y - y;
 				const distance = Math.sqrt(dx * dx + dy * dy);
 
-				// Different hit areas for different joints
 				const hitRadius = i === 0 ? 12 : 8; // Head has larger hit area
 
 				if (distance < hitRadius) {
@@ -582,7 +579,7 @@ define([
 		function render() {
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-			// Draw onion skin of previous frame (more transparent, Pivot style)
+			// Draw onion skin of previous frame
 			if (frames.length > 1 && !isPlaying) {
 				const prevFrameIndex = currentFrame === 0 ? frames.length - 1 : currentFrame - 1;
 				ctx.save();
@@ -594,16 +591,20 @@ define([
 
 				drawStickmanSkeleton(ctx, frames[prevFrameIndex]);
 
-				// Draw previous frame joints (excluding middle)
 				ctx.fillStyle = '#0066cc';
 				frames[prevFrameIndex].forEach((joint, index) => {
-					if (index === 11) return; // Skip middle joint
+
+					// Skip middle joint
+					if (index === 11) 
+						return; 
+
 					ctx.beginPath();
 					if (index === 0) {
 						ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
 					} else {
 						ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
 					}
+
 					ctx.fill();
 				});
 
@@ -668,6 +669,7 @@ define([
 		}
 
 		// START APPLICATION
+		
 		activity.setup();
 		initializeAnimator();
 	});
