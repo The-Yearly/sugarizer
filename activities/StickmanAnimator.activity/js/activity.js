@@ -41,6 +41,21 @@ define([
 			{ joint1: 9, joint2: 10, distance: 25 }    // right elbow to hand
 		];
 
+		// Replace the proportionConstraints array with this more precise version
+		const jointConnections = [
+			{ from: 0, to: 1, length: 30 },    // head to body
+			{ from: 1, to: 11, length: 20 },   // body to middle
+			{ from: 11, to: 2, length: 20 },   // middle to hips
+			{ from: 2, to: 3, length: 35 },    // hips to left knee
+			{ from: 3, to: 4, length: 35 },    // left knee to foot
+			{ from: 2, to: 5, length: 35 },    // hips to right knee
+			{ from: 5, to: 6, length: 35 },    // right knee to foot
+			{ from: 1, to: 7, length: 35 },    // body to left elbow
+			{ from: 7, to: 8, length: 25 },    // left elbow to hand
+			{ from: 1, to: 9, length: 35 },    // body to right elbow
+			{ from: 9, to: 10, length: 25 }    // right elbow to hand
+		];
+
 		// INITIALIZATION FUNCTIONS
 
 		function initializeAnimator() {
@@ -131,6 +146,11 @@ define([
 				{ x: 240, y: 210, name: 'rightHand' }, // 10 - right hand
 				{ x: 200, y: 200, name: 'middle' }     // 11 - middle (drag joint)
 			];
+
+			// Ensure all joints are at correct distances initially
+			for (let i = 0; i < joints.length; i++) {
+				maintainJointDistances(i);
+			}
 		}
 
 		async function loadTemplate(templateName) {
@@ -395,6 +415,30 @@ define([
 			ctx.stroke();
 		}
 
+		function maintainJointDistances(movedJointIndex) {
+			// Find all connections involving the moved joint
+			const connections = jointConnections.filter(conn =>
+				conn.from === movedJointIndex || conn.to === movedJointIndex
+			);
+
+			connections.forEach(conn => {
+				const fixedJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
+				const fixedJoint = joints[fixedJointIndex];
+				const movedJoint = joints[movedJointIndex];
+
+				// Calculate current distance
+				const dx = movedJoint.x - fixedJoint.x;
+				const dy = movedJoint.y - fixedJoint.y;
+				const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+				// If distance is different from the required length, adjust position
+				if (Math.abs(currentDistance - conn.length) > 0.1) {
+					const ratio = conn.length / currentDistance;
+					movedJoint.x = fixedJoint.x + dx * ratio;
+					movedJoint.y = fixedJoint.y + dy * ratio;
+				}
+			});
+		}
 
 		// ANIMATION CONTROL
 
@@ -452,7 +496,7 @@ define([
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 
 			if (isDraggingWhole) {
-				// Drag entire stickman
+				// Drag entire stickman (unchanged)
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
 
@@ -463,9 +507,16 @@ define([
 
 				saveCurrentFrame();
 			} else if (isDragging && selectedJoint && selectedJoint !== joints[11]) {
-				// Normal joint dragging - move only the selected joint
+				// Find the index of the selected joint
+				const selectedIndex = joints.indexOf(selectedJoint);
+
+				// Move the joint to mouse position
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
+
+				// Maintain distances for connected joints
+				maintainJointDistances(selectedIndex);
+
 				saveCurrentFrame();
 			}
 		}
