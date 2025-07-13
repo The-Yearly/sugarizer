@@ -25,27 +25,11 @@ define([
 		let dragStartPos = { x: 0, y: 0 };
 		let originalJoints = [];
 
-		// Joint constraints for maintaining body proportions (removed to fix body)
-		// We'll only use constraints when dragging the whole stickman
-		const proportionConstraints = [
-			{ joint1: 0, joint2: 1, distance: 30 },    // head to body
-			{ joint1: 1, joint2: 11, distance: 20 },   // body to middle
-			{ joint1: 11, joint2: 2, distance: 20 },   // middle to hips
-			{ joint1: 2, joint2: 3, distance: 35 },    // hips to left knee
-			{ joint1: 3, joint2: 4, distance: 35 },    // left knee to foot
-			{ joint1: 2, joint2: 5, distance: 35 },    // hips to right knee
-			{ joint1: 5, joint2: 6, distance: 35 },    // right knee to foot
-			{ joint1: 1, joint2: 7, distance: 35 },    // body to left elbow
-			{ joint1: 7, joint2: 8, distance: 25 },    // left elbow to hand
-			{ joint1: 1, joint2: 9, distance: 35 },    // body to right elbow
-			{ joint1: 9, joint2: 10, distance: 25 }    // right elbow to hand
-		];
-
-		// Replace the proportionConstraints array with this more precise version
+		// Joint connections with proper distances
 		const jointConnections = [
-			{ from: 0, to: 1, length: 30 },    // head to body
-			{ from: 1, to: 11, length: 20 },   // body to middle
-			{ from: 11, to: 2, length: 20 },   // middle to hips
+			{ from: 0, to: 1, length: 15 },    // head to body (reduced neck length)
+			{ from: 1, to: 11, length: 25 },   // body to middle
+			{ from: 11, to: 2, length: 25 },   // middle to hips
 			{ from: 2, to: 3, length: 35 },    // hips to left knee
 			{ from: 3, to: 4, length: 35 },    // left knee to foot
 			{ from: 2, to: 5, length: 35 },    // hips to right knee
@@ -134,23 +118,27 @@ define([
 		function createDefaultStickman() {
 			joints = [
 				{ x: 200, y: 150, name: 'head' },      // 0 - head
-				{ x: 200, y: 180, name: 'body' },      // 1 - body (shoulders)
+				{ x: 200, y: 165, name: 'body' },      // 1 - body (shoulders) - closer to head
 				{ x: 200, y: 220, name: 'hips' },      // 2 - hips
 				{ x: 185, y: 250, name: 'leftKnee' },  // 3 - left knee
 				{ x: 180, y: 280, name: 'leftFoot' },  // 4 - left foot
 				{ x: 215, y: 250, name: 'rightKnee' }, // 5 - right knee
 				{ x: 220, y: 280, name: 'rightFoot' }, // 6 - right foot
-				{ x: 175, y: 190, name: 'leftElbow' }, // 7 - left elbow
-				{ x: 160, y: 210, name: 'leftHand' },  // 8 - left hand
-				{ x: 225, y: 190, name: 'rightElbow' },// 9 - right elbow
-				{ x: 240, y: 210, name: 'rightHand' }, // 10 - right hand
-				{ x: 200, y: 200, name: 'middle' }     // 11 - middle (drag joint)
+				{ x: 175, y: 175, name: 'leftElbow' }, // 7 - left elbow
+				{ x: 160, y: 200, name: 'leftHand' },  // 8 - left hand
+				{ x: 225, y: 175, name: 'rightElbow' },// 9 - right elbow
+				{ x: 240, y: 200, name: 'rightHand' }, // 10 - right hand
+				{ x: 200, y: 192, name: 'middle' }     // 11 - middle (drag joint)
 			];
 
-			// Ensure all joints are at correct distances initially
-			for (let i = 0; i < joints.length; i++) {
-				maintainJointDistances(i);
-			}
+			// Update middle joint position based on body and hips
+			updateMiddleJoint();
+		}
+
+		function updateMiddleJoint() {
+			// Always calculate middle joint position based on body and hips
+			joints[11].x = (joints[1].x + joints[2].x) / 2;
+			joints[11].y = (joints[1].y + joints[2].y) / 2;
 		}
 
 		async function loadTemplate(templateName) {
@@ -171,6 +159,7 @@ define([
 
 				currentFrame = 0;
 				joints = JSON.parse(JSON.stringify(frames[currentFrame]));
+				updateMiddleJoint();
 				updateTimeline();
 			} catch (error) {
 				console.error('Error loading template:', error);
@@ -182,6 +171,7 @@ define([
 		// FRAME MANAGEMENT
 
 		function addFrame() {
+			updateMiddleJoint();
 			const frameData = JSON.parse(JSON.stringify(joints));
 			frames.push(frameData);
 			currentFrame = frames.length - 1;
@@ -190,6 +180,7 @@ define([
 
 		function saveCurrentFrame() {
 			if (currentFrame >= 0) {
+				updateMiddleJoint();
 				frames[currentFrame] = JSON.parse(JSON.stringify(joints));
 			}
 		}
@@ -219,6 +210,7 @@ define([
 				previewCanvas.addEventListener('click', () => {
 					currentFrame = index;
 					joints = JSON.parse(JSON.stringify(frame));
+					updateMiddleJoint();
 					updateTimeline();
 				});
 
@@ -331,24 +323,24 @@ define([
 				}
 			});
 
-			// Draw middle joint (drag joint) with different style
+			// Draw middle joint (drag joint) with smaller size
 			const middleJoint = joints[11];
 			ctx.fillStyle = '#00ff00';
 			ctx.strokeStyle = '#00cc00';
-			ctx.lineWidth = 2;
+			ctx.lineWidth = 1.5;
 			ctx.beginPath();
-			ctx.arc(middleJoint.x, middleJoint.y, 8, 0, Math.PI * 2);
+			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2); // Reduced from 8 to 5
 			ctx.fill();
 			ctx.stroke();
 
-			// Add cross pattern to indicate drag functionality
+			// Add cross pattern to indicate drag functionality (smaller)
 			ctx.strokeStyle = '#ffffff';
 			ctx.lineWidth = 1;
 			ctx.beginPath();
-			ctx.moveTo(middleJoint.x - 4, middleJoint.y);
-			ctx.lineTo(middleJoint.x + 4, middleJoint.y);
-			ctx.moveTo(middleJoint.x, middleJoint.y - 4);
-			ctx.lineTo(middleJoint.x, middleJoint.y + 4);
+			ctx.moveTo(middleJoint.x - 3, middleJoint.y);
+			ctx.lineTo(middleJoint.x + 3, middleJoint.y);
+			ctx.moveTo(middleJoint.x, middleJoint.y - 3);
+			ctx.lineTo(middleJoint.x, middleJoint.y + 3);
 			ctx.stroke();
 
 			// Highlight selected joint
@@ -416,26 +408,39 @@ define([
 		}
 
 		function maintainJointDistances(movedJointIndex) {
-			// Find all connections involving the moved joint
+			// Skip distance maintenance for middle joint as it's calculated
+			if (movedJointIndex === 11) return;
+
+			// Get all connections for this joint
 			const connections = jointConnections.filter(conn =>
 				conn.from === movedJointIndex || conn.to === movedJointIndex
 			);
 
+			// Process each connection
 			connections.forEach(conn => {
-				const fixedJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
-				const fixedJoint = joints[fixedJointIndex];
+				const otherJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
+
+				// Skip if other joint is the middle joint (it will be recalculated)
+				if (otherJointIndex === 11) return;
+
 				const movedJoint = joints[movedJointIndex];
+				const otherJoint = joints[otherJointIndex];
 
 				// Calculate current distance
-				const dx = movedJoint.x - fixedJoint.x;
-				const dy = movedJoint.y - fixedJoint.y;
+				const dx = movedJoint.x - otherJoint.x;
+				const dy = movedJoint.y - otherJoint.y;
 				const currentDistance = Math.sqrt(dx * dx + dy * dy);
 
-				// If distance is different from the required length, adjust position
-				if (Math.abs(currentDistance - conn.length) > 0.1) {
+				// Only adjust if distance is significantly different
+				if (Math.abs(currentDistance - conn.length) > 1.0) {
+					// Adjust the connected joint to maintain the proper distance
 					const ratio = conn.length / currentDistance;
-					movedJoint.x = fixedJoint.x + dx * ratio;
-					movedJoint.y = fixedJoint.y + dy * ratio;
+					const targetX = otherJoint.x + dx * ratio;
+					const targetY = otherJoint.y + dy * ratio;
+
+					// Move the moved joint to the correct position
+					movedJoint.x = targetX;
+					movedJoint.y = targetY;
 				}
 			});
 		}
@@ -468,6 +473,7 @@ define([
 
 			currentFrame = (currentFrame + 1) % frames.length;
 			joints = JSON.parse(JSON.stringify(frames[currentFrame]));
+			updateMiddleJoint();
 			updateTimeline();
 
 			setTimeout(() => {
@@ -496,7 +502,7 @@ define([
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 
 			if (isDraggingWhole) {
-				// Drag entire stickman (unchanged)
+				// Drag entire stickman
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
 
@@ -514,8 +520,13 @@ define([
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
 
-				// Maintain distances for connected joints
+				// Maintain distances only for the moved joint
 				maintainJointDistances(selectedIndex);
+
+				// Update middle joint position if body or hips moved
+				if (selectedIndex === 1 || selectedIndex === 2) {
+					updateMiddleJoint();
+				}
 
 				saveCurrentFrame();
 			}
@@ -538,13 +549,13 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			// Check middle joint first (larger hit area)
+			// Check middle joint first (smaller hit area)
 			const middleJoint = joints[11];
 			if (middleJoint) {
 				const dx = middleJoint.x - x;
 				const dy = middleJoint.y - y;
 				const distance = Math.sqrt(dx * dx + dy * dy);
-				if (distance < 12) {
+				if (distance < 8) { // Reduced from 12 to 8
 					return middleJoint;
 				}
 			}
