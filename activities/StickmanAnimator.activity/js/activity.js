@@ -19,24 +19,28 @@ define([
 		let joints = [];
 		let selectedJoint = null;
 		let isDragging = false;
+		let isDraggingWhole = false;
 		let templates = {};
 		let currentSpeed = 1;
+		let dragStartPos = { x: 0, y: 0 };
+		let originalJoints = [];
 
-		// Joint constraints for maintaining body proportions
-		const constraints = [
-			{ joint1: 0, joint2: 1, distance: 40 },    // head to body
-			{ joint1: 1, joint2: 2, distance: 25 },    // body to hips
-			{ joint1: 2, joint2: 3, distance: 30 },    // hips to left knee
-			{ joint1: 3, joint2: 4, distance: 25 },    // left knee to foot
-			{ joint1: 2, joint2: 5, distance: 30 },    // hips to right knee
-			{ joint1: 5, joint2: 6, distance: 25 },    // right knee to foot
-			{ joint1: 1, joint2: 7, distance: 30 },    // body to left elbow
-			{ joint1: 7, joint2: 8, distance: 20 },    // left elbow to hand
-			{ joint1: 1, joint2: 9, distance: 30 },    // body to right elbow
-			{ joint1: 9, joint2: 10, distance: 20 }    // right elbow to hand
+		// Joint constraints for maintaining body proportions (removed to fix body)
+		// We'll only use constraints when dragging the whole stickman
+		const proportionConstraints = [
+			{ joint1: 0, joint2: 1, distance: 30 },    // head to body
+			{ joint1: 1, joint2: 11, distance: 20 },   // body to middle
+			{ joint1: 11, joint2: 2, distance: 20 },   // middle to hips
+			{ joint1: 2, joint2: 3, distance: 35 },    // hips to left knee
+			{ joint1: 3, joint2: 4, distance: 35 },    // left knee to foot
+			{ joint1: 2, joint2: 5, distance: 35 },    // hips to right knee
+			{ joint1: 5, joint2: 6, distance: 35 },    // right knee to foot
+			{ joint1: 1, joint2: 7, distance: 35 },    // body to left elbow
+			{ joint1: 7, joint2: 8, distance: 25 },    // left elbow to hand
+			{ joint1: 1, joint2: 9, distance: 35 },    // body to right elbow
+			{ joint1: 9, joint2: 10, distance: 25 }    // right elbow to hand
 		];
 
-		
 		// INITIALIZATION FUNCTIONS
 
 		function initializeAnimator() {
@@ -83,7 +87,7 @@ define([
 		}
 
 		function initControls() {
-			
+
 			// Play/Pause button setup
 			const playPauseButton = document.getElementById('play-pause-button');
 			playPauseButton.style.backgroundImage = "url('icons/play.svg')";
@@ -109,22 +113,23 @@ define([
 				loadTemplate(e.detail.template);
 			});
 		}
-		
+
 		// STICKMAN CREATION & TEMPLATES
-		
+
 		function createDefaultStickman() {
 			joints = [
-				{ x: 200, y: 160, name: 'head' },
-				{ x: 200, y: 200, name: 'body' },
-				{ x: 200, y: 225, name: 'hips' },
-				{ x: 170, y: 250, name: 'leftKnee' },
-				{ x: 170, y: 275, name: 'leftFoot' },
-				{ x: 230, y: 250, name: 'rightKnee' },
-				{ x: 230, y: 275, name: 'rightFoot' },
-				{ x: 170, y: 200, name: 'leftElbow' },
-				{ x: 170, y: 220, name: 'leftHand' },
-				{ x: 230, y: 200, name: 'rightElbow' },
-				{ x: 230, y: 220, name: 'rightHand' }
+				{ x: 200, y: 150, name: 'head' },      // 0 - head
+				{ x: 200, y: 180, name: 'body' },      // 1 - body (shoulders)
+				{ x: 200, y: 220, name: 'hips' },      // 2 - hips
+				{ x: 185, y: 250, name: 'leftKnee' },  // 3 - left knee
+				{ x: 180, y: 280, name: 'leftFoot' },  // 4 - left foot
+				{ x: 215, y: 250, name: 'rightKnee' }, // 5 - right knee
+				{ x: 220, y: 280, name: 'rightFoot' }, // 6 - right foot
+				{ x: 175, y: 190, name: 'leftElbow' }, // 7 - left elbow
+				{ x: 160, y: 210, name: 'leftHand' },  // 8 - left hand
+				{ x: 225, y: 190, name: 'rightElbow' },// 9 - right elbow
+				{ x: 240, y: 210, name: 'rightHand' }, // 10 - right hand
+				{ x: 200, y: 200, name: 'middle' }     // 11 - middle (drag joint)
 			];
 		}
 
@@ -137,6 +142,13 @@ define([
 				const templateData = await response.json();
 
 				frames = JSON.parse(JSON.stringify(templateData.frames));
+				// Add middle joint to existing templates if not present
+				frames.forEach(frame => {
+					if (frame.length === 11) {
+						frame.push({ x: (frame[1].x + frame[2].x) / 2, y: (frame[1].y + frame[2].y) / 2, name: 'middle' });
+					}
+				});
+
 				currentFrame = 0;
 				joints = JSON.parse(JSON.stringify(frames[currentFrame]));
 				updateTimeline();
@@ -146,9 +158,9 @@ define([
 				addFrame();
 			}
 		}
-		
+
 		// FRAME MANAGEMENT
-		
+
 		function addFrame() {
 			const frameData = JSON.parse(JSON.stringify(joints));
 			frames.push(frameData);
@@ -170,9 +182,9 @@ define([
 			updateTimeline();
 			pause();
 		}
-		
+
 		// TIMELINE FUNCTIONS
-		
+
 		function updateTimeline() {
 			const timeline = document.getElementById('timeline');
 			timeline.innerHTML = '';
@@ -238,76 +250,154 @@ define([
 			});
 			return deleteBtn;
 		}
-		
+
 		// DRAWING FUNCTIONS
-		
+
 		function drawStickmanPreview(ctx, frame) {
-			ctx.strokeStyle = '#000';
+			// Simplified version for timeline previews
+			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 2;
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
+
 			drawStickmanSkeleton(ctx, frame);
 
-			// Draw head
-			ctx.beginPath();
-			ctx.arc(frame[0].x, frame[0].y, 8, 0, Math.PI * 2);
-			ctx.stroke();
-		}
-
-		function drawStickman() {
-			ctx.strokeStyle = '#000';
-			ctx.lineWidth = 4;
-			drawStickmanSkeleton(ctx, joints);
-
-			// Draw joints
-			ctx.fillStyle = '#edf3c4';
-			joints.forEach(joint => {
+			// Draw small red joints for preview (excluding middle joint)
+			ctx.fillStyle = '#ff0000';
+			frame.forEach((joint, index) => {
+				if (index === 11) return; // Skip middle joint in preview
 				ctx.beginPath();
-				ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+				if (index === 0) {
+					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2); // Head slightly larger
+				} else {
+					ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2); // Body joints
+				}
 				ctx.fill();
 			});
 		}
 
+		function drawStickman() {
+			// Draw skeleton first (behind joints)
+			ctx.strokeStyle = '#000000';
+			ctx.lineWidth = 3;
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
+			drawStickmanSkeleton(ctx, joints);
+
+			// Draw joints on top (Pivot style - red circles)
+			joints.forEach((joint, index) => {
+				// Skip middle joint for normal display
+				if (index === 11) return;
+
+				// Different colors for different joint types
+				if (index === 0) {
+					// Head joint - slightly larger
+					ctx.fillStyle = '#ff0000';
+					ctx.strokeStyle = '#cc0000';
+					ctx.lineWidth = 2;
+					ctx.beginPath();
+					ctx.arc(joint.x, joint.y, 6, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+				} else {
+					// Body joints
+					ctx.fillStyle = '#ff0000';
+					ctx.strokeStyle = '#cc0000';
+					ctx.lineWidth = 1.5;
+					ctx.beginPath();
+					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+				}
+			});
+
+			// Draw middle joint (drag joint) with different style
+			const middleJoint = joints[11];
+			ctx.fillStyle = '#00ff00';
+			ctx.strokeStyle = '#00cc00';
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.arc(middleJoint.x, middleJoint.y, 8, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.stroke();
+
+			// Add cross pattern to indicate drag functionality
+			ctx.strokeStyle = '#ffffff';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(middleJoint.x - 4, middleJoint.y);
+			ctx.lineTo(middleJoint.x + 4, middleJoint.y);
+			ctx.moveTo(middleJoint.x, middleJoint.y - 4);
+			ctx.lineTo(middleJoint.x, middleJoint.y + 4);
+			ctx.stroke();
+
+			// Highlight selected joint
+			if (selectedJoint && selectedJoint !== joints[11]) {
+				ctx.strokeStyle = '#ffff00';
+				ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.arc(selectedJoint.x, selectedJoint.y, 8, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
+			}
+		}
+
 		function drawStickmanSkeleton(ctx, frame) {
-			// Draw body line
+			ctx.strokeStyle = '#000000';
+			ctx.lineWidth = 8;
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
+
+			// Draw body line (head to body to middle to hips)
 			ctx.beginPath();
 			ctx.moveTo(frame[0].x, frame[0].y);
 			ctx.lineTo(frame[1].x, frame[1].y);
+			if (frame[11]) {
+				ctx.lineTo(frame[11].x, frame[11].y);
+			}
 			ctx.lineTo(frame[2].x, frame[2].y);
 			ctx.stroke();
 
-			// Draw legs
+			// Draw left leg
 			ctx.beginPath();
-			ctx.moveTo(frame[2].x, frame[2].y);
-			ctx.lineTo(frame[3].x, frame[3].y);
-			ctx.lineTo(frame[4].x, frame[4].y);
+			ctx.moveTo(frame[2].x, frame[2].y); // hips
+			ctx.lineTo(frame[3].x, frame[3].y); // left knee
+			ctx.lineTo(frame[4].x, frame[4].y); // left foot
 			ctx.stroke();
 
+			// Draw right leg
 			ctx.beginPath();
-			ctx.moveTo(frame[2].x, frame[2].y);
-			ctx.lineTo(frame[5].x, frame[5].y);
-			ctx.lineTo(frame[6].x, frame[6].y);
+			ctx.moveTo(frame[2].x, frame[2].y); // hips
+			ctx.lineTo(frame[5].x, frame[5].y); // right knee
+			ctx.lineTo(frame[6].x, frame[6].y); // right foot
 			ctx.stroke();
 
-			// Draw arms
+			// Draw left arm
 			ctx.beginPath();
-			ctx.moveTo(frame[1].x, frame[1].y);
-			ctx.lineTo(frame[7].x, frame[7].y);
-			ctx.lineTo(frame[8].x, frame[8].y);
+			ctx.moveTo(frame[1].x, frame[1].y); // body
+			ctx.lineTo(frame[7].x, frame[7].y); // left elbow
+			ctx.lineTo(frame[8].x, frame[8].y); // left hand
 			ctx.stroke();
 
+			// Draw right arm
 			ctx.beginPath();
-			ctx.moveTo(frame[1].x, frame[1].y);
-			ctx.lineTo(frame[9].x, frame[9].y);
-			ctx.lineTo(frame[10].x, frame[10].y);
+			ctx.moveTo(frame[1].x, frame[1].y); // body
+			ctx.lineTo(frame[9].x, frame[9].y); // right elbow
+			ctx.lineTo(frame[10].x, frame[10].y); // right hand
 			ctx.stroke();
 
-			// Draw head
+			// Draw head circle (filled)
 			ctx.beginPath();
-			ctx.arc(frame[0].x, frame[0].y, 15, 0, Math.PI * 2);
+			ctx.arc(frame[0].x, frame[0].y, 12, 0, Math.PI * 2);
+			ctx.fillStyle = '#ffffff';  // White fill
+			ctx.fill();
 			ctx.stroke();
 		}
-		
+
+
 		// ANIMATION CONTROL
-		
+
 		function togglePlayPause() {
 			if (isPlaying) {
 				pause();
@@ -340,27 +430,49 @@ define([
 				requestAnimationFrame(animate);
 			}, 1000 / (currentSpeed * 2));
 		}
-		
+
 		// MOUSE INTERACTION
-		
+
 		function handleMouseDown(e) {
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 			selectedJoint = findJointAtPosition(mouseX, mouseY);
-			isDragging = !!selectedJoint;
+
+			if (selectedJoint === joints[11]) {
+				// Clicked on middle joint - start whole stickman drag
+				isDraggingWhole = true;
+				dragStartPos = { x: mouseX, y: mouseY };
+				originalJoints = JSON.parse(JSON.stringify(joints));
+			} else {
+				// Normal joint dragging
+				isDragging = !!selectedJoint;
+			}
 		}
 
 		function handleMouseMove(e) {
-			if (isDragging && selectedJoint) {
-				const { mouseX, mouseY } = getCanvasCoordinates(e);
+			const { mouseX, mouseY } = getCanvasCoordinates(e);
+
+			if (isDraggingWhole) {
+				// Drag entire stickman
+				const deltaX = mouseX - dragStartPos.x;
+				const deltaY = mouseY - dragStartPos.y;
+
+				joints.forEach((joint, index) => {
+					joint.x = originalJoints[index].x + deltaX;
+					joint.y = originalJoints[index].y + deltaY;
+				});
+
+				saveCurrentFrame();
+			} else if (isDragging && selectedJoint && selectedJoint !== joints[11]) {
+				// Normal joint dragging - move only the selected joint
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
-				constrainJoints();
 				saveCurrentFrame();
 			}
 		}
 
 		function handleMouseUp() {
 			isDragging = false;
+			isDraggingWhole = false;
 			selectedJoint = null;
 		}
 
@@ -375,60 +487,73 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			return joints.find(joint => {
+			// Check middle joint first (larger hit area)
+			const middleJoint = joints[11];
+			if (middleJoint) {
+				const dx = middleJoint.x - x;
+				const dy = middleJoint.y - y;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+				if (distance < 12) {
+					return middleJoint;
+				}
+			}
+
+			// Check other joints in reverse order so head (larger) gets priority
+			for (let i = joints.length - 2; i >= 0; i--) {
+				const joint = joints[i];
 				const dx = joint.x - x;
 				const dy = joint.y - y;
-				return Math.sqrt(dx * dx + dy * dy) < 10;
-			});
-		}
+				const distance = Math.sqrt(dx * dx + dy * dy);
 
-		function constrainJoints() {
-			const iterations = 5;
-			for (let i = 0; i < iterations; i++) {
-				constraints.forEach(constraint => {
-					const joint1 = joints[constraint.joint1];
-					const joint2 = joints[constraint.joint2];
+				// Different hit areas for different joints
+				const hitRadius = i === 0 ? 12 : 8; // Head has larger hit area
 
-					const dx = joint2.x - joint1.x;
-					const dy = joint2.y - joint1.y;
-					const currentDistance = Math.sqrt(dx * dx + dy * dy);
-
-					if (currentDistance === constraint.distance) return;
-
-					const difference = (constraint.distance - currentDistance) / currentDistance;
-					const offsetX = dx * 0.5 * difference;
-					const offsetY = dy * 0.5 * difference;
-
-					joint1.x -= offsetX;
-					joint1.y -= offsetY;
-					joint2.x += offsetX;
-					joint2.y += offsetY;
-				});
+				if (distance < hitRadius) {
+					return joint;
+				}
 			}
+			return null;
 		}
-		
+
 		// RENDERING LOOP
-		
+
 		function render() {
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-			// Draw onion skin of previous frame
-			if (frames.length > 1) {
+			// Draw onion skin of previous frame (more transparent, Pivot style)
+			if (frames.length > 1 && !isPlaying) {
 				const prevFrameIndex = currentFrame === 0 ? frames.length - 1 : currentFrame - 1;
 				ctx.save();
-				ctx.strokeStyle = 'rgba(150, 150, 255, 0.4)';
-				ctx.fillStyle = 'rgba(150, 150, 255, 0.2)';
-				ctx.lineWidth = 3;
+				ctx.globalAlpha = 0.3;
+				ctx.strokeStyle = '#0066cc';
+				ctx.lineWidth = 2;
+				ctx.lineCap = 'round';
+				ctx.lineJoin = 'round';
+
 				drawStickmanSkeleton(ctx, frames[prevFrameIndex]);
+
+				// Draw previous frame joints (excluding middle)
+				ctx.fillStyle = '#0066cc';
+				frames[prevFrameIndex].forEach((joint, index) => {
+					if (index === 11) return; // Skip middle joint
+					ctx.beginPath();
+					if (index === 0) {
+						ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+					} else {
+						ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
+					}
+					ctx.fill();
+				});
+
 				ctx.restore();
 			}
 
 			drawStickman();
 			requestAnimationFrame(render);
 		}
-		
+
 		// EXPORT FUNCTIONALITY
-		
+
 		function exportAnimation() {
 			const recordCanvas = document.createElement('canvas');
 			recordCanvas.width = canvas.width;
@@ -479,7 +604,7 @@ define([
 
 			renderFrame();
 		}
-		
+
 		// START APPLICATION
 		activity.setup();
 		initializeAnimator();
