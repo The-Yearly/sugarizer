@@ -114,20 +114,26 @@ define([
 
 		// STICKMAN CREATION & TEMPLATES
 
+
 		function createDefaultStickman() {
+			// Calculate center of canvas
+			const centerX = canvas.width / 2;
+			const centerY = canvas.height / 2;
+
+			// Define stickman relative to center position
 			joints = [
-				{ x: 200, y: 150, name: 'head' },            // 0 - head
-				{ x: 200, y: 165, name: 'body' },            // 1 - body
-				{ x: 200, y: 220, name: 'hips' },            // 2 - hips
-				{ x: 185, y: 250, name: 'leftKnee' },        // 3 - left knee
-				{ x: 180, y: 280, name: 'leftFoot' },        // 4 - left foot
-				{ x: 215, y: 250, name: 'rightKnee' },       // 5 - right knee
-				{ x: 220, y: 280, name: 'rightFoot' },       // 6 - right foot
-				{ x: 175, y: 175, name: 'leftElbow' },       // 7 - left elbow
-				{ x: 160, y: 200, name: 'leftHand' },        // 8 - left hand
-				{ x: 225, y: 175, name: 'rightElbow' },      // 9 - right elbow
-				{ x: 240, y: 200, name: 'rightHand' },       // 10 - right hand
-				{ x: 200, y: 192, name: 'middle' }           // 11 - middle (drag joint)
+				{ x: centerX, y: centerY - 50, name: 'head' },            // 0 - head
+				{ x: centerX, y: centerY - 35, name: 'body' },            // 1 - body
+				{ x: centerX, y: centerY + 20, name: 'hips' },            // 2 - hips
+				{ x: centerX - 15, y: centerY + 50, name: 'leftKnee' },   // 3 - left knee
+				{ x: centerX - 20, y: centerY + 80, name: 'leftFoot' },   // 4 - left foot
+				{ x: centerX + 15, y: centerY + 50, name: 'rightKnee' },  // 5 - right knee
+				{ x: centerX + 20, y: centerY + 80, name: 'rightFoot' },  // 6 - right foot
+				{ x: centerX - 25, y: centerY - 25, name: 'leftElbow' },  // 7 - left elbow
+				{ x: centerX - 40, y: centerY, name: 'leftHand' },        // 8 - left hand
+				{ x: centerX + 25, y: centerY - 25, name: 'rightElbow' }, // 9 - right elbow
+				{ x: centerX + 40, y: centerY, name: 'rightHand' },       // 10 - right hand
+				{ x: centerX, y: centerY - 8, name: 'middle' }            // 11 - middle (drag joint)
 			];
 
 			updateMiddleJoint();
@@ -244,8 +250,8 @@ define([
 
 		function createPreviewCanvas(frame, index) {
 			const previewCanvas = document.createElement('canvas');
-			previewCanvas.width = 60;
-			previewCanvas.height = 60;
+			previewCanvas.width = 80;
+			previewCanvas.height = 80;
 
 			// active class for current frame
 			const isActive = index === currentFrame;
