@@ -1,9 +1,13 @@
 define([
 	"sugar-web/activity/activity",
+	"sugar-web/env",
+	"sugar-web/graphics/presencepalette",
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
 ], function (
 	activity,
+	env,
+	presencepalette,
 	speedpalette,
 	templatepalette
 ) {
@@ -27,6 +31,8 @@ define([
 		let originalJoints = [];
 		let nextStickmanId = 0;
 		let isRemovalMode = false;
+		let currentenv;
+		let isShared = false;
 
 		// Joint connections with proper distances
 		const jointConnections = [
@@ -51,14 +57,90 @@ define([
 				initCanvas();
 				initEvents();
 				initControls();
-				createInitialStickman();
-				addFrame();
 				render();
 			} else {
 				console.warn('Canvas element not found, retrying...');
 				setTimeout(initializeAnimator, 100);
 			}
 		}
+
+		function setupDatastore() {
+			activity.setup();
+
+			env.getEnvironment(function (err, environment) {
+				currentenv = environment;
+
+				// Load from datastore
+				if (!environment.objectId) {
+					console.log("New instance");
+					// Initialize with default state - only create one frame
+					createInitialStickman();
+					addFrame(); // This will be the only frame created for new instances
+				} else {
+					// Existing instance - load saved data
+					activity.getDatastoreObject().loadAsText(function (error, metadata, data) {
+						if (error == null && data != null) {
+							const savedData = JSON.parse(data);
+
+							// Restore saved state
+							frames = savedData.frames || [];
+							currentFrame = savedData.currentFrame || 0;
+							speed = savedData.speed || 1;
+							currentSpeed = savedData.currentSpeed || 1;
+							nextStickmanId = savedData.nextStickmanId || 0;
+
+							if (frames.length > 0) {
+								stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+								stickmen.forEach((_, index) => updateMiddleJoint(index));
+							} else {
+								// Only create one frame if loaded data has no frames
+								createInitialStickman();
+								addFrame();
+							}
+
+							updateTimeline();
+							render();
+						} else {
+							console.log("No instance found, creating new instance");
+							// Only create one frame for new instances
+							createInitialStickman();
+							addFrame();
+						}
+					});
+				}
+
+				if (environment.sharedId) {
+					console.log("Shared instance");
+					isShared = true;
+					// Handle shared activity if needed
+				}
+			});
+		}
+
+		document.getElementById('stop-button').addEventListener('click', function () {
+			console.log("writing...");
+
+			// Prepare data to save
+			const saveData = {
+				frames: frames,
+				currentFrame: currentFrame,
+				speed: speed,
+				currentSpeed: currentSpeed,
+				nextStickmanId: nextStickmanId
+			};
+
+			var jsonData = JSON.stringify(saveData);
+			activity.getDatastoreObject().setDataAsText(jsonData);
+			activity.getDatastoreObject().save(function (error) {
+				if (error === null) {
+					console.log("write done.");
+				} else {
+					console.log("write failed.");
+				}
+				activity.close();
+			});
+		});
+
 
 		function initCanvas() {
 			canvas = document.getElementById('stickman-canvas');
@@ -82,10 +164,9 @@ define([
 			document.getElementById('export-button').addEventListener('click', exportAnimation);
 			document.getElementById('addStickman-button').addEventListener('click', addNewStickman);
 			document.getElementById('minus-button').addEventListener('click', removeSelectedStickman);
-			document.getElementById('stop-button').addEventListener('click', function () {
-				pause();
-				activity.close();
-			});
+
+			// Initialize datastore
+			setupDatastore();
 		}
 
 		function initControls() {
