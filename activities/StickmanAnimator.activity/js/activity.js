@@ -24,6 +24,9 @@ define([
 		let currentSpeed = 1;
 		let dragStartPos = { x: 0, y: 0 };
 		let originalJoints = [];
+		let lastFrameTime = 0;
+		let frameRecordingInterval = 100; // milliseconds between frame captures
+		let dragStartFrame = -1;
 
 		// Joint connections with proper distances
 		const jointConnections = [
@@ -519,6 +522,7 @@ define([
 				});
 
 				saveCurrentFrame();
+				updateTimeline(); // Add this line to update timeline immediately
 			} else if (isDragging && selectedJoint && selectedJoint !== joints[11]) {
 				// Find the index of the selected joint
 				const selectedIndex = joints.indexOf(selectedJoint);
@@ -535,6 +539,7 @@ define([
 				}
 
 				saveCurrentFrame();
+				updateTimeline(); // Add this line to update timeline immediately
 			}
 		}
 
@@ -542,6 +547,11 @@ define([
 			isDragging = false;
 			isDraggingWhole = false;
 			selectedJoint = null;
+			// Final update when dragging ends
+			if (currentFrame >= 0) {
+				saveCurrentFrame();
+				updateTimeline();
+			}
 		}
 
 		function getCanvasCoordinates(e) {
