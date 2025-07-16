@@ -73,11 +73,10 @@ define([
 				// Load from datastore
 				if (!environment.objectId) {
 					console.log("New instance");
-					// Initialize with default state - only create one frame
 					createInitialStickman();
-					addFrame(); // This will be the only frame created for new instances
+					addFrame(); 
 				} else {
-					// Existing instance - load saved data
+					// load saved data
 					activity.getDatastoreObject().loadAsText(function (error, metadata, data) {
 						if (error == null && data != null) {
 							const savedData = JSON.parse(data);
@@ -93,7 +92,6 @@ define([
 								stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
 								stickmen.forEach((_, index) => updateMiddleJoint(index));
 							} else {
-								// Only create one frame if loaded data has no frames
 								createInitialStickman();
 								addFrame();
 							}
@@ -102,7 +100,6 @@ define([
 							render();
 						} else {
 							console.log("No instance found, creating new instance");
-							// Only create one frame for new instances
 							createInitialStickman();
 							addFrame();
 						}
@@ -112,7 +109,7 @@ define([
 				if (environment.sharedId) {
 					console.log("Shared instance");
 					isShared = true;
-					// Handle shared activity if needed
+					// shared activity logic goes here
 				}
 			});
 		}
@@ -120,7 +117,6 @@ define([
 		document.getElementById('stop-button').addEventListener('click', function () {
 			console.log("writing...");
 
-			// Prepare data to save
 			const saveData = {
 				frames: frames,
 				currentFrame: currentFrame,
