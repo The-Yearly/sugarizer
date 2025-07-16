@@ -16,17 +16,17 @@ define([
 		let currentFrame = 0;
 		let isPlaying = false;
 		let speed = 1;
-		let joints = [];
+		let stickmen = []; // Array of stickmen
 		let selectedJoint = null;
+		let selectedStickmanIndex = -1;
 		let isDragging = false;
 		let isDraggingWhole = false;
 		let templates = {};
 		let currentSpeed = 1;
 		let dragStartPos = { x: 0, y: 0 };
 		let originalJoints = [];
-		let lastFrameTime = 0;
-		let frameRecordingInterval = 100; // milliseconds between frame captures
-		let dragStartFrame = -1;
+		let nextStickmanId = 0;
+		let isRemovalMode = false;
 
 		// Joint connections with proper distances
 		const jointConnections = [
@@ -51,7 +51,7 @@ define([
 				initCanvas();
 				initEvents();
 				initControls();
-				createDefaultStickman();
+				createInitialStickman();
 				addFrame();
 				render();
 			} else {
@@ -80,7 +80,8 @@ define([
 			// Control buttons
 			document.getElementById('add-button').addEventListener('click', addFrame);
 			document.getElementById('export-button').addEventListener('click', exportAnimation);
-			document.getElementById('addStickman-button').addEventListener('click', createNew);
+			document.getElementById('addStickman-button').addEventListener('click', addNewStickman);
+			document.getElementById('minus-button').addEventListener('click', removeSelectedStickman);
 			document.getElementById('stop-button').addEventListener('click', function () {
 				pause();
 				activity.close();
@@ -88,7 +89,6 @@ define([
 		}
 
 		function initControls() {
-
 			// Play/Pause button setup
 			const playPauseButton = document.getElementById('play-pause-button');
 			playPauseButton.style.backgroundImage = "url('icons/play.svg')";
@@ -115,36 +115,91 @@ define([
 			});
 		}
 
-		// STICKMAN CREATION & TEMPLATES
+		// STICKMAN CREATION & MANAGEMENT
 
+		function createStickmanJoints(centerX, centerY, id) {
+			return {
+				id: id,
+				joints: [
+					{ x: centerX, y: centerY - 50, name: 'head' },            // 0 - head
+					{ x: centerX, y: centerY - 35, name: 'body' },            // 1 - body
+					{ x: centerX, y: centerY + 20, name: 'hips' },            // 2 - hips
+					{ x: centerX - 15, y: centerY + 50, name: 'leftKnee' },   // 3 - left knee
+					{ x: centerX - 20, y: centerY + 80, name: 'leftFoot' },   // 4 - left foot
+					{ x: centerX + 15, y: centerY + 50, name: 'rightKnee' },  // 5 - right knee
+					{ x: centerX + 20, y: centerY + 80, name: 'rightFoot' },  // 6 - right foot
+					{ x: centerX - 25, y: centerY - 25, name: 'leftElbow' },  // 7 - left elbow
+					{ x: centerX - 40, y: centerY, name: 'leftHand' },        // 8 - left hand
+					{ x: centerX + 25, y: centerY - 25, name: 'rightElbow' }, // 9 - right elbow
+					{ x: centerX + 40, y: centerY, name: 'rightHand' },       // 10 - right hand
+					{ x: centerX, y: centerY - 8, name: 'middle' }            // 11 - middle (drag joint)
+				]
+			};
+		}
 
-		function createDefaultStickman() {
-			// Calculate center of canvas
+		function createInitialStickman() {
 			const centerX = canvas.width / 2;
 			const centerY = canvas.height / 2;
 
-			// Define stickman relative to center position
-			joints = [
-				{ x: centerX, y: centerY - 50, name: 'head' },            // 0 - head
-				{ x: centerX, y: centerY - 35, name: 'body' },            // 1 - body
-				{ x: centerX, y: centerY + 20, name: 'hips' },            // 2 - hips
-				{ x: centerX - 15, y: centerY + 50, name: 'leftKnee' },   // 3 - left knee
-				{ x: centerX - 20, y: centerY + 80, name: 'leftFoot' },   // 4 - left foot
-				{ x: centerX + 15, y: centerY + 50, name: 'rightKnee' },  // 5 - right knee
-				{ x: centerX + 20, y: centerY + 80, name: 'rightFoot' },  // 6 - right foot
-				{ x: centerX - 25, y: centerY - 25, name: 'leftElbow' },  // 7 - left elbow
-				{ x: centerX - 40, y: centerY, name: 'leftHand' },        // 8 - left hand
-				{ x: centerX + 25, y: centerY - 25, name: 'rightElbow' }, // 9 - right elbow
-				{ x: centerX + 40, y: centerY, name: 'rightHand' },       // 10 - right hand
-				{ x: centerX, y: centerY - 8, name: 'middle' }            // 11 - middle (drag joint)
-			];
-
-			updateMiddleJoint();
+			stickmen = [createStickmanJoints(centerX, centerY, nextStickmanId++)];
+			updateMiddleJoint(0);
 		}
 
-		function updateMiddleJoint() {
-			joints[11].x = (joints[1].x + joints[2].x) / 2;
-			joints[11].y = (joints[1].y + joints[2].y) / 2;
+		function addNewStickman() {
+			// at a random position
+			const centerX = Math.random() * (canvas.width - 200) + 100;
+			const centerY = Math.random() * (canvas.height - 200) + 100;
+
+			const newStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
+			stickmen.push(newStickman);
+			updateMiddleJoint(stickmen.length - 1);
+
+			frames.forEach(frame => {
+				frame.push(JSON.parse(JSON.stringify(newStickman)));
+			});
+
+			updateTimeline();
+			console.log(`Added new stickman. Total: ${stickmen.length}`);
+		}
+
+		function removeSelectedStickman() {
+			if (!isRemovalMode) {
+				isRemovalMode = true;
+				document.getElementById('minus-button').style.backgroundColor = '#ffcccc';
+				document.getElementById('minus-button').style.border = '2px solid #ff0000';
+				canvas.style.cursor = 'crosshair';
+				console.log("Removal mode activated. Click on a stickman to remove it.");
+			} else {
+				exitRemovalMode();
+			}
+		}
+
+		function exitRemovalMode() {
+			isRemovalMode = false;
+			document.getElementById('minus-button').style.backgroundColor = '';
+			document.getElementById('minus-button').style.border = '';
+			canvas.style.cursor = 'default';
+			console.log("Removal mode deactivated.");
+		}
+
+		function updateMiddleJoint(stickmanIndex) {
+			if (stickmanIndex >= 0 && stickmanIndex < stickmen.length) {
+				const joints = stickmen[stickmanIndex].joints;
+				joints[11].x = (joints[1].x + joints[2].x) / 2;
+				joints[11].y = (joints[1].y + joints[2].y) / 2;
+			}
+		}
+
+		function createNew() {
+			frames = [];
+			currentFrame = 0;
+			stickmen = [];
+			selectedJoint = null;
+			selectedStickmanIndex = -1;
+			createInitialStickman();
+			addFrame();
+			updateTimeline();
+			pause();
 		}
 
 		async function loadTemplate(templateName) {
@@ -155,24 +210,34 @@ define([
 				}
 				const templateData = await response.json();
 
+				// For now, templates only work with single stickman
+				// Reset to single stickman and load template
+				stickmen = [createStickmanJoints(canvas.width / 2, canvas.height / 2, nextStickmanId++)];
+
 				frames = JSON.parse(JSON.stringify(templateData.frames));
 				frames.forEach(frame => {
-					if (frame.length === 11) {
-						frame.push({ 
-							x: (frame[1].x + frame[2].x) / 2, 
-							y: (frame[1].y + frame[2].y) / 2, 
-							name: 'middle' 
-						});
+					// Ensure frame is array of stickmen
+					if (!Array.isArray(frame[0])) {
+						if (frame.length === 11) {
+							frame.push({
+								x: (frame[1].x + frame[2].x) / 2,
+								y: (frame[1].y + frame[2].y) / 2,
+								name: 'middle'
+							});
+						}
+						frame = [{ id: 0, joints: frame }];
 					}
 				});
 
 				currentFrame = 0;
-				joints = JSON.parse(JSON.stringify(frames[currentFrame]));
-				updateMiddleJoint();
+				if (frames.length > 0) {
+					stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+				}
+				updateMiddleJoint(0);
 				updateTimeline();
 			} catch (error) {
 				console.error('Error loading template:', error);
-				createDefaultStickman();
+				createInitialStickman();
 				addFrame();
 			}
 		}
@@ -180,8 +245,11 @@ define([
 		// FRAME MANAGEMENT
 
 		function addFrame() {
-			updateMiddleJoint();
-			const frameData = JSON.parse(JSON.stringify(joints));
+			// Update middle joints for all stickmen
+			stickmen.forEach((_, index) => updateMiddleJoint(index));
+
+			// Deep copy all stickmen for this frame
+			const frameData = JSON.parse(JSON.stringify(stickmen));
 			frames.push(frameData);
 			currentFrame = frames.length - 1;
 			updateTimeline();
@@ -189,18 +257,9 @@ define([
 
 		function saveCurrentFrame() {
 			if (currentFrame >= 0) {
-				updateMiddleJoint();
-				frames[currentFrame] = JSON.parse(JSON.stringify(joints));
+				stickmen.forEach((_, index) => updateMiddleJoint(index));
+				frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
 			}
-		}
-
-		function createNew() {
-			frames = [];
-			currentFrame = 0;
-			createDefaultStickman();
-			addFrame();
-			updateTimeline();
-			pause();
 		}
 
 		// TIMELINE FUNCTIONS
@@ -218,9 +277,9 @@ define([
 
 				previewCanvas.addEventListener('click', () => {
 					currentFrame = index;
-					joints = JSON.parse(JSON.stringify(frame));
-					updateMiddleJoint();
-					updateTimeline(); 
+					stickmen = JSON.parse(JSON.stringify(frame));
+					stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
+					updateTimeline();
 					render();
 				});
 
@@ -229,7 +288,6 @@ define([
 				timeline.appendChild(frameContainer);
 			});
 
-			// Auto-scroll to active frame if it's not visible
 			scrollToActiveFrame();
 		}
 
@@ -256,30 +314,39 @@ define([
 			previewCanvas.width = 80;
 			previewCanvas.height = 80;
 
-			// active class for current frame
 			const isActive = index === currentFrame;
 			previewCanvas.className = `frame ${isActive ? 'active' : ''}`;
 
 			const previewCtx = previewCanvas.getContext('2d');
-
-			// different background colors for active frame
 			previewCtx.fillStyle = isActive ? '#e6f3ff' : '#ffffff';
 			previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-			const stickmanHeight = Math.max(...frame.map(p => p.y)) - Math.min(...frame.map(p => p.y));
-			const stickmanWidth = Math.max(...frame.map(p => p.x)) - Math.min(...frame.map(p => p.x));
-			const scale = Math.min(40 / stickmanHeight, 40 / stickmanWidth);
+			// bounds for all stickmen in this frame
+			let allPoints = [];
+			frame.forEach(stickman => {
+				allPoints = allPoints.concat(stickman.joints);
+			});
 
-			const centerX = (Math.max(...frame.map(p => p.x)) + Math.min(...frame.map(p => p.x))) / 2;
-			const centerY = (Math.max(...frame.map(p => p.y)) + Math.min(...frame.map(p => p.y))) / 2;
+			if (allPoints.length > 0) {
+				const stickmanHeight = Math.max(...allPoints.map(p => p.y)) - Math.min(...allPoints.map(p => p.y));
+				const stickmanWidth = Math.max(...allPoints.map(p => p.x)) - Math.min(...allPoints.map(p => p.x));
+				const scale = Math.min(40 / stickmanHeight, 40 / stickmanWidth);
 
-			previewCtx.save();
-			previewCtx.translate(previewCanvas.width / 2, previewCanvas.height / 2);
-			previewCtx.scale(scale, scale);
-			previewCtx.translate(-centerX, -centerY);
+				const centerX = (Math.max(...allPoints.map(p => p.x)) + Math.min(...allPoints.map(p => p.x))) / 2;
+				const centerY = (Math.max(...allPoints.map(p => p.y)) + Math.min(...allPoints.map(p => p.y))) / 2;
 
-			drawStickmanPreview(previewCtx, frame);
-			previewCtx.restore();
+				previewCtx.save();
+				previewCtx.translate(previewCanvas.width / 2, previewCanvas.height / 2);
+				previewCtx.scale(scale, scale);
+				previewCtx.translate(-centerX, -centerY);
+
+				// Draw all stickmen in preview
+				frame.forEach(stickman => {
+					drawStickmanPreview(previewCtx, stickman.joints);
+				});
+
+				previewCtx.restore();
+			}
 
 			return previewCanvas;
 		}
@@ -301,38 +368,45 @@ define([
 
 		// DRAWING FUNCTIONS
 
-		function drawStickmanPreview(ctx, frame) {
+		function drawStickmanPreview(ctx, joints) {
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 2;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 
-			drawStickmanSkeleton(ctx, frame);
+			drawStickmanSkeleton(ctx, joints);
 
 			ctx.fillStyle = '#ff0000';
-			frame.forEach((joint, index) => {
-				if (index === 11) return; // Skip middle joint in preview
+			joints.forEach((joint, index) => {
+				if (index === 11) 
+					return; 
 				ctx.beginPath();
 				if (index === 0) {
-					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2); 
+					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2);
 				} else {
-					ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2); 
+					ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
 				}
 				ctx.fill();
 			});
 		}
 
-		function drawStickman() {
-			// draw skeleton first
+		function drawAllStickmen() {
+			stickmen.forEach((stickman, stickmanIndex) => {
+				drawStickman(stickman.joints, stickmanIndex);
+			});
+		}
+
+		function drawStickman(joints, stickmanIndex) {
+			// skeleton first
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 3;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 			drawStickmanSkeleton(ctx, joints);
 
-			// Draw joints on top
+			// joints on top
 			joints.forEach((joint, index) => {
-				// skip middle joint for normal display
+				// Skip middle joint for normal display
 				if (index === 11) return;
 
 				ctx.fillStyle = '#ff0000';
@@ -342,21 +416,22 @@ define([
 				ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.stroke();
-				
 			});
 
-			// Draw middle joint (drag joint)
+			// Draw middle joint (drag joint) - different color for selected stickman
 			const middleJoint = joints[11];
-			ctx.fillStyle = '#00ff00';
-			ctx.strokeStyle = '#00cc00';
+			const isSelected = stickmanIndex === selectedStickmanIndex;
+
+			ctx.fillStyle = isSelected ? '#ffff00' : '#00ff00';
+			ctx.strokeStyle = isSelected ? '#cccc00' : '#00cc00';
 			ctx.lineWidth = 1.5;
 			ctx.beginPath();
 			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2);
 			ctx.fill();
 			ctx.stroke();
 
-			// highlight selected joint
-			if (selectedJoint && selectedJoint !== joints[11]) {
+			// Highlight selected joint
+			if (selectedJoint && selectedStickmanIndex === stickmanIndex && selectedJoint !== joints[11]) {
 				ctx.strokeStyle = '#ffff00';
 				ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
 				ctx.lineWidth = 2;
@@ -367,61 +442,62 @@ define([
 			}
 		}
 
-		function drawStickmanSkeleton(ctx, frame) {
+		function drawStickmanSkeleton(ctx, joints) {
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 10;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 
-			// draw body line (head to body to middle to hips)
+			// body line
 			ctx.beginPath();
-			ctx.moveTo(frame[0].x, frame[0].y);
-			ctx.lineTo(frame[1].x, frame[1].y);
-			if (frame[11]) {
-				ctx.lineTo(frame[11].x, frame[11].y);
+			ctx.moveTo(joints[0].x, joints[0].y);
+			ctx.lineTo(joints[1].x, joints[1].y);
+			if (joints[11]) {
+				ctx.lineTo(joints[11].x, joints[11].y);
 			}
-			ctx.lineTo(frame[2].x, frame[2].y);
+			ctx.lineTo(joints[2].x, joints[2].y);
 			ctx.stroke();
 
-			// draw left leg
+			// left leg
 			ctx.beginPath();
-			ctx.moveTo(frame[2].x, frame[2].y); // hips
-			ctx.lineTo(frame[3].x, frame[3].y); // left knee
-			ctx.lineTo(frame[4].x, frame[4].y); // left foot
+			ctx.moveTo(joints[2].x, joints[2].y); // hips
+			ctx.lineTo(joints[3].x, joints[3].y); // left knee
+			ctx.lineTo(joints[4].x, joints[4].y); // left foot
 			ctx.stroke();
 
-			// draw right leg
+			// right leg
 			ctx.beginPath();
-			ctx.moveTo(frame[2].x, frame[2].y); // hips
-			ctx.lineTo(frame[5].x, frame[5].y); // right knee
-			ctx.lineTo(frame[6].x, frame[6].y); // right foot
+			ctx.moveTo(joints[2].x, joints[2].y); // hips
+			ctx.lineTo(joints[5].x, joints[5].y); // right knee
+			ctx.lineTo(joints[6].x, joints[6].y); // right foot
 			ctx.stroke();
 
-			// draw left arm
+			// left arm
 			ctx.beginPath();
-			ctx.moveTo(frame[1].x, frame[1].y); // body
-			ctx.lineTo(frame[7].x, frame[7].y); // left elbow
-			ctx.lineTo(frame[8].x, frame[8].y); // left hand
+			ctx.moveTo(joints[1].x, joints[1].y); // body
+			ctx.lineTo(joints[7].x, joints[7].y); // left elbow
+			ctx.lineTo(joints[8].x, joints[8].y); // left hand
 			ctx.stroke();
 
-			// draw right arm
+			// right arm
 			ctx.beginPath();
-			ctx.moveTo(frame[1].x, frame[1].y);    // body
-			ctx.lineTo(frame[9].x, frame[9].y);    // right elbow
-			ctx.lineTo(frame[10].x, frame[10].y);  // right hand
+			ctx.moveTo(joints[1].x, joints[1].y);    // body
+			ctx.lineTo(joints[9].x, joints[9].y);    // right elbow
+			ctx.lineTo(joints[10].x, joints[10].y);  // right hand
 			ctx.stroke();
 
-			// draw head circle (solid black)
+			// head circle (solid black)
 			ctx.beginPath();
-			ctx.arc(frame[0].x, frame[0].y, 15, 0, Math.PI * 2);
-			ctx.fillStyle = '#000000'; 
+			ctx.arc(joints[0].x, joints[0].y, 15, 0, Math.PI * 2);
+			ctx.fillStyle = '#000000';
 			ctx.fill();
-
 		}
 
-		function maintainJointDistances(movedJointIndex) {
+		function maintainJointDistances(stickmanIndex, movedJointIndex) {
 			// Skip distance maintenance for middle joint 
 			if (movedJointIndex === 11) return;
+
+			const joints = stickmen[stickmanIndex].joints;
 
 			// Get all connections for this joint
 			const connections = jointConnections.filter(conn =>
@@ -431,7 +507,6 @@ define([
 			connections.forEach(conn => {
 				const otherJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
 
-				// Skip if other joint is the middle joint (it will be recalculated)
 				if (otherJointIndex === 11) return;
 
 				const movedJoint = joints[movedJointIndex];
@@ -482,8 +557,8 @@ define([
 			if (!isPlaying) return;
 
 			currentFrame = (currentFrame + 1) % frames.length;
-			joints = JSON.parse(JSON.stringify(frames[currentFrame]));
-			updateMiddleJoint();
+			stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+			stickmen.forEach((_, index) => updateMiddleJoint(index));
 			updateTimeline();
 
 			setTimeout(() => {
@@ -495,59 +570,99 @@ define([
 
 		function handleMouseDown(e) {
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
-			selectedJoint = findJointAtPosition(mouseX, mouseY);
+			const result = findJointAtPosition(mouseX, mouseY);
 
-			if (selectedJoint === joints[11]) {
-				// Clicked on middle joint - start whole stickman drag
-				isDraggingWhole = true;
-				dragStartPos = { x: mouseX, y: mouseY };
-				originalJoints = JSON.parse(JSON.stringify(joints));
+			if (isRemovalMode && result) {
+				// Remove the clicked stickman
+				const stickmanToRemove = result.stickmanIndex;
+
+				if (stickmen.length > 1) {
+					// Remove from current stickmen array
+					stickmen.splice(stickmanToRemove, 1);
+
+					// Remove from all frames
+					frames.forEach(frame => {
+						frame.splice(stickmanToRemove, 1);
+					});
+
+					if (selectedStickmanIndex === stickmanToRemove) {
+						selectedJoint = null;
+						selectedStickmanIndex = -1;
+					} else if (selectedStickmanIndex > stickmanToRemove) {
+						selectedStickmanIndex--;
+					}
+
+					updateTimeline();
+				} else {
+					console.log("Cannot remove the last stickman");
+				}
+
+				exitRemovalMode();
+				return;
+			}
+
+			if (isRemovalMode) {
+				exitRemovalMode();
+				return;
+			}
+
+			// Normal selection 
+			if (result) {
+				selectedJoint = result.joint;
+				selectedStickmanIndex = result.stickmanIndex;
+
+				if (selectedJoint === stickmen[selectedStickmanIndex].joints[11]) {
+					// Clicked on middle joint start whole stickman drag
+					isDraggingWhole = true;
+					dragStartPos = { x: mouseX, y: mouseY };
+					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+				} else {
+					isDragging = true;
+				}
 			} else {
-				// Normal joint dragging
-				isDragging = !!selectedJoint;
+				selectedJoint = null;
+				selectedStickmanIndex = -1;
 			}
 		}
 
 		function handleMouseMove(e) {
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 
-			if (isDraggingWhole) {
+			if (isDraggingWhole && selectedStickmanIndex >= 0) {
 				// Drag entire stickman
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
 
-				joints.forEach((joint, index) => {
+				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
 					joint.x = originalJoints[index].x + deltaX;
 					joint.y = originalJoints[index].y + deltaY;
 				});
 
 				saveCurrentFrame();
-				updateTimeline(); // Add this line to update timeline immediately
-			} else if (isDragging && selectedJoint && selectedJoint !== joints[11]) {
-				// Find the index of the selected joint
-				const selectedIndex = joints.indexOf(selectedJoint);
+				updateTimeline();
+			} else if (isDragging && selectedJoint && selectedStickmanIndex >= 0) {
+				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
 
 				// Maintain distances only for the moved joint
-				maintainJointDistances(selectedIndex);
+				maintainJointDistances(selectedStickmanIndex, selectedJointIndex);
 
 				// Update middle joint position if body or hips moved
-				if (selectedIndex === 1 || selectedIndex === 2) {
-					updateMiddleJoint();
+				if (selectedJointIndex === 1 || selectedJointIndex === 2) {
+					updateMiddleJoint(selectedStickmanIndex);
 				}
 
 				saveCurrentFrame();
-				updateTimeline(); // Add this line to update timeline immediately
+				updateTimeline();
 			}
 		}
 
 		function handleMouseUp() {
 			isDragging = false;
 			isDraggingWhole = false;
-			selectedJoint = null;
-			// Final update when dragging ends
+
 			if (currentFrame >= 0) {
 				saveCurrentFrame();
 				updateTimeline();
@@ -565,26 +680,33 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			const middleJoint = joints[11];
-			if (middleJoint) {
-				const dx = middleJoint.x - x;
-				const dy = middleJoint.y - y;
-				const distance = Math.sqrt(dx * dx + dy * dy);
-				if (distance < 8) { 
-					return middleJoint;
+			// Check all stickmen, starting from the last one
+			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
+				const joints = stickmen[stickmanIndex].joints;
+
+				// Check drag joint - middle joint
+				const middleJoint = joints[11];
+				if (middleJoint) {
+					const dx = middleJoint.x - x;
+					const dy = middleJoint.y - y;
+					const distance = Math.sqrt(dx * dx + dy * dy);
+					if (distance < 8) {
+						return { joint: middleJoint, stickmanIndex: stickmanIndex };
+					}
 				}
-			}
 
-			for (let i = joints.length - 2; i >= 0; i--) {
-				const joint = joints[i];
-				const dx = joint.x - x;
-				const dy = joint.y - y;
-				const distance = Math.sqrt(dx * dx + dy * dy);
+				// Check other joints
+				for (let i = joints.length - 2; i >= 0; i--) {
+					const joint = joints[i];
+					const dx = joint.x - x;
+					const dy = joint.y - y;
+					const distance = Math.sqrt(dx * dx + dy * dy);
 
-				const hitRadius = i === 0 ? 12 : 8; // Head has larger hit area
+					const hitRadius = i === 0 ? 12 : 8;
 
-				if (distance < hitRadius) {
-					return joint;
+					if (distance < hitRadius) {
+						return { joint: joint, stickmanIndex: stickmanIndex };
+					}
 				}
 			}
 			return null;
@@ -598,6 +720,8 @@ define([
 			// Draw onion skin of previous frame
 			if (frames.length > 1 && !isPlaying) {
 				const prevFrameIndex = currentFrame === 0 ? frames.length - 1 : currentFrame - 1;
+				const prevFrame = frames[prevFrameIndex];
+
 				ctx.save();
 				ctx.globalAlpha = 0.3;
 				ctx.strokeStyle = '#0066cc';
@@ -605,29 +729,29 @@ define([
 				ctx.lineCap = 'round';
 				ctx.lineJoin = 'round';
 
-				drawStickmanSkeleton(ctx, frames[prevFrameIndex]);
+				prevFrame.forEach(stickman => {
+					drawStickmanSkeleton(ctx, stickman.joints);
 
-				ctx.fillStyle = '#0066cc';
-				frames[prevFrameIndex].forEach((joint, index) => {
+					ctx.fillStyle = '#0066cc';
+					stickman.joints.forEach((joint, index) => {
+						// Skip middle joint
+						if (index === 11) 
+							return;
 
-					// Skip middle joint
-					if (index === 11) 
-						return; 
-
-					ctx.beginPath();
-					if (index === 0) {
-						ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
-					} else {
-						ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
-					}
-
-					ctx.fill();
+						ctx.beginPath();
+						if (index === 0) {
+							ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+						} else {
+							ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
+						}
+						ctx.fill();
+					});
 				});
 
 				ctx.restore();
 			}
 
-			drawStickman();
+			drawAllStickmen();
 			requestAnimationFrame(render);
 		}
 
@@ -668,15 +792,13 @@ define([
 				recordCtx.fillStyle = '#ffffff';
 				recordCtx.fillRect(0, 0, recordCanvas.width, recordCanvas.height);
 
-				const originalJoints = [...joints];
-				joints = JSON.parse(JSON.stringify(frames[currentExportFrame]));
+				const frameStickmen = frames[currentExportFrame];
+				frameStickmen.forEach(stickman => {
+					recordCtx.strokeStyle = '#000';
+					recordCtx.lineWidth = 4;
+					drawStickmanSkeleton(recordCtx, stickman.joints);
+				});
 
-				// Draw frame
-				recordCtx.strokeStyle = '#000';
-				recordCtx.lineWidth = 4;
-				drawStickmanSkeleton(recordCtx, joints);
-
-				joints = originalJoints;
 				currentExportFrame++;
 				setTimeout(() => requestAnimationFrame(renderFrame), 150);
 			};
