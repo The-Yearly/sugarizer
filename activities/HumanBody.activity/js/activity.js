@@ -209,7 +209,6 @@ define([
 							// Load model paint data if available
 							if (savedData.modelPaintData) {
 								modelPaintData = savedData.modelPaintData;
-								console.log("Loaded model paint data:", modelPaintData);
 							} else {
 								modelPaintData = {
 									skeleton: [],
@@ -221,17 +220,14 @@ define([
 							// Load camera state if available
 							if (savedData.cameraPosition) {
 								cameraPosition = savedData.cameraPosition;
-								console.log("Loaded camera position:", cameraPosition);
 							}
 
 							if (savedData.cameraTarget) {
 								cameraTarget = savedData.cameraTarget;
-								console.log("Loaded camera target:", cameraTarget);
 							}
 
 							if (savedData.cameraFov) {
 								cameraFov = savedData.cameraFov;
-								console.log("Loaded camera FOV:", cameraFov);
 							}
 
 							// Check if saved data includes model information
@@ -462,7 +458,6 @@ define([
 
 			scene.children.forEach(child => {
 				if (child.name && modelNamesToRemove.includes(child.name)) {
-					console.log(`Found model to remove by name: ${child.name}`);
 					childrenToRemove.push(child);
 				}
 			});
@@ -475,7 +470,6 @@ define([
 				// Clean up resources
 				child.traverse((node) => {
 					if (node.isMesh) {
-						// console.log(`Disposing mesh from ${child.name}: ${node.name}`);
 						if (node.geometry) {
 							node.geometry.dispose();
 						}
@@ -501,7 +495,6 @@ define([
 			}
 
 			if (currentModelName === modelKey) {
-				console.log(`Model ${modelKey} is already loaded`);
 				return;
 			}
 
@@ -612,7 +605,7 @@ define([
 					presenceIndex = 0;
 				}
 			} else {
-				console.warn(`No body parts data found for model: ${modelName}`);
+				// console.warn(`No body parts data found for model: ${modelName}`);
 			}
 		}
 
@@ -698,7 +691,6 @@ define([
 			if (msg.action == "init") {
 				partsColored = msg.content[0];
 				players = msg.content[1];
-				console.log(partsColored);
 
 				// Update the model palette to show the correct active button
 				if (paletteModel.updateActiveModel) {
@@ -737,7 +729,6 @@ define([
 			}
 
 			if (msg.action == "answer") {
-				console.log("Received answer from", msg.user.name);
 
 				// Only host processes answers
 				if (!ifDoctorHost || !firstAnswer) {
@@ -1053,6 +1044,8 @@ define([
 			isTourActive = currentModeIndex === 1;
 			isDoctorActive = currentModeIndex === 2;
 
+			window.currentModeIndex = currentModeIndex;
+			
 			// If switching to Tour mode, start it
 			if (isTourActive) {
 				startTourMode();
@@ -1579,7 +1572,6 @@ define([
 				// Set initial body parts based on current model
 				updateBodyPartsForModel(currentModelName);
 
-				console.log("All body parts data loaded successfully");
 			} catch (error) {
 				console.error("Error loading body parts data:", error);
 			}
@@ -1965,7 +1957,6 @@ define([
 				});
 			} else {
 				object.material = object.userData.originalMaterial.clone();
-				console.log("Restored original material");
 			}
 
 			if (presence) {
