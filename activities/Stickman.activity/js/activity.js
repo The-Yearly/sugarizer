@@ -97,6 +97,7 @@ define([
 							}
 
 							updateTimeline();
+							updateRemoveButtonState(); // Update button state after loading
 							render();
 						} else {
 							console.log("No instance found, creating new instance");
@@ -220,6 +221,9 @@ define([
 
 			stickmen = [createStickmanJoints(centerX, centerY, nextStickmanId++)];
 			updateMiddleJoint(0);
+			// by default first stickman is selected
+			selectedStickmanIndex = 0;
+			updateRemoveButtonState(); 
 		}
 
 		function addNewStickman() {
@@ -236,10 +240,123 @@ define([
 			});
 
 			updateTimeline();
+			updateRemoveButtonState(); 
 			console.log(`Added new stickman. Total: ${stickmen.length}`);
 		}
 
+		function confirmationModal(stickmanId, stickmanToRemove) {
+			// Create modal overlay
+			const modalOverlay = document.createElement('div');
+			modalOverlay.className = 'modal-overlay';
+
+			// Create modal content
+			const modal = document.createElement('div');
+			modal.className = 'modal-content';
+
+			// Create header
+			const header = document.createElement('div');
+			header.className = 'modal-header';
+
+			// Create title
+			const title = document.createElement('h3');
+			title.textContent = 'Remove Stickman';
+			title.className = 'modal-title';
+
+			// Create body content
+			const body = document.createElement('div');
+			body.className = 'modal-body';
+
+			// Create message
+			const message = document.createElement('p');
+			message.textContent = `Are you sure you want to remove Stickman #${stickmanId}?`;
+			message.className = 'modal-message';
+
+			// Create button container
+			const buttonContainer = document.createElement('div');
+			buttonContainer.className = 'modal-button-container';
+
+			// Create cancel button
+			const cancelButton = document.createElement('button');
+			cancelButton.className = 'modal-button';
+			cancelButton.innerHTML = `
+				<span class="modal-button-icon modal-button-icon-cancel"></span>No
+			`;
+
+			// Create confirm button
+			const confirmButton = document.createElement('button');
+			confirmButton.className = 'modal-button modal-button-confirm';
+			confirmButton.innerHTML = `
+				<span class="modal-button-icon modal-button-icon-ok"></span>Yes
+			`;
+
+			// Add event listeners
+			cancelButton.onclick = () => {
+				document.body.removeChild(modalOverlay);
+				exitRemovalMode();
+			};
+
+			confirmButton.onclick = () => {
+				document.body.removeChild(modalOverlay);
+
+				if (stickmen.length > 1) {
+					// Remove from current stickmen array
+					stickmen.splice(stickmanToRemove, 1);
+
+					// Remove from all frames
+					frames.forEach(frame => {
+						frame.splice(stickmanToRemove, 1);
+					});
+
+					// Adjust selected stickman index if needed
+					if (selectedStickmanIndex === stickmanToRemove) {
+						selectedJoint = null;
+						selectedStickmanIndex = stickmen.length > 0 ? 0 : -1;
+					} else if (selectedStickmanIndex > stickmanToRemove) {
+						selectedStickmanIndex--;
+					}
+
+					updateTimeline();
+					updateRemoveButtonState();
+					console.log(`Removed Stickman #${stickmanId}. Remaining: ${stickmen.length}`);
+				} else {
+					console.error("Cannot remove the last stickman. At least one stickman must remain.");
+				}
+
+				exitRemovalMode();
+			};
+
+			// Close modal when clicking overlay
+			modalOverlay.onclick = (e) => {
+				if (e.target === modalOverlay) {
+					document.body.removeChild(modalOverlay);
+					exitRemovalMode();
+				}
+			};
+
+			// Assemble modal
+			header.appendChild(title);
+			body.appendChild(message);
+			buttonContainer.appendChild(cancelButton);
+			buttonContainer.appendChild(confirmButton);
+			body.appendChild(buttonContainer);
+			modal.appendChild(header);
+			modal.appendChild(body);
+			modalOverlay.appendChild(modal);
+
+			// Add to page
+			document.body.appendChild(modalOverlay);
+
+			// Focus the cancel button by default
+			cancelButton.focus();
+		}
+
 		function removeSelectedStickman() {
+			// Check if only one stickman remains
+			if (stickmen.length <= 1) {
+				console.log("Cannot remove the last stickman. At least one stickman must remain.");
+				return;
+			}
+
 			if (!isRemovalMode) {
 				isRemovalMode = true;
 				document.getElementById('minus-button').style.backgroundColor = '#ffcccc';
@@ -248,6 +365,22 @@ define([
 				console.log("Removal mode activated. Click on a stickman to remove it.");
 			} else {
 				exitRemovalMode();
+			}
+		}
+
+		function updateRemoveButtonState() {
+			const minusButton = document.getElementById('minus-button');
+
+			if (stickmen.length <= 1) {
+				minusButton.disabled = true;
+				minusButton.style.opacity = '0.5';
+				minusButton.style.cursor = 'not-allowed';
+				minusButton.title = 'Cannot remove the last stickman';
+			} else {
+				minusButton.disabled = false;
+				minusButton.style.opacity = '1';
+				minusButton.style.cursor = 'pointer';
+				minusButton.title = 'Remove stickman';
 			}
 		}
 
@@ -481,42 +614,46 @@ define([
 			ctx.lineJoin = 'round';
 			drawStickmanSkeleton(ctx, joints);
 
-			// joints on top
-			joints.forEach((joint, index) => {
-				// Skip middle joint for normal display
-				if (index === 11) return;
+			// Show joints for selected stickman, or first stickman if none selected
+			const shouldShowJoints = (selectedStickmanIndex >= 0)
+				? stickmanIndex === selectedStickmanIndex
+				: stickmanIndex === 0;
 
-				ctx.fillStyle = '#ff0000';
-				ctx.strokeStyle = '#cc0000';
-				ctx.lineWidth = 1.5;
-				ctx.beginPath();
-				ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.stroke();
-			});
+			// Only draw joints for the active stickman
+			if (shouldShowJoints) {
+				joints.forEach((joint, index) => {
+					if (index === 11) return;
 
-			// Draw middle joint (drag joint) - different color for selected stickman
+					ctx.fillStyle = '#ff0000';
+					ctx.strokeStyle = '#cc0000';
+					ctx.lineWidth = 1.5;
+					ctx.beginPath();
+					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+				});
+
+				// Highlight selected joint
+				if (selectedJoint && selectedJoint !== joints[11]) {
+					ctx.strokeStyle = '#ffff00';
+					ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+					ctx.lineWidth = 2;
+					ctx.beginPath();
+					ctx.arc(selectedJoint.x, selectedJoint.y, 8, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+				}
+			}
+
+			// Draw middle joint
 			const middleJoint = joints[11];
-			const isSelected = stickmanIndex === selectedStickmanIndex;
-
-			ctx.fillStyle = isSelected ? '#ffff00' : '#00ff00';
-			ctx.strokeStyle = isSelected ? '#cccc00' : '#00cc00';
+			ctx.fillStyle = '#ffff00';
+			ctx.strokeStyle = '#cccc00';
 			ctx.lineWidth = 1.5;
 			ctx.beginPath();
 			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2);
 			ctx.fill();
 			ctx.stroke();
-
-			// Highlight selected joint
-			if (selectedJoint && selectedStickmanIndex === stickmanIndex && selectedJoint !== joints[11]) {
-				ctx.strokeStyle = '#ffff00';
-				ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
-				ctx.lineWidth = 2;
-				ctx.beginPath();
-				ctx.arc(selectedJoint.x, selectedJoint.y, 8, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.stroke();
-			}
 		}
 
 		function drawStickmanSkeleton(ctx, joints) {
@@ -652,29 +789,9 @@ define([
 			if (isRemovalMode && result) {
 				// Remove the clicked stickman
 				const stickmanToRemove = result.stickmanIndex;
-
-				if (stickmen.length > 1) {
-					// Remove from current stickmen array
-					stickmen.splice(stickmanToRemove, 1);
-
-					// Remove from all frames
-					frames.forEach(frame => {
-						frame.splice(stickmanToRemove, 1);
-					});
-
-					if (selectedStickmanIndex === stickmanToRemove) {
-						selectedJoint = null;
-						selectedStickmanIndex = -1;
-					} else if (selectedStickmanIndex > stickmanToRemove) {
-						selectedStickmanIndex--;
-					}
-
-					updateTimeline();
-				} else {
-					console.log("Cannot remove the last stickman");
-				}
-
-				exitRemovalMode();
+				const stickmanId = stickmen[stickmanToRemove].id;
+				
+				confirmationModal(stickmanId, stickmanToRemove);
 				return;
 			}
 
