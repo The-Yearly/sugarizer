@@ -527,29 +527,35 @@ define([
 			previewCtx.fillStyle = isActive ? '#e6f3ff' : '#ffffff';
 			previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-			// bounds for all stickmen in this frame
-			let allPoints = [];
-			frame.forEach(stickman => {
-				allPoints = allPoints.concat(stickman.joints);
-			});
+			// stickman to preview based on selection
+			let stickmanToPreview = null;
 
-			if (allPoints.length > 0) {
-				const stickmanHeight = Math.max(...allPoints.map(p => p.y)) - Math.min(...allPoints.map(p => p.y));
-				const stickmanWidth = Math.max(...allPoints.map(p => p.x)) - Math.min(...allPoints.map(p => p.x));
+			if (selectedStickmanIndex >= 0 && selectedStickmanIndex < frame.length) {
+				// Show selected stickman
+				stickmanToPreview = frame[selectedStickmanIndex];
+			} else if (frame.length > 0) {
+				// Show first stickman if no selection
+				stickmanToPreview = frame[0];
+			}
+
+			if (stickmanToPreview && stickmanToPreview.joints) {
+				const joints = stickmanToPreview.joints;
+
+				// Calculate bounds for this single stickman
+				const stickmanHeight = Math.max(...joints.map(p => p.y)) - Math.min(...joints.map(p => p.y));
+				const stickmanWidth = Math.max(...joints.map(p => p.x)) - Math.min(...joints.map(p => p.x));
 				const scale = Math.min(40 / stickmanHeight, 40 / stickmanWidth);
 
-				const centerX = (Math.max(...allPoints.map(p => p.x)) + Math.min(...allPoints.map(p => p.x))) / 2;
-				const centerY = (Math.max(...allPoints.map(p => p.y)) + Math.min(...allPoints.map(p => p.y))) / 2;
+				const centerX = (Math.max(...joints.map(p => p.x)) + Math.min(...joints.map(p => p.x))) / 2;
+				const centerY = (Math.max(...joints.map(p => p.y)) + Math.min(...joints.map(p => p.y))) / 2;
 
 				previewCtx.save();
 				previewCtx.translate(previewCanvas.width / 2, previewCanvas.height / 2);
 				previewCtx.scale(scale, scale);
 				previewCtx.translate(-centerX, -centerY);
 
-				// Draw all stickmen in preview
-				frame.forEach(stickman => {
-					drawStickmanPreview(previewCtx, stickman.joints);
-				});
+				// Draw only the selected stickman in preview
+				drawStickmanPreview(previewCtx, joints);
 
 				previewCtx.restore();
 			}
@@ -786,7 +792,7 @@ define([
 				// Remove the clicked stickman
 				const stickmanToRemove = result.stickmanIndex;
 				const stickmanId = stickmen[stickmanToRemove].id;
-				
+
 				confirmationModal(stickmanId, stickmanToRemove);
 				return;
 			}
@@ -798,8 +804,14 @@ define([
 
 			// Normal selection 
 			if (result) {
+				const previousSelectedIndex = selectedStickmanIndex;
 				selectedJoint = result.joint;
 				selectedStickmanIndex = result.stickmanIndex;
+
+				// Update timeline if selected stickman changed
+				if (previousSelectedIndex !== selectedStickmanIndex) {
+					updateTimeline();
+				}
 
 				if (selectedJoint === stickmen[selectedStickmanIndex].joints[11]) {
 					// Clicked on middle joint start whole stickman drag
@@ -810,8 +822,14 @@ define([
 					isDragging = true;
 				}
 			} else {
+				const previousSelectedIndex = selectedStickmanIndex;
 				selectedJoint = null;
 				selectedStickmanIndex = -1;
+
+				// Update timeline if selection was cleared
+				if (previousSelectedIndex !== -1) {
+					updateTimeline();
+				}
 			}
 		}
 
