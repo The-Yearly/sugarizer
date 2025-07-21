@@ -268,7 +268,7 @@ define([
 
 			// Create message
 			const message = document.createElement('p');
-			message.textContent = `Are you sure you want to remove Stickman #${stickmanId}?`;
+			message.textContent = 'Are you sure you want to remove the Stickman ?';
 			message.className = 'modal-message';
 
 			// Create button container
@@ -373,13 +373,9 @@ define([
 
 			if (stickmen.length <= 1) {
 				minusButton.disabled = true;
-				minusButton.style.opacity = '0.5';
-				minusButton.style.cursor = 'not-allowed';
 				minusButton.title = 'Cannot remove the last stickman';
 			} else {
 				minusButton.disabled = false;
-				minusButton.style.opacity = '1';
-				minusButton.style.cursor = 'pointer';
 				minusButton.title = 'Remove stickman';
 			}
 		}

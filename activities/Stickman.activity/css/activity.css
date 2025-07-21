@@ -366,15 +366,6 @@ body {
 	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
-.modal-button:hover {
-	background-color: #6a6a6a;
-}
-
-.modal-button:focus {
-	box-shadow: 0 0 0 0rem rgba(158, 158, 158, .5);
-	outline: none;
-}
-
 /* Button Icons */
 .modal-button-icon {
 	background-size: 16px 16px;
@@ -393,17 +384,4 @@ body {
 
 .modal-button-icon-ok {
 	background-image: url('../icons/dialog-ok.svg');
-}
-
-/* Confirm Button Specific Styles */
-.modal-button-confirm {
-	background-color: #ff4444;
-}
-
-.modal-button-confirm:hover {
-	background-color: #cc0000;
-}
-
-.modal-button-confirm:focus {
-	box-shadow: 0 0 0 0rem rgba(255, 68, 68, .5);
 }
