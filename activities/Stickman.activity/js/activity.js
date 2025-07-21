@@ -33,6 +33,21 @@ define([
 		let isRemovalMode = false;
 		let currentenv;
 		let isShared = false;
+		let isRotating = false;
+		let rotationPivot = null;
+		let rotationStartAngle = 0;
+		let neckManuallyMoved = false; // Track if neck has been manually positioned
+
+		// Joint hierarchy - defines parent-child relationships for rotation
+		const jointHierarchy = {
+			2: [11], // hip -> middle
+			11: [1], // middle -> body (neck rotates around middle)
+			1: [0, 7, 9], // body -> head, left elbow, right elbow
+			7: [8], // left elbow -> left hand
+			9: [10], // right elbow -> right hand
+			3: [4], // left knee -> left foot
+			5: [6] // right knee -> right foot
+		};
 
 		// Joint connections with proper distances
 		const jointConnections = [
@@ -220,6 +235,7 @@ define([
 			const centerY = canvas.height / 2;
 
 			stickmen = [createStickmanJoints(centerX, centerY, nextStickmanId++)];
+			neckManuallyMoved = false; // Reset flag for new stickman
 			updateMiddleJoint(0);
 			// by default first stickman is selected
 			selectedStickmanIndex = 0;
@@ -389,7 +405,7 @@ define([
 		}
 
 		function updateMiddleJoint(stickmanIndex) {
-			if (stickmanIndex >= 0 && stickmanIndex < stickmen.length) {
+			if (stickmanIndex >= 0 && stickmanIndex < stickmen.length && !neckManuallyMoved) {
 				const joints = stickmen[stickmanIndex].joints;
 				joints[11].x = (joints[1].x + joints[2].x) / 2;
 				joints[11].y = (joints[1].y + joints[2].y) / 2;
@@ -454,6 +470,9 @@ define([
 			// Update middle joints for all stickmen
 			stickmen.forEach((_, index) => updateMiddleJoint(index));
 
+			// Reset neck manually moved flag when adding a new frame
+			neckManuallyMoved = false;
+
 			// Deep copy all stickmen for this frame
 			const frameData = JSON.parse(JSON.stringify(stickmen));
 			frames.push(frameData);
@@ -463,7 +482,14 @@ define([
 
 		function saveCurrentFrame() {
 			if (currentFrame >= 0) {
-				stickmen.forEach((_, index) => updateMiddleJoint(index));
+				// Don't update middle joints if we're currently rotating the neck
+				// or if we're dragging the neck joint individually
+				const isNeckOperation = (isRotating || isDragging) && selectedJoint && stickmen[selectedStickmanIndex] && 
+					stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
+				
+				if (!isNeckOperation) {
+					stickmen.forEach((_, index) => updateMiddleJoint(index));
+				}
 				frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
 			}
 		}
@@ -484,6 +510,7 @@ define([
 				previewCanvas.addEventListener('click', () => {
 					currentFrame = index;
 					stickmen = JSON.parse(JSON.stringify(frame));
+					neckManuallyMoved = false; // Reset flag when switching frames
 					stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
 					updateTimeline();
 					render();
@@ -624,13 +651,24 @@ define([
 			// Only draw joints for the active stickman
 			if (shouldShowJoints) {
 				joints.forEach((joint, index) => {
-					if (index === 11) return;
+					if (index === 11) return; // Skip middle joint in regular drawing
 
-					ctx.fillStyle = '#ff0000';
-					ctx.strokeStyle = '#cc0000';
+					// Different colors for different joint types
+					if (index === 2) { // Hip joint - drag anchor
+						ctx.fillStyle = '#00ff00';
+						ctx.strokeStyle = '#00cc00';
+					} else if (isRotationalJoint(index)) { // Rotational joints
+						ctx.fillStyle = '#ff8800';
+						ctx.strokeStyle = '#cc6600';
+					} else { // Regular joints
+						ctx.fillStyle = '#ff0000';
+						ctx.strokeStyle = '#cc0000';
+					}
+
 					ctx.lineWidth = 1.5;
 					ctx.beginPath();
-					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+					const radius = index === 2 ? 6 : 4; // Hip joint slightly larger
+					ctx.arc(joint.x, joint.y, radius, 0, Math.PI * 2);
 					ctx.fill();
 					ctx.stroke();
 				});
@@ -647,15 +685,17 @@ define([
 				}
 			}
 
-			// Draw middle joint
-			const middleJoint = joints[11];
-			ctx.fillStyle = '#ffff00';
-			ctx.strokeStyle = '#cccc00';
-			ctx.lineWidth = 1.5;
-			ctx.beginPath();
-			ctx.arc(middleJoint.x, middleJoint.y, 5, 0, Math.PI * 2);
-			ctx.fill();
-			ctx.stroke();
+			// Draw middle joint only for selected stickman (for rotation reference)
+			if (shouldShowJoints) {
+				const middleJoint = joints[11];
+				ctx.fillStyle = '#ff8800';
+				ctx.strokeStyle = '#cc6600';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.arc(middleJoint.x, middleJoint.y, 4, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
+			}
 		}
 
 		function drawStickmanSkeleton(ctx, joints) {
@@ -746,6 +786,114 @@ define([
 			});
 		}
 
+		// HIERARCHICAL ROTATION SYSTEM
+
+		function rotatePointAroundPivot(point, pivot, angle) {
+			const cos = Math.cos(angle);
+			const sin = Math.sin(angle);
+			const dx = point.x - pivot.x;
+			const dy = point.y - pivot.y;
+			
+			return {
+				x: pivot.x + (dx * cos - dy * sin),
+				y: pivot.y + (dx * sin + dy * cos)
+			};
+		}
+
+		function rotateJointHierarchy(stickmanIndex, pivotJointIndex, angle) {
+			const joints = stickmen[stickmanIndex].joints;
+			let pivot;
+			let pivotJointIndex_actual; // The joint that acts as the actual rotation pivot
+			
+			// Determine the actual pivot point for rotation
+			if (pivotJointIndex === 11) { // middle joint rotates around hip
+				pivot = joints[2];
+				pivotJointIndex_actual = 2;
+			} else if (pivotJointIndex === 1) { // body/neck rotates around middle joint
+				pivot = joints[11];
+				pivotJointIndex_actual = 11;
+			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { // elbows rotate around body
+				pivot = joints[1];
+				pivotJointIndex_actual = 1;
+			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { // knees rotate around hip
+				pivot = joints[2];
+				pivotJointIndex_actual = 2;
+			} else {
+				pivot = joints[pivotJointIndex];
+				pivotJointIndex_actual = pivotJointIndex;
+			}
+
+			// Store pivot position to prevent it from changing during rotation
+			const fixedPivot = { x: pivot.x, y: pivot.y };
+
+			// Rotate all child joints recursively
+			function rotateChildren(parentIndex, rotationAngle) {
+				const childIndices = jointHierarchy[parentIndex] || [];
+				
+				childIndices.forEach(childIndex => {
+					// Never rotate the pivot joint itself
+					if (childIndex === pivotJointIndex_actual) return;
+					
+					const oldPos = { x: joints[childIndex].x, y: joints[childIndex].y };
+					const newPos = rotatePointAroundPivot(oldPos, fixedPivot, rotationAngle);
+					joints[childIndex].x = newPos.x;
+					joints[childIndex].y = newPos.y;
+					
+					// Recursively rotate children of this joint
+					rotateChildren(childIndex, rotationAngle);
+				});
+			}
+
+			// First rotate the selected joint itself around its pivot (except pivot joints)
+			if (pivotJointIndex !== pivotJointIndex_actual) {
+				const oldPos = { x: joints[pivotJointIndex].x, y: joints[pivotJointIndex].y };
+				const newPos = rotatePointAroundPivot(oldPos, fixedPivot, angle);
+				joints[pivotJointIndex].x = newPos.x;
+				joints[pivotJointIndex].y = newPos.y;
+			}
+
+			// Then rotate all children
+			rotateChildren(pivotJointIndex, angle);
+
+			// Ensure pivot joint position is preserved (especially important for middle joint)
+			if (pivotJointIndex_actual < joints.length) {
+				joints[pivotJointIndex_actual].x = fixedPivot.x;
+				joints[pivotJointIndex_actual].y = fixedPivot.y;
+			}
+		}
+
+		function getAngle(point1, point2) {
+			return Math.atan2(point2.y - point1.y, point2.x - point1.x);
+		}
+
+		function isRotationalJoint(jointIndex) {
+			// These joints support rotation with hierarchical movement
+			return [1, 2, 3, 5, 7, 9, 11].includes(jointIndex);
+		}
+
+		function getRotationPivot(stickmanIndex, jointIndex) {
+			const joints = stickmen[stickmanIndex].joints;
+			
+			// Define pivot points for each rotational joint
+			switch (jointIndex) {
+				case 11: // middle joint rotates around hip
+					return joints[2];
+				case 1: // body/neck rotates around middle joint
+					// Return a copy of the middle joint position to prevent interference
+					return { x: joints[11].x, y: joints[11].y };
+				case 7: // left elbow rotates around body
+					return joints[1];
+				case 9: // right elbow rotates around body
+					return joints[1];
+				case 3: // left knee rotates around hip
+					return joints[2];
+				case 5: // right knee rotates around hip
+					return joints[2];
+				default:
+					return joints[jointIndex]; // fallback
+			}
+		}
+
 		// ANIMATION CONTROL
 
 		function togglePlayPause() {
@@ -774,6 +922,7 @@ define([
 
 			currentFrame = (currentFrame + 1) % frames.length;
 			stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+			neckManuallyMoved = false; // Reset flag during animation
 			stickmen.forEach((_, index) => updateMiddleJoint(index));
 			updateTimeline();
 
@@ -813,12 +962,21 @@ define([
 					updateTimeline();
 				}
 
-				if (selectedJoint === stickmen[selectedStickmanIndex].joints[11]) {
-					// Clicked on middle joint start whole stickman drag
+				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
+
+				if (selectedJointIndex === 2) { // Hip joint - drag whole stickman
 					isDraggingWhole = true;
 					dragStartPos = { x: mouseX, y: mouseY };
 					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+				} else if (isRotationalJoint(selectedJointIndex)) {
+					// Start rotation for hierarchical joints
+					isRotating = true;
+					rotationPivot = getRotationPivot(selectedStickmanIndex, selectedJointIndex);
+					rotationStartAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
+					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+					console.log(`Starting rotation for joint ${selectedJointIndex} around pivot:`, rotationPivot);
 				} else {
+					// Regular joint dragging for non-hierarchical joints (head, hands, feet)
 					isDragging = true;
 				}
 			} else {
@@ -837,7 +995,7 @@ define([
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 
 			if (isDraggingWhole && selectedStickmanIndex >= 0) {
-				// Drag entire stickman
+				// Drag entire stickman using hip as anchor
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
 
@@ -848,17 +1006,51 @@ define([
 
 				saveCurrentFrame();
 				updateTimeline();
+			} else if (isRotating && selectedJoint && selectedStickmanIndex >= 0 && rotationPivot) {
+				// Hierarchical rotation
+				const currentAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
+				const angleDiff = currentAngle - rotationStartAngle;
+				
+				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
+				
+				// Reset to original positions before applying rotation
+				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
+					joint.x = originalJoints[index].x;
+					joint.y = originalJoints[index].y;
+				});
+				
+				// Apply rotation
+				rotateJointHierarchy(selectedStickmanIndex, selectedJointIndex, angleDiff);
+				
+				// Mark neck as manually moved if we're rotating the neck joint
+				if (selectedJointIndex === 1) {
+					neckManuallyMoved = true;
+				}
+				
+				// Only update middle joint position if we're not rotating the neck (body joint)
+				// When rotating the neck around the middle joint, the middle joint should stay fixed
+				if (selectedJointIndex !== 1) {
+					updateMiddleJoint(selectedStickmanIndex);
+				}
+
+				saveCurrentFrame();
+				updateTimeline();
 			} else if (isDragging && selectedJoint && selectedStickmanIndex >= 0) {
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
 				selectedJoint.x = mouseX;
 				selectedJoint.y = mouseY;
 
+				// Mark neck as manually moved if we're dragging the neck joint
+				if (selectedJointIndex === 1) {
+					neckManuallyMoved = true;
+				}
+
 				// Maintain distances only for the moved joint
 				maintainJointDistances(selectedStickmanIndex, selectedJointIndex);
 
-				// Update middle joint position if body or hips moved
-				if (selectedJointIndex === 1 || selectedJointIndex === 2) {
+				// Update middle joint position only when hips moved (not when body/neck moved)
+				if (selectedJointIndex === 2) {
 					updateMiddleJoint(selectedStickmanIndex);
 				}
 
@@ -868,11 +1060,26 @@ define([
 		}
 
 		function handleMouseUp() {
+			const wasRotatingNeck = isRotating && selectedJoint && selectedStickmanIndex >= 0 && 
+				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
+			
+			const wasDraggingNeck = isDragging && selectedJoint && selectedStickmanIndex >= 0 && 
+				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
+
 			isDragging = false;
 			isDraggingWhole = false;
+			isRotating = false;
+			rotationPivot = null;
+			originalJoints = [];
 
 			if (currentFrame >= 0) {
-				saveCurrentFrame();
+				// Don't update middle joint if we just finished rotating or dragging the neck
+				if (!wasRotatingNeck && !wasDraggingNeck) {
+					saveCurrentFrame();
+				} else {
+					// Save without updating middle joints
+					frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
+				}
 				updateTimeline();
 			}
 		}
@@ -892,7 +1099,18 @@ define([
 			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
 				const joints = stickmen[stickmanIndex].joints;
 
-				// Check drag joint - middle joint
+				// First check hip joint (index 2) - prioritize for whole stickman dragging
+				const hipJoint = joints[2];
+				if (hipJoint) {
+					const dx = hipJoint.x - x;
+					const dy = hipJoint.y - y;
+					const distance = Math.sqrt(dx * dx + dy * dy);
+					if (distance < 10) {
+						return { joint: hipJoint, stickmanIndex: stickmanIndex };
+					}
+				}
+
+				// Check middle joint for rotation
 				const middleJoint = joints[11];
 				if (middleJoint) {
 					const dx = middleJoint.x - x;
@@ -905,6 +1123,7 @@ define([
 
 				// Check other joints
 				for (let i = joints.length - 2; i >= 0; i--) {
+					if (i === 2) continue; // Skip hip joint as it's already checked
 					const joint = joints[i];
 					const dx = joint.x - x;
 					const dy = joint.y - y;
