@@ -333,7 +333,6 @@ define([
 
 					updateTimeline();
 					updateRemoveButtonState();
-					console.log(`Removed Stickman #${stickmanId}. Remaining: ${stickmen.length}`);
 				} else {
 					console.error("Cannot remove the last stickman. At least one stickman must remain.");
 				}
@@ -361,15 +360,12 @@ define([
 
 			// Add to page
 			document.body.appendChild(modalOverlay);
-
-			// Focus the cancel button by default
-			cancelButton.focus();
 		}
 
 		function removeSelectedStickman() {
 			// Check if only one stickman remains
 			if (stickmen.length <= 1) {
-				console.log("Cannot remove the last stickman. At least one stickman must remain.");
+				console.log("Cannot remove the last stickman");
 				return;
 			}
 
@@ -378,7 +374,6 @@ define([
 				document.getElementById('minus-button').style.backgroundColor = '#ffcccc';
 				document.getElementById('minus-button').style.border = '2px solid #ff0000';
 				canvas.style.cursor = 'crosshair';
-				console.log("Removal mode activated. Click on a stickman to remove it.");
 			} else {
 				exitRemovalMode();
 			}
@@ -401,7 +396,6 @@ define([
 			document.getElementById('minus-button').style.backgroundColor = '';
 			document.getElementById('minus-button').style.border = '';
 			canvas.style.cursor = 'default';
-			console.log("Removal mode deactivated.");
 		}
 
 		function updateMiddleJoint(stickmanIndex) {
@@ -651,41 +645,33 @@ define([
 			// Only draw joints for the active stickman
 			if (shouldShowJoints) {
 				joints.forEach((joint, index) => {
-					if (index === 11) return; // Skip middle joint in regular drawing
+					if (index === 11) 
+						return; // Skip middle joint in regular drawing
 
 					// Different colors for different joint types
-					if (index === 2) { // Hip joint - drag anchor
+					if (index === 2) { 
+						// Hip joint - drag anchor
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
-					} else if (isRotationalJoint(index)) { // Rotational joints
+					} else if (isRotationalJoint(index)) { 
+						// Rotational joints
 						ctx.fillStyle = '#ff8800';
 						ctx.strokeStyle = '#cc6600';
-					} else { // Regular joints
+					} else { 
+						// Regular joints
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
 					}
 
 					ctx.lineWidth = 1.5;
 					ctx.beginPath();
-					const radius = index === 2 ? 6 : 4; // Hip joint slightly larger
-					ctx.arc(joint.x, joint.y, radius, 0, Math.PI * 2);
+					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
 					ctx.fill();
 					ctx.stroke();
 				});
-
-				// Highlight selected joint
-				if (selectedJoint && selectedJoint !== joints[11]) {
-					ctx.strokeStyle = '#ffff00';
-					ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
-					ctx.lineWidth = 2;
-					ctx.beginPath();
-					ctx.arc(selectedJoint.x, selectedJoint.y, 8, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
-				}
 			}
 
-			// Draw middle joint only for selected stickman (for rotation reference)
+			// Draw middle joint only for selected stickman 
 			if (shouldShowJoints) {
 				const middleJoint = joints[11];
 				ctx.fillStyle = '#ff8800';
@@ -751,7 +737,8 @@ define([
 
 		function maintainJointDistances(stickmanIndex, movedJointIndex) {
 			// Skip distance maintenance for middle joint 
-			if (movedJointIndex === 11) return;
+			if (movedJointIndex === 11) 
+				return;
 
 			const joints = stickmen[stickmanIndex].joints;
 
@@ -763,7 +750,8 @@ define([
 			connections.forEach(conn => {
 				const otherJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
 
-				if (otherJointIndex === 11) return;
+				if (otherJointIndex === 11) 
+					return;
 
 				const movedJoint = joints[movedJointIndex];
 				const otherJoint = joints[otherJointIndex];
@@ -806,16 +794,20 @@ define([
 			let pivotJointIndex_actual; // The joint that acts as the actual rotation pivot
 			
 			// Determine the actual pivot point for rotation
-			if (pivotJointIndex === 11) { // middle joint rotates around hip
+			if (pivotJointIndex === 11) { 
+				// middle joint rotates around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
-			} else if (pivotJointIndex === 1) { // body/neck rotates around middle joint
+			} else if (pivotJointIndex === 1) { 
+				// body/neck rotates around middle joint
 				pivot = joints[11];
 				pivotJointIndex_actual = 11;
-			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { // elbows rotate around body
+			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { 
+				// elbows rotate around body
 				pivot = joints[1];
 				pivotJointIndex_actual = 1;
-			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { // knees rotate around hip
+			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { 
+				// knees rotate around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
 			} else {
@@ -824,7 +816,10 @@ define([
 			}
 
 			// Store pivot position to prevent it from changing during rotation
-			const fixedPivot = { x: pivot.x, y: pivot.y };
+			const fixedPivot = { 
+				x: pivot.x, 
+				y: pivot.y 
+			};
 
 			// Rotate all child joints recursively
 			function rotateChildren(parentIndex, rotationAngle) {
@@ -834,7 +829,10 @@ define([
 					// Never rotate the pivot joint itself
 					if (childIndex === pivotJointIndex_actual) return;
 					
-					const oldPos = { x: joints[childIndex].x, y: joints[childIndex].y };
+					const oldPos = { 
+						x: joints[childIndex].x, 
+						y: joints[childIndex].y 
+					};
 					const newPos = rotatePointAroundPivot(oldPos, fixedPivot, rotationAngle);
 					joints[childIndex].x = newPos.x;
 					joints[childIndex].y = newPos.y;
@@ -846,7 +844,10 @@ define([
 
 			// First rotate the selected joint itself around its pivot (except pivot joints)
 			if (pivotJointIndex !== pivotJointIndex_actual) {
-				const oldPos = { x: joints[pivotJointIndex].x, y: joints[pivotJointIndex].y };
+				const oldPos = { 
+					x: joints[pivotJointIndex].x, 
+					y: joints[pivotJointIndex].y 
+				};
 				const newPos = rotatePointAroundPivot(oldPos, fixedPivot, angle);
 				joints[pivotJointIndex].x = newPos.x;
 				joints[pivotJointIndex].y = newPos.y;
@@ -878,8 +879,7 @@ define([
 			switch (jointIndex) {
 				case 11: // middle joint rotates around hip
 					return joints[2];
-				case 1: // body/neck rotates around middle joint
-					// Return a copy of the middle joint position to prevent interference
+				case 1: // body/neck rotates around middle joint and return a copy of the middle joint position to prevent interference
 					return { x: joints[11].x, y: joints[11].y };
 				case 7: // left elbow rotates around body
 					return joints[1];
@@ -964,17 +964,27 @@ define([
 
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
-				if (selectedJointIndex === 2) { // Hip joint - drag whole stickman
+				if (selectedJointIndex === 2) { 
+
+					// Hip joint - drag whole stickman
 					isDraggingWhole = true;
-					dragStartPos = { x: mouseX, y: mouseY };
+					dragStartPos = { 
+						x: mouseX, 
+						y: mouseY 
+					};
 					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+
 				} else if (isRotationalJoint(selectedJointIndex)) {
 					// Start rotation for hierarchical joints
 					isRotating = true;
 					rotationPivot = getRotationPivot(selectedStickmanIndex, selectedJointIndex);
-					rotationStartAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
+					rotationStartAngle = getAngle(
+						rotationPivot, { 
+							x: mouseX, 
+							y: mouseY 
+						}
+					);
 					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
-					console.log(`Starting rotation for joint ${selectedJointIndex} around pivot:`, rotationPivot);
 				} else {
 					// Regular joint dragging for non-hierarchical joints (head, hands, feet)
 					isDragging = true;
@@ -1106,7 +1116,10 @@ define([
 					const dy = hipJoint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
 					if (distance < 10) {
-						return { joint: hipJoint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: hipJoint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 
@@ -1117,13 +1130,17 @@ define([
 					const dy = middleJoint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
 					if (distance < 8) {
-						return { joint: middleJoint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: middleJoint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 
 				// Check other joints
 				for (let i = joints.length - 2; i >= 0; i--) {
-					if (i === 2) continue; // Skip hip joint as it's already checked
+					if (i === 2) 
+						continue; // Skip hip joint as it's already checked
 					const joint = joints[i];
 					const dx = joint.x - x;
 					const dy = joint.y - y;
@@ -1132,7 +1149,10 @@ define([
 					const hitRadius = i === 0 ? 12 : 8;
 
 					if (distance < hitRadius) {
-						return { joint: joint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: joint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 			}
