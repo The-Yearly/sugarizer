@@ -36,17 +36,18 @@ define([
 		let isRotating = false;
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
-		let neckManuallyMoved = false; // Track if neck has been manually positioned
+		let neckManuallyMoved = false;
+
 
 		// Joint hierarchy - defines parent-child relationships for rotation
 		const jointHierarchy = {
-			2: [11], // hip -> middle
-			11: [1], // middle -> body (neck rotates around middle)
-			1: [0, 7, 9], // body -> head, left elbow, right elbow
-			7: [8], // left elbow -> left hand
-			9: [10], // right elbow -> right hand
-			3: [4], // left knee -> left foot
-			5: [6] // right knee -> right foot
+			2: 	[11], 			// hip -> middle
+			11: [1], 			// middle -> body (neck rotates around middle)
+			1: 	[0, 7, 9],  	// body -> head, left elbow, right elbow
+			7: 	[8], 			// left elbow -> left hand
+			9: 	[10], 			// right elbow -> right hand
+			3: 	[4], 			// left knee -> left foot
+			5: 	[6] 			// right knee -> right foot
 		};
 
 		// Joint connections with proper distances
@@ -261,51 +262,45 @@ define([
 		}
 
 		function confirmationModal(stickmanId, stickmanToRemove) {
-			// Create modal overlay
+			// modal overlay
 			const modalOverlay = document.createElement('div');
 			modalOverlay.className = 'modal-overlay';
 
-			// Create modal content
+			// modal content
 			const modal = document.createElement('div');
 			modal.className = 'modal-content';
 
-			// Create header
 			const header = document.createElement('div');
 			header.className = 'modal-header';
 
-			// Create title
 			const title = document.createElement('h3');
 			title.textContent = 'Remove Stickman';
 			title.className = 'modal-title';
 
-			// Create body content
 			const body = document.createElement('div');
 			body.className = 'modal-body';
 
-			// Create message
 			const message = document.createElement('p');
 			message.textContent = 'Are you sure you want to remove the Stickman ?';
 			message.className = 'modal-message';
 
-			// Create button container
+			// button container
 			const buttonContainer = document.createElement('div');
 			buttonContainer.className = 'modal-button-container';
 
-			// Create cancel button
 			const cancelButton = document.createElement('button');
 			cancelButton.className = 'modal-button';
 			cancelButton.innerHTML = `
 				<span class="modal-button-icon modal-button-icon-cancel"></span>No
 			`;
 
-			// Create confirm button
 			const confirmButton = document.createElement('button');
 			confirmButton.className = 'modal-button modal-button-confirm';
 			confirmButton.innerHTML = `
 				<span class="modal-button-icon modal-button-icon-ok"></span>Yes
 			`;
 
-			// Add event listeners
+			// event listeners
 			cancelButton.onclick = () => {
 				document.body.removeChild(modalOverlay);
 				exitRemovalMode();
@@ -335,7 +330,7 @@ define([
 					updateRemoveButtonState();
 					console.log(`Removed Stickman #${stickmanId}. Remaining: ${stickmen.length}`);
 				} else {
-					console.error("Cannot remove the last stickman. At least one stickman must remain.");
+					console.error("Cannot remove the last stickman.");
 				}
 
 				exitRemovalMode();
@@ -349,7 +344,7 @@ define([
 				}
 			};
 
-			// Assemble modal
+			// Assemble
 			header.appendChild(title);
 			body.appendChild(message);
 			buttonContainer.appendChild(cancelButton);
@@ -361,15 +356,12 @@ define([
 
 			// Add to page
 			document.body.appendChild(modalOverlay);
-
-			// Focus the cancel button by default
-			cancelButton.focus();
 		}
 
 		function removeSelectedStickman() {
 			// Check if only one stickman remains
 			if (stickmen.length <= 1) {
-				console.log("Cannot remove the last stickman. At least one stickman must remain.");
+				console.log("Cannot remove the last stickman");
 				return;
 			}
 
@@ -410,18 +402,6 @@ define([
 				joints[11].x = (joints[1].x + joints[2].x) / 2;
 				joints[11].y = (joints[1].y + joints[2].y) / 2;
 			}
-		}
-
-		function createNew() {
-			frames = [];
-			currentFrame = 0;
-			stickmen = [];
-			selectedJoint = null;
-			selectedStickmanIndex = -1;
-			createInitialStickman();
-			addFrame();
-			updateTimeline();
-			pause();
 		}
 
 		async function loadTemplate(templateName) {
@@ -470,7 +450,7 @@ define([
 			// Update middle joints for all stickmen
 			stickmen.forEach((_, index) => updateMiddleJoint(index));
 
-			// Reset neck manually moved flag when adding a new frame
+			// Reset neck moved flag when adding a new frame
 			neckManuallyMoved = false;
 
 			// Deep copy all stickmen for this frame
@@ -482,14 +462,17 @@ define([
 
 		function saveCurrentFrame() {
 			if (currentFrame >= 0) {
-				// Don't update middle joints if we're currently rotating the neck
-				// or if we're dragging the neck joint individually
-				const isNeckOperation = (isRotating || isDragging) && selectedJoint && stickmen[selectedStickmanIndex] && 
+				// Don't update middle joints if we're currently rotating the neck or if we're dragging the neck joint individually
+				const isNeckOperation = 
+					(isRotating || isDragging) && 
+					selectedJoint && 
+					stickmen[selectedStickmanIndex] && 
 					stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
 				
 				if (!isNeckOperation) {
 					stickmen.forEach((_, index) => updateMiddleJoint(index));
 				}
+
 				frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
 			}
 		}
@@ -651,38 +634,32 @@ define([
 			// Only draw joints for the active stickman
 			if (shouldShowJoints) {
 				joints.forEach((joint, index) => {
-					if (index === 11) return; // Skip middle joint in regular drawing
+
+					// Skip middle joint in regular drawing
+					if (index === 11) 
+						return; 
 
 					// Different colors for different joint types
-					if (index === 2) { // Hip joint - drag anchor
+					if (index === 2) { 
+						// Hip joint - drag anchor
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
-					} else if (isRotationalJoint(index)) { // Rotational joints
+					} else if (isRotationalJoint(index)) { 
+						// Rotational joints
 						ctx.fillStyle = '#ff8800';
 						ctx.strokeStyle = '#cc6600';
-					} else { // Regular joints
+					} else { 
+						// Regular joints
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
 					}
 
 					ctx.lineWidth = 1.5;
 					ctx.beginPath();
-					const radius = index === 2 ? 6 : 4; // Hip joint slightly larger
-					ctx.arc(joint.x, joint.y, radius, 0, Math.PI * 2);
+					ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
 					ctx.fill();
 					ctx.stroke();
 				});
-
-				// Highlight selected joint
-				if (selectedJoint && selectedJoint !== joints[11]) {
-					ctx.strokeStyle = '#ffff00';
-					ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
-					ctx.lineWidth = 2;
-					ctx.beginPath();
-					ctx.arc(selectedJoint.x, selectedJoint.y, 8, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
-				}
 			}
 
 			// Draw middle joint only for selected stickman (for rotation reference)
@@ -806,16 +783,20 @@ define([
 			let pivotJointIndex_actual; // The joint that acts as the actual rotation pivot
 			
 			// Determine the actual pivot point for rotation
-			if (pivotJointIndex === 11) { // middle joint rotates around hip
+			if (pivotJointIndex === 11) { 
+				// middle joint rotates around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
-			} else if (pivotJointIndex === 1) { // body/neck rotates around middle joint
+			} else if (pivotJointIndex === 1) { 
+				// body/neck rotates around middle joint
 				pivot = joints[11];
 				pivotJointIndex_actual = 11;
-			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { // elbows rotate around body
+			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { 
+				// elbows rotate around body
 				pivot = joints[1];
 				pivotJointIndex_actual = 1;
-			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { // knees rotate around hip
+			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { 
+				// knees rotate around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
 			} else {
@@ -824,29 +805,18 @@ define([
 			}
 
 			// Store pivot position to prevent it from changing during rotation
-			const fixedPivot = { x: pivot.x, y: pivot.y };
-
-			// Rotate all child joints recursively
-			function rotateChildren(parentIndex, rotationAngle) {
-				const childIndices = jointHierarchy[parentIndex] || [];
-				
-				childIndices.forEach(childIndex => {
-					// Never rotate the pivot joint itself
-					if (childIndex === pivotJointIndex_actual) return;
-					
-					const oldPos = { x: joints[childIndex].x, y: joints[childIndex].y };
-					const newPos = rotatePointAroundPivot(oldPos, fixedPivot, rotationAngle);
-					joints[childIndex].x = newPos.x;
-					joints[childIndex].y = newPos.y;
-					
-					// Recursively rotate children of this joint
-					rotateChildren(childIndex, rotationAngle);
-				});
-			}
+			const fixedPivot = { 
+				x: pivot.x, 
+				y: pivot.y 
+			};
 
 			// First rotate the selected joint itself around its pivot (except pivot joints)
 			if (pivotJointIndex !== pivotJointIndex_actual) {
-				const oldPos = { x: joints[pivotJointIndex].x, y: joints[pivotJointIndex].y };
+				const oldPos = { 
+					x: joints[pivotJointIndex].x, 
+					y: joints[pivotJointIndex].y 
+				};
+				
 				const newPos = rotatePointAroundPivot(oldPos, fixedPivot, angle);
 				joints[pivotJointIndex].x = newPos.x;
 				joints[pivotJointIndex].y = newPos.y;
@@ -855,11 +825,33 @@ define([
 			// Then rotate all children
 			rotateChildren(pivotJointIndex, angle);
 
-			// Ensure pivot joint position is preserved (especially important for middle joint)
+			// Ensure pivot joint position is preserved
 			if (pivotJointIndex_actual < joints.length) {
 				joints[pivotJointIndex_actual].x = fixedPivot.x;
 				joints[pivotJointIndex_actual].y = fixedPivot.y;
 			}
+		}
+
+		// Rotate all child joints recursively
+		function rotateChildren(parentIndex, rotationAngle) {
+			const childIndices = jointHierarchy[parentIndex] || [];
+
+			childIndices.forEach(childIndex => {
+				// Never rotate the pivot joint itself
+				if (childIndex === pivotJointIndex_actual) return;
+
+				const oldPos = { 
+					x: joints[childIndex].x, 
+					y: joints[childIndex].y 
+				};
+
+				const newPos = rotatePointAroundPivot(oldPos, fixedPivot, rotationAngle);
+				joints[childIndex].x = newPos.x;
+				joints[childIndex].y = newPos.y;
+
+				// Recursively rotate children of this joint
+				rotateChildren(childIndex, rotationAngle);
+			});
 		}
 
 		function getAngle(point1, point2) {
@@ -876,18 +868,24 @@ define([
 			
 			// Define pivot points for each rotational joint
 			switch (jointIndex) {
-				case 11: // middle joint rotates around hip
+				case 11: 
+					// middle joint rotates around hip
 					return joints[2];
-				case 1: // body/neck rotates around middle joint
-					// Return a copy of the middle joint position to prevent interference
+				case 1: 
+					// body/neck rotates around middle joint
+					// Return a copy of the middle joint
 					return { x: joints[11].x, y: joints[11].y };
-				case 7: // left elbow rotates around body
+				case 7: 
+					// left elbow rotates around body
 					return joints[1];
-				case 9: // right elbow rotates around body
+				case 9: 
+					// right elbow rotates around body
 					return joints[1];
-				case 3: // left knee rotates around hip
+				case 3: 
+					// left knee rotates around hip
 					return joints[2];
-				case 5: // right knee rotates around hip
+				case 5: 
+					// right knee rotates around hip
 					return joints[2];
 				default:
 					return joints[jointIndex]; // fallback
@@ -964,17 +962,31 @@ define([
 
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
-				if (selectedJointIndex === 2) { // Hip joint - drag whole stickman
+				if (selectedJointIndex === 2) { 
+
+					// Hip joint - drag whole stickman
 					isDraggingWhole = true;
-					dragStartPos = { x: mouseX, y: mouseY };
+					dragStartPos = { 
+						x: mouseX, 
+						y: mouseY 
+					};
 					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+
 				} else if (isRotationalJoint(selectedJointIndex)) {
+
 					// Start rotation for hierarchical joints
 					isRotating = true;
 					rotationPivot = getRotationPivot(selectedStickmanIndex, selectedJointIndex);
-					rotationStartAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
+
+					rotationStartAngle = getAngle(
+						rotationPivot, { 
+							x: mouseX, 
+							y: mouseY 
+						}
+					);
+
 					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
-					console.log(`Starting rotation for joint ${selectedJointIndex} around pivot:`, rotationPivot);
+
 				} else {
 					// Regular joint dragging for non-hierarchical joints (head, hands, feet)
 					isDragging = true;
@@ -1006,9 +1018,16 @@ define([
 
 				saveCurrentFrame();
 				updateTimeline();
+
 			} else if (isRotating && selectedJoint && selectedStickmanIndex >= 0 && rotationPivot) {
 				// Hierarchical rotation
-				const currentAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
+				const currentAngle = getAngle(
+					rotationPivot, { 
+						x: mouseX, 
+						y: mouseY 
+					}
+				);
+
 				const angleDiff = currentAngle - rotationStartAngle;
 				
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
@@ -1027,7 +1046,7 @@ define([
 					neckManuallyMoved = true;
 				}
 				
-				// Only update middle joint position if we're not rotating the neck (body joint)
+				// Only update middle joint position if we're not rotating the neck
 				// When rotating the neck around the middle joint, the middle joint should stay fixed
 				if (selectedJointIndex !== 1) {
 					updateMiddleJoint(selectedStickmanIndex);
@@ -1035,6 +1054,7 @@ define([
 
 				saveCurrentFrame();
 				updateTimeline();
+
 			} else if (isDragging && selectedJoint && selectedStickmanIndex >= 0) {
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
@@ -1060,10 +1080,16 @@ define([
 		}
 
 		function handleMouseUp() {
-			const wasRotatingNeck = isRotating && selectedJoint && selectedStickmanIndex >= 0 && 
+			const wasRotatingNeck = 
+				isRotating && 
+				selectedJoint && 
+				selectedStickmanIndex >= 0 && 
 				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
 			
-			const wasDraggingNeck = isDragging && selectedJoint && selectedStickmanIndex >= 0 && 
+			const wasDraggingNeck = 
+				isDragging && 
+				selectedJoint && 
+				selectedStickmanIndex >= 0 && 
 				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
 
 			isDragging = false;
@@ -1099,14 +1125,17 @@ define([
 			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
 				const joints = stickmen[stickmanIndex].joints;
 
-				// First check hip joint (index 2) - prioritize for whole stickman dragging
+				// First check hip joint (index 2)
 				const hipJoint = joints[2];
 				if (hipJoint) {
 					const dx = hipJoint.x - x;
 					const dy = hipJoint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
 					if (distance < 10) {
-						return { joint: hipJoint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: hipJoint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 
@@ -1117,13 +1146,18 @@ define([
 					const dy = middleJoint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
 					if (distance < 8) {
-						return { joint: middleJoint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: middleJoint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 
 				// Check other joints
 				for (let i = joints.length - 2; i >= 0; i--) {
-					if (i === 2) continue; // Skip hip joint as it's already checked
+					if (i === 2) 
+						continue; // Skip hip joint , already checked
+
 					const joint = joints[i];
 					const dx = joint.x - x;
 					const dy = joint.y - y;
@@ -1132,7 +1166,10 @@ define([
 					const hitRadius = i === 0 ? 12 : 8;
 
 					if (distance < hitRadius) {
-						return { joint: joint, stickmanIndex: stickmanIndex };
+						return { 
+							joint: joint, 
+							stickmanIndex: stickmanIndex 
+						};
 					}
 				}
 			}
