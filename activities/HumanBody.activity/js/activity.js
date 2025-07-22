@@ -863,6 +863,14 @@ define([
 					updateModeText();
 				}
 
+				// Update body parts data if provided
+				if (msg.content.bodyPartsData) {
+					bodyParts = msg.content.bodyPartsData;
+				} else {
+					// Fallback: update body parts for current model
+					updateBodyPartsForModel(msg.content.modelName || currentModelName);
+				}
+
 				shownParts = msg.content.shownParts || [];
 				tourIndex = msg.content.currentIndex || 0;
 
@@ -872,17 +880,57 @@ define([
 					tourTimer = null;
 				}
 
-				// Start syncing with host
-				if (bodyParts[tourIndex]) {
-					const part = bodyParts[tourIndex];
-					syncTourStep(
-						tourIndex,
-						part.name,
-						shownParts,
-						part.position,
-						part.frontView,
-						part.sideView
-					);
+				// Function to start tour sync once model is ready
+				const startTourSync = () => {
+					if (bodyParts[tourIndex]) {
+						const part = bodyParts[tourIndex];
+						syncTourStep(
+							tourIndex,
+							part.name,
+							shownParts,
+							part.position,
+							part.frontView,
+							part.sideView
+						);
+					}
+				};
+
+				// Check if we need to switch models
+				if (msg.content.modelName && msg.content.modelName !== currentModelName) {
+
+					const originalCallback = availableModels[msg.content.modelName].callback;
+
+					// Temporarily override the model load callback
+					const modelConfig = availableModels[msg.content.modelName];
+					loadModel({
+						...modelConfig,
+						callback: (loadedModel) => {
+							currentModel = loadedModel;
+							applyModelColors(loadedModel, msg.content.modelName);
+
+							currentModelName = msg.content.modelName;
+
+							const modelButton = document.getElementById('model-button');
+							modelButton.classList.remove('skeleton-icon', 'body-icon', 'organs-icon');
+							modelButton.classList.add(`${msg.content.modelName}-icon`);
+
+							startTourSync();
+							
+							if (originalCallback) {
+								originalCallback(loadedModel);
+							}
+						}
+					});
+
+					removeCurrentModel();
+
+					// Restore paint data for new model
+					if (modelPaintData[msg.content.modelName] && modelPaintData[msg.content.modelName].length > 0) {
+						partsColored = [...modelPaintData[msg.content.modelName]];
+					}
+				} else {
+					// Same model, start tour sync immediately
+					startTourSync();
 				}
 			}
 
@@ -1111,6 +1159,8 @@ define([
 		
 		function startTourMode() {
 			shownParts = []; // Reset shown parts
+			updateBodyPartsForModel(currentModelName);
+
 			tourIndex = getRandomUnshownPartIndex();
 			previousMesh = null;
 
@@ -1126,7 +1176,9 @@ define([
 					action: "tourStart",
 					content: {
 						shownParts: shownParts,
-						currentIndex: tourIndex
+						currentIndex: tourIndex,
+						modelName: currentModelName, 
+						bodyPartsData: bodyParts 
 					},
 				});
 			}
