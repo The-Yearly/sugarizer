@@ -772,6 +772,24 @@ define([
 			}
 
 			if (msg.action == "startDoctor") {
+
+				updateBodyPartsForModel(msg.content.modelName);
+
+				// switch models, before starting doctor mode
+				if (msg.content.modelName !== currentModelName) {
+					switchModel(msg.content.modelName);
+
+					// Wait for model to load before starting doctor mode
+					setTimeout(() => {
+						showLeaderboard();
+						isPaintActive = false;
+						isLearnActive = false;
+						isTourActive = false;
+						isDoctorActive = true;
+					}, 500);
+					return;
+				}
+
 				showLeaderboard();
 				isPaintActive = false;
 				isLearnActive = false;
@@ -1055,12 +1073,15 @@ define([
 			}
 
 			if (isDoctorActive) {
-				// Send doctor mode start message - with safety check
 				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 				}
 				ifDoctorHost = true;
@@ -1107,7 +1128,11 @@ define([
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 					ifDoctorHost = true;
 					startDoctorModePresence();
