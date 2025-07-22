@@ -2110,17 +2110,14 @@ define([
 					// Show "Correct!" modal first
 					showModal(l10n.get("Correct"));
 
-					// Increment the body part index
-					currentBodyPartIndex++;
-
-					// After delay, show next part or game over
+					// After delay, get next random part
 					setTimeout(() => {
-						if (currentBodyPartIndex < bodyParts.length) {
-							showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
-						} else {
-							showModal(l10n.get("GameOver"));
-							stopDoctorMode();
-						}
+						// Get next random part index
+						currentBodyPartIndex = getRandomUnshownPartIndex();
+						shownParts.push(currentBodyPartIndex);
+
+						// Show next question
+						showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
 					}, 2000);
 				} else {
 					// Wrong answer - increment failed attempts
