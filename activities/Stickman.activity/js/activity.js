@@ -168,7 +168,8 @@ define([
 
 		function resizeCanvas() {
 			canvas.width = canvas.parentElement.clientWidth - 32;
-			canvas.height = canvas.parentElement.clientHeight - 200;
+			// Reduce canvas height by an additional 50 pixels to ensure stickmen never go behind the timeline
+			canvas.height = canvas.parentElement.clientHeight - 250;
 		}
 
 		function initEvents() {
@@ -237,7 +238,7 @@ define([
 
 		function createInitialStickman() {
 			const centerX = canvas.width / 2;
-			const centerY = canvas.height / 2;
+			const centerY = canvas.height / 2 - 20;
 
 			stickmen = [createStickmanJoints(centerX, centerY, nextStickmanId++)];
 			neckManuallyMoved = false; // Reset flag for new stickman
@@ -248,17 +249,43 @@ define([
 		}
 
 		function addNewStickman() {
-			// at a random position
-			const centerX = Math.random() * (canvas.width - 200) + 100;
-			const centerY = Math.random() * (canvas.height - 200) + 100;
+			// Calculate safe boundaries to keep the entire stickman visible
+			// Stickman dimensions: roughly 140 pixels tall (60 above center + 100 below center) and 90 pixels wide (45 on each side)
+			const stickmanHeight = 140;
+			const stickmanWidth = 90;
+			const margin = 20; 
+			
+			const minX = stickmanWidth / 2 + margin;
+			const maxX = canvas.width - stickmanWidth / 2 - margin;
+			const minY = 60 + margin; // Head is 60 pixels above center
+			const maxY = canvas.height - 100 - margin; // Feet are 100 pixels below center
+
+			// Ensure valid bounds
+			const safeMinX = Math.max(minX, 50);
+			const safeMaxX = Math.min(maxX, canvas.width - 50);
+			const safeMinY = Math.max(minY, 80);
+			const safeMaxY = Math.min(maxY, canvas.height - 120);
+			
+			// within canvas bounds
+			const centerX = Math.random() * (safeMaxX - safeMinX) + safeMinX;
+			const centerY = Math.random() * (safeMaxY - safeMinY) + safeMinY;
 
 			const newStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
 			stickmen.push(newStickman);
 			updateMiddleJoint(stickmen.length - 1);
 
+			// Add the new stickman to all existing frames
 			frames.forEach(frame => {
 				frame.push(JSON.parse(JSON.stringify(newStickman)));
 			});
+
+			// Move back to frame 1 (index 0)
+			if (frames.length > 0) {
+				currentFrame = 0;
+				stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+				neckManuallyMoved = false;
+				stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
+			}
 
 			updateTimeline();
 			updateRemoveButtonState(); 
@@ -266,51 +293,44 @@ define([
 		}
 
 		function confirmationModal(stickmanId, stickmanToRemove) {
-			// Create modal overlay
 			const modalOverlay = document.createElement('div');
 			modalOverlay.className = 'modal-overlay';
 
-			// Create modal content
 			const modal = document.createElement('div');
 			modal.className = 'modal-content';
 
-			// Create header
 			const header = document.createElement('div');
 			header.className = 'modal-header';
 
-			// Create title
 			const title = document.createElement('h3');
 			title.textContent = 'Remove Stickman';
 			title.className = 'modal-title';
 
-			// Create body content
 			const body = document.createElement('div');
 			body.className = 'modal-body';
 
-			// Create message
 			const message = document.createElement('p');
 			message.textContent = 'Are you sure you want to remove the Stickman ?';
 			message.className = 'modal-message';
 
-			// Create button container
+			// button container
 			const buttonContainer = document.createElement('div');
 			buttonContainer.className = 'modal-button-container';
 
-			// Create cancel button
+			// cancel button
 			const cancelButton = document.createElement('button');
 			cancelButton.className = 'modal-button';
 			cancelButton.innerHTML = `
 				<span class="modal-button-icon modal-button-icon-cancel"></span>No
 			`;
 
-			// Create confirm button
+			// confirm button
 			const confirmButton = document.createElement('button');
 			confirmButton.className = 'modal-button modal-button-confirm';
 			confirmButton.innerHTML = `
 				<span class="modal-button-icon modal-button-icon-ok"></span>Yes
 			`;
 
-			// Add event listeners
 			cancelButton.onclick = () => {
 				document.body.removeChild(modalOverlay);
 				exitRemovalMode();
@@ -1169,23 +1189,29 @@ define([
 		function render() {
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-			// Draw onion skin of previous frame
-			if (frames.length > 1 && !isPlaying) {
-				const prevFrameIndex = currentFrame === 0 ? frames.length - 1 : currentFrame - 1;
+			// Draw onion skin of previous frame - only for selected stickman
+			// do not show for the first frame
+			if (frames.length > 1 && !isPlaying && currentFrame > 0) {
+				const prevFrameIndex = currentFrame - 1;
 				const prevFrame = frames[prevFrameIndex];
 
-				ctx.save();
-				ctx.globalAlpha = 0.3;
-				ctx.strokeStyle = '#0066cc';
-				ctx.lineWidth = 2;
-				ctx.lineCap = 'round';
-				ctx.lineJoin = 'round';
+				// Only show shadow for selected stickman, or first stickman if none selected
+				const shadowStickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
+				
+				if (shadowStickmanIndex < prevFrame.length) {
+					const shadowStickman = prevFrame[shadowStickmanIndex];
 
-				prevFrame.forEach(stickman => {
-					drawStickmanSkeleton(ctx, stickman.joints);
+					ctx.save();
+					ctx.globalAlpha = 0.3;
+					ctx.strokeStyle = '#0066cc';
+					ctx.lineWidth = 2;
+					ctx.lineCap = 'round';
+					ctx.lineJoin = 'round';
+
+					drawStickmanSkeleton(ctx, shadowStickman.joints);
 
 					ctx.fillStyle = '#0066cc';
-					stickman.joints.forEach((joint, index) => {
+					shadowStickman.joints.forEach((joint, index) => {
 						// Skip middle joint
 						if (index === 11) 
 							return;
@@ -1198,9 +1224,9 @@ define([
 						}
 						ctx.fill();
 					});
-				});
 
-				ctx.restore();
+					ctx.restore();
+				}
 			}
 
 			drawAllStickmen();
