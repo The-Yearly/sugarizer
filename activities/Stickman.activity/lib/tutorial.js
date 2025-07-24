@@ -1,79 +1,81 @@
 define([
+	"l10n"
 ], function (
+	l10n
 ) {
 	var tutorial = {};
 
 	tutorial.start = function () {
 		var steps = [
 			{
-				title: "Stickman Activity",
-				intro: "Learn how to create animated stickman figures and bring them to life!"
+				title: l10n.get("TutorialTitle"),
+				intro: l10n.get("TutorialIntro")
 			},
 			{
 				element: "#network-button",
 				position: "bottom",
-				title: "Network",
-				intro: "Connect with other users to share your animations.",
+				title: l10n.get("NetworkTitle"),
+				intro: l10n.get("NetworkIntro"),
 			},
 			{
 				element: "#play-pause-button",
 				position: "bottom",
-				title: "Play/Pause Animation",
-				intro: "Click here to play or pause your stickman animation.",
+				title: l10n.get("PlayPauseTitle"),
+				intro: l10n.get("PlayPauseIntro"),
 			},
 			{
 				element: "#speed-button",
 				position: "bottom",
-				title: "Animation Speed",
-				intro: "Click here to adjust the speed of your stickman animation.",
+				title: l10n.get("SpeedTitle"),
+				intro: l10n.get("SpeedIntro"),
 			},
 			{
 				element: "#minus-button",
 				position: "bottom",
-				title: "Animation Speed",
-				intro: "Click here to adjust the speed of your stickman animation.",
+				title: l10n.get("RemoveTitle"),
+				intro: l10n.get("RemoveIntro"),
 			},
 			{
 				element: "#addStickman-button",
 				position: "bottom",
-				title: "Add Stickman",
-				intro: "Click here to add a new stickman to your animation.",
+				title: l10n.get("AddStickmanTitle"),
+				intro: l10n.get("AddStickmanIntro"),
 			},
 			{
 				element: "#template-button",
 				position: "bottom",
-				title: "Templates",
-				intro: "Click here to choose a template for your stickman.",
+				title: l10n.get("TemplatesTitle"),
+				intro: l10n.get("TemplatesIntro"),
 			},
 			{
 				element: "#import-button",
 				position: "bottom",
-				title: "Import",
-				intro: "Click here to import a stickman template.",
+				title: l10n.get("ImportTitle"),
+				intro: l10n.get("ImportIntro"),
 			},
 			{
 				element: "#export-button",
 				position: "bottom",
-				title: "Export",
-				intro: "Click here to export your stickman animation.",
+				title: l10n.get("ExportTitle"),
+				intro: l10n.get("ExportIntro"),
 			},
 			{
 				element: "#timeline",
 				position: "top",
-				title: "Timeline",
-				intro: "View and navigate through your animation frames here. Click on any frame to edit it.",
+				title: l10n.get("TimelineTitle"),
+				intro: l10n.get("TimelineIntro"),
 			},
 			{
 				element: "#add-button",
 				position: "top",
-				title: "Add Frame",
-				intro: "Click here to add a new frame to your animation sequence.",
+				title: l10n.get("AddFrameTitle"),
+				intro: l10n.get("AddFrameIntro"),
 			},
 			{
 				element: "#fullscreen-button",
 				position: "bottom",
-				title: "Full Screen",
-				intro: "Switch to full screen mode for a better experience.",
+				title: l10n.get("FullScreenTitle"),
+				intro: l10n.get("FullScreenIntro"),
 			},
 		];
 
@@ -84,8 +86,8 @@ define([
 		introJs().setOptions({
 			tooltipClass: 'customTooltip',
 			steps: steps,
-			prevLabel: "Previous",
-			nextLabel: "Next",
+			prevLabel: l10n.get("Previous"),
+			nextLabel: l10n.get("Next"),
 			exitOnOverlayClick: false,
 			nextToDone: false,
 			showBullets: false

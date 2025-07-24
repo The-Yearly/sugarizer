@@ -5,13 +5,15 @@ define([
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
 	"tutorial",
+	"l10n"
 ], function (
 	activity,
 	env,
 	presencepalette,
 	speedpalette,
 	templatepalette,
-	tutorial
+	tutorial,
+	l10n
 ) {
 	// Manipulate the DOM only when it is ready.
 	requirejs(['domReady!'], function (doc) {
@@ -86,6 +88,11 @@ define([
 
 			env.getEnvironment(function (err, environment) {
 				currentenv = environment;
+
+				// Set current language to Sugarizer
+				var defaultLanguage = (typeof chrome != 'undefined' && chrome.app && chrome.app.runtime) ? chrome.i18n.getUILanguage() : navigator.language;
+				var language = environment.user ? environment.user.language : defaultLanguage;
+				l10n.init(language);
 
 				// Load from datastore
 				if (!environment.objectId) {
@@ -303,14 +310,14 @@ define([
 			header.className = 'modal-header';
 
 			const title = document.createElement('h3');
-			title.textContent = 'Remove Stickman';
+			title.textContent = l10n.get("RemoveStickman");
 			title.className = 'modal-title';
 
 			const body = document.createElement('div');
 			body.className = 'modal-body';
 
 			const message = document.createElement('p');
-			message.textContent = 'Are you sure you want to remove the Stickman ?';
+			message.textContent = l10n.get("ConfirmRemoval");
 			message.className = 'modal-message';
 
 			// button container
@@ -321,14 +328,14 @@ define([
 			const cancelButton = document.createElement('button');
 			cancelButton.className = 'modal-button';
 			cancelButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-cancel"></span>No
+				<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("No")}
 			`;
 
 			// confirm button
 			const confirmButton = document.createElement('button');
 			confirmButton.className = 'modal-button modal-button-confirm';
 			confirmButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-ok"></span>Yes
+				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("Yes")}
 			`;
 
 			cancelButton.onclick = () => {
@@ -409,10 +416,10 @@ define([
 
 			if (stickmen.length <= 1) {
 				minusButton.disabled = true;
-				minusButton.title = 'Cannot remove the last stickman';
+				minusButton.title = l10n.get("CannotRemoveLastStickman");
 			} else {
 				minusButton.disabled = false;
-				minusButton.title = 'Remove stickman';
+				minusButton.title = l10n.get("RemoveStickmanTooltip");
 			}
 		}
 
@@ -1285,6 +1292,12 @@ define([
 		}
 
 		// START APPLICATION
+		
+		// Process localize event
+		window.addEventListener("localized", function() {
+			// Localization is ready, strings will be updated when they are accessed
+			console.log("Localization initialized");
+		});
 		
 		activity.setup();
 		initializeAnimator();
