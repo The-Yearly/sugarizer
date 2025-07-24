@@ -40,28 +40,28 @@ define([
 
 		// Joint hierarchy - defines parent-child relationships for rotation
 		const jointHierarchy = {
-			2: [11], // hip -> middle
-			11: [1], // middle -> body (neck rotates around middle)
-			1: [0, 7, 9], // body -> head, left elbow, right elbow
-			7: [8], // left elbow -> left hand
-			9: [10], // right elbow -> right hand
-			3: [4], // left knee -> left foot
-			5: [6] // right knee -> right foot
+			2: [11], 		// hip -> middle
+			11: [1], 		// middle -> body (neck rotates around middle)
+			1: [0, 7, 9], 	// body -> head, left elbow, right elbow
+			7: [8], 		// left elbow -> left hand
+			9: [10], 		// right elbow -> right hand
+			3: [4], 		// left knee -> left foot
+			5: [6]			// right knee -> right foot
 		};
 
 		// Joint connections with proper distances
 		const jointConnections = [
-			{ from: 0, to: 1, length: 15 },    // head to body 
-			{ from: 1, to: 11, length: 25 },   // body to middle
-			{ from: 11, to: 2, length: 25 },   // middle to hips
-			{ from: 2, to: 3, length: 35 },    // hips to left knee
-			{ from: 3, to: 4, length: 35 },    // left knee to foot
-			{ from: 2, to: 5, length: 35 },    // hips to right knee
-			{ from: 5, to: 6, length: 35 },    // right knee to foot
-			{ from: 1, to: 7, length: 35 },    // body to left elbow
-			{ from: 7, to: 8, length: 25 },    // left elbow to hand
-			{ from: 1, to: 9, length: 35 },    // body to right elbow
-			{ from: 9, to: 10, length: 25 }    // right elbow to hand
+			{ from: 0, to: 1, length: 20 },    // head to body 
+			{ from: 1, to: 11, length: 30 },   // body to middle
+			{ from: 11, to: 2, length: 30 },   // middle to hips
+			{ from: 2, to: 3, length: 40 },    // hips to left knee
+			{ from: 3, to: 4, length: 40 },    // left knee to foot
+			{ from: 2, to: 5, length: 40 },    // hips to right knee
+			{ from: 5, to: 6, length: 40 },    // right knee to foot
+			{ from: 1, to: 7, length: 40 },    // body to left elbow
+			{ from: 7, to: 8, length: 30 },    // left elbow to hand
+			{ from: 1, to: 9, length: 40 },    // body to right elbow
+			{ from: 9, to: 10, length: 30 }    // right elbow to hand
 		];
 
 		// INITIALIZATION FUNCTIONS
@@ -214,18 +214,18 @@ define([
 			return {
 				id: id,
 				joints: [
-					{ x: centerX, y: centerY - 50, name: 'head' },            // 0 - head
-					{ x: centerX, y: centerY - 35, name: 'body' },            // 1 - body
+					{ x: centerX, y: centerY - 60, name: 'head' },            // 0 - head
+					{ x: centerX, y: centerY - 40, name: 'body' },            // 1 - body
 					{ x: centerX, y: centerY + 20, name: 'hips' },            // 2 - hips
-					{ x: centerX - 15, y: centerY + 50, name: 'leftKnee' },   // 3 - left knee
-					{ x: centerX - 20, y: centerY + 80, name: 'leftFoot' },   // 4 - left foot
-					{ x: centerX + 15, y: centerY + 50, name: 'rightKnee' },  // 5 - right knee
-					{ x: centerX + 20, y: centerY + 80, name: 'rightFoot' },  // 6 - right foot
-					{ x: centerX - 25, y: centerY - 25, name: 'leftElbow' },  // 7 - left elbow
-					{ x: centerX - 40, y: centerY, name: 'leftHand' },        // 8 - left hand
-					{ x: centerX + 25, y: centerY - 25, name: 'rightElbow' }, // 9 - right elbow
-					{ x: centerX + 40, y: centerY, name: 'rightHand' },       // 10 - right hand
-					{ x: centerX, y: centerY - 8, name: 'middle' }            // 11 - middle (drag joint)
+					{ x: centerX - 20, y: centerY + 60, name: 'leftKnee' },   // 3 - left knee
+					{ x: centerX - 25, y: centerY + 100, name: 'leftFoot' },  // 4 - left foot
+					{ x: centerX + 20, y: centerY + 60, name: 'rightKnee' },  // 5 - right knee
+					{ x: centerX + 25, y: centerY + 100, name: 'rightFoot' }, // 6 - right foot
+					{ x: centerX - 30, y: centerY - 30, name: 'leftElbow' },  // 7 - left elbow
+					{ x: centerX - 45, y: centerY, name: 'leftHand' },        // 8 - left hand
+					{ x: centerX + 30, y: centerY - 30, name: 'rightElbow' }, // 9 - right elbow
+					{ x: centerX + 45, y: centerY, name: 'rightHand' },       // 10 - right hand
+					{ x: centerX, y: centerY - 10, name: 'middle' }           // 11 - middle (drag joint)
 				]
 			};
 		}
@@ -686,7 +686,7 @@ define([
 
 		function drawStickmanSkeleton(ctx, joints) {
 			ctx.strokeStyle = '#000000';
-			ctx.lineWidth = 10;
+			ctx.lineWidth = 12;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
 
@@ -730,7 +730,7 @@ define([
 
 			// head circle (solid black)
 			ctx.beginPath();
-			ctx.arc(joints[0].x, joints[0].y, 15, 0, Math.PI * 2);
+			ctx.arc(joints[0].x, joints[0].y, 17, 0, Math.PI * 2);
 			ctx.fillStyle = '#000000';
 			ctx.fill();
 		}
@@ -1242,7 +1242,7 @@ define([
 				const frameStickmen = frames[currentExportFrame];
 				frameStickmen.forEach(stickman => {
 					recordCtx.strokeStyle = '#000';
-					recordCtx.lineWidth = 4;
+					recordCtx.lineWidth = 8;
 					drawStickmanSkeleton(recordCtx, stickman.joints);
 				});
 
