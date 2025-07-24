@@ -4,12 +4,14 @@ define([
 	"sugar-web/graphics/presencepalette",
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
+	"tutorial",
 ], function (
 	activity,
 	env,
 	presencepalette,
 	speedpalette,
-	templatepalette
+	templatepalette,
+	tutorial
 ) {
 	// Manipulate the DOM only when it is ready.
 	requirejs(['domReady!'], function (doc) {
@@ -153,6 +155,9 @@ define([
 			});
 		});
 
+		document.getElementById("help-button").addEventListener('click', function (e) {
+			tutorial.start();
+		});
 
 		function initCanvas() {
 			canvas = document.getElementById('stickman-canvas');
