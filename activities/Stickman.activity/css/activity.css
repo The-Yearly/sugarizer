@@ -227,8 +227,12 @@ body {
 	right: -6px;
 	cursor: pointer;
 	border-radius: 50%;
-	opacity: 0.8;
-	transition: opacity 0.2s ease;
+	opacity: 1;
+}
+
+.delete-frame:hover {
+	opacity: 1;
+	background-color: #282828;
 }
 
 
