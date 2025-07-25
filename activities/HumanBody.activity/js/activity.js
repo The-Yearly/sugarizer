@@ -209,7 +209,6 @@ define([
 							// Load model paint data if available
 							if (savedData.modelPaintData) {
 								modelPaintData = savedData.modelPaintData;
-								console.log("Loaded model paint data:", modelPaintData);
 							} else {
 								modelPaintData = {
 									skeleton: [],
@@ -221,17 +220,14 @@ define([
 							// Load camera state if available
 							if (savedData.cameraPosition) {
 								cameraPosition = savedData.cameraPosition;
-								console.log("Loaded camera position:", cameraPosition);
 							}
 
 							if (savedData.cameraTarget) {
 								cameraTarget = savedData.cameraTarget;
-								console.log("Loaded camera target:", cameraTarget);
 							}
 
 							if (savedData.cameraFov) {
 								cameraFov = savedData.cameraFov;
-								console.log("Loaded camera FOV:", cameraFov);
 							}
 
 							// Check if saved data includes model information
@@ -462,7 +458,6 @@ define([
 
 			scene.children.forEach(child => {
 				if (child.name && modelNamesToRemove.includes(child.name)) {
-					console.log(`Found model to remove by name: ${child.name}`);
 					childrenToRemove.push(child);
 				}
 			});
@@ -475,7 +470,6 @@ define([
 				// Clean up resources
 				child.traverse((node) => {
 					if (node.isMesh) {
-						// console.log(`Disposing mesh from ${child.name}: ${node.name}`);
 						if (node.geometry) {
 							node.geometry.dispose();
 						}
@@ -501,7 +495,6 @@ define([
 			}
 
 			if (currentModelName === modelKey) {
-				console.log(`Model ${modelKey} is already loaded`);
 				return;
 			}
 
@@ -612,7 +605,7 @@ define([
 					presenceIndex = 0;
 				}
 			} else {
-				console.warn(`No body parts data found for model: ${modelName}`);
+				// console.warn(`No body parts data found for model: ${modelName}`);
 			}
 		}
 
@@ -698,7 +691,6 @@ define([
 			if (msg.action == "init") {
 				partsColored = msg.content[0];
 				players = msg.content[1];
-				console.log(partsColored);
 
 				// Update the model palette to show the correct active button
 				if (paletteModel.updateActiveModel) {
@@ -737,7 +729,6 @@ define([
 			}
 
 			if (msg.action == "answer") {
-				console.log("Received answer from", msg.user.name);
 
 				// Only host processes answers
 				if (!ifDoctorHost || !firstAnswer) {
@@ -781,6 +772,24 @@ define([
 			}
 
 			if (msg.action == "startDoctor") {
+
+				updateBodyPartsForModel(msg.content.modelName);
+
+				// switch models, before starting doctor mode
+				if (msg.content.modelName !== currentModelName) {
+					switchModel(msg.content.modelName);
+
+					// Wait for model to load before starting doctor mode
+					setTimeout(() => {
+						showLeaderboard();
+						isPaintActive = false;
+						isLearnActive = false;
+						isTourActive = false;
+						isDoctorActive = true;
+					}, 500);
+					return;
+				}
+
 				showLeaderboard();
 				isPaintActive = false;
 				isLearnActive = false;
@@ -872,6 +881,14 @@ define([
 					updateModeText();
 				}
 
+				// Update body parts data if provided
+				if (msg.content.bodyPartsData) {
+					bodyParts = msg.content.bodyPartsData;
+				} else {
+					// Fallback: update body parts for current model
+					updateBodyPartsForModel(msg.content.modelName || currentModelName);
+				}
+
 				shownParts = msg.content.shownParts || [];
 				tourIndex = msg.content.currentIndex || 0;
 
@@ -881,17 +898,57 @@ define([
 					tourTimer = null;
 				}
 
-				// Start syncing with host
-				if (bodyParts[tourIndex]) {
-					const part = bodyParts[tourIndex];
-					syncTourStep(
-						tourIndex,
-						part.name,
-						shownParts,
-						part.position,
-						part.frontView,
-						part.sideView
-					);
+				// Function to start tour sync once model is ready
+				const startTourSync = () => {
+					if (bodyParts[tourIndex]) {
+						const part = bodyParts[tourIndex];
+						syncTourStep(
+							tourIndex,
+							part.name,
+							shownParts,
+							part.position,
+							part.frontView,
+							part.sideView
+						);
+					}
+				};
+
+				// Check if we need to switch models
+				if (msg.content.modelName && msg.content.modelName !== currentModelName) {
+
+					const originalCallback = availableModels[msg.content.modelName].callback;
+
+					// Temporarily override the model load callback
+					const modelConfig = availableModels[msg.content.modelName];
+					loadModel({
+						...modelConfig,
+						callback: (loadedModel) => {
+							currentModel = loadedModel;
+							applyModelColors(loadedModel, msg.content.modelName);
+
+							currentModelName = msg.content.modelName;
+
+							const modelButton = document.getElementById('model-button');
+							modelButton.classList.remove('skeleton-icon', 'body-icon', 'organs-icon');
+							modelButton.classList.add(`${msg.content.modelName}-icon`);
+
+							startTourSync();
+							
+							if (originalCallback) {
+								originalCallback(loadedModel);
+							}
+						}
+					});
+
+					removeCurrentModel();
+
+					// Restore paint data for new model
+					if (modelPaintData[msg.content.modelName] && modelPaintData[msg.content.modelName].length > 0) {
+						partsColored = [...modelPaintData[msg.content.modelName]];
+					}
+				} else {
+					// Same model, start tour sync immediately
+					startTourSync();
 				}
 			}
 
@@ -1016,12 +1073,15 @@ define([
 			}
 
 			if (isDoctorActive) {
-				// Send doctor mode start message - with safety check
 				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 				}
 				ifDoctorHost = true;
@@ -1053,6 +1113,8 @@ define([
 			isTourActive = currentModeIndex === 1;
 			isDoctorActive = currentModeIndex === 2;
 
+			window.currentModeIndex = currentModeIndex;
+			
 			// If switching to Tour mode, start it
 			if (isTourActive) {
 				startTourMode();
@@ -1066,7 +1128,11 @@ define([
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 					ifDoctorHost = true;
 					startDoctorModePresence();
@@ -1118,6 +1184,8 @@ define([
 		
 		function startTourMode() {
 			shownParts = []; // Reset shown parts
+			updateBodyPartsForModel(currentModelName);
+
 			tourIndex = getRandomUnshownPartIndex();
 			previousMesh = null;
 
@@ -1133,7 +1201,9 @@ define([
 					action: "tourStart",
 					content: {
 						shownParts: shownParts,
-						currentIndex: tourIndex
+						currentIndex: tourIndex,
+						modelName: currentModelName, 
+						bodyPartsData: bodyParts 
 					},
 				});
 			}
@@ -1579,7 +1649,6 @@ define([
 				// Set initial body parts based on current model
 				updateBodyPartsForModel(currentModelName);
 
-				console.log("All body parts data loaded successfully");
 			} catch (error) {
 				console.error("Error loading body parts data:", error);
 			}
@@ -1965,7 +2034,6 @@ define([
 				});
 			} else {
 				object.material = object.userData.originalMaterial.clone();
-				console.log("Restored original material");
 			}
 
 			if (presence) {
@@ -2119,17 +2187,14 @@ define([
 					// Show "Correct!" modal first
 					showModal(l10n.get("Correct"));
 
-					// Increment the body part index
-					currentBodyPartIndex++;
-
-					// After delay, show next part or game over
+					// After delay, get next random part
 					setTimeout(() => {
-						if (currentBodyPartIndex < bodyParts.length) {
-							showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
-						} else {
-							showModal(l10n.get("GameOver"));
-							stopDoctorMode();
-						}
+						// Get next random part index
+						currentBodyPartIndex = getRandomUnshownPartIndex();
+						shownParts.push(currentBodyPartIndex);
+
+						// Show next question
+						showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
 					}, 2000);
 				} else {
 					// Wrong answer - increment failed attempts
