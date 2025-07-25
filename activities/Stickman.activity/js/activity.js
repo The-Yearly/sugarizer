@@ -432,7 +432,7 @@ define([
 
 			if (!isRemovalMode) {
 				isRemovalMode = true;
-				document.getElementById('minus-button').style.backgroundColor = 'black';
+				document.getElementById('minus-button').style.backgroundColor = '#808080';
 				canvas.style.cursor = 'crosshair';
 			} else {
 				exitRemovalMode();
