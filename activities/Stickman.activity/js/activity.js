@@ -139,6 +139,34 @@ define([
 			});
 		}
 
+		// translate toolbar buttons 
+		function translateToolbarButtons() {
+			const buttonsToTranslate = [
+				{ id: 'network-button', key: 'Network' },
+				{ id: 'play-pause-button', key: 'PlayPause' },
+				{ id: 'speed-button', key: 'Speed' },
+				{ id: 'minus-button', key: 'RemoveStickman' },
+				{ id: 'addStickman-button', key: 'AddStickman' },
+				{ id: 'template-button', key: 'Templates' },
+				{ id: 'import-button', key: 'Import' },
+				{ id: 'export-button', key: 'Export' },
+				{ id: 'stop-button', key: 'Stop' },
+				{ id: 'fullscreen-button', key: 'Fullscreen' },
+				{ id: 'help-button', key: 'Tutorial' },
+				{ id: 'add-button', key: 'AddFrame' }
+			];
+
+			buttonsToTranslate.forEach(button => {
+				const element = document.getElementById(button.id);
+				if (element) {
+					const translatedText = l10n.get(button.key);
+					if (translatedText) {
+						element.title = translatedText;
+					}
+				}
+			});
+		}
+
 		document.getElementById('stop-button').addEventListener('click', function () {
 			console.log("writing...");
 
@@ -1295,8 +1323,9 @@ define([
 		
 		// Process localize event
 		window.addEventListener("localized", function() {
-			// Localization is ready, strings will be updated when they are accessed
 			console.log("Localization initialized");
+			// Translate toolbar buttons after localization is ready
+			translateToolbarButtons();
 		});
 		
 		activity.setup();
