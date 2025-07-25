@@ -368,7 +368,6 @@ define([
 
 			cancelButton.onclick = () => {
 				document.body.removeChild(modalOverlay);
-				exitRemovalMode();
 			};
 
 			confirmButton.onclick = () => {
@@ -393,18 +392,20 @@ define([
 
 					updateTimeline();
 					updateRemoveButtonState();
+
+					// If only one stickman remains, automatically exit removal mode
+					if (stickmen.length <= 1) {
+						exitRemovalMode();
+					}
 				} else {
 					console.error("Cannot remove the last stickman. At least one stickman must remain.");
 				}
-
-				exitRemovalMode();
 			};
 
 			// Close modal when clicking overlay
 			modalOverlay.onclick = (e) => {
 				if (e.target === modalOverlay) {
 					document.body.removeChild(modalOverlay);
-					exitRemovalMode();
 				}
 			};
 
@@ -431,8 +432,7 @@ define([
 
 			if (!isRemovalMode) {
 				isRemovalMode = true;
-				document.getElementById('minus-button').style.backgroundColor = '#ffcccc';
-				document.getElementById('minus-button').style.border = '2px solid #ff0000';
+				document.getElementById('minus-button').style.backgroundColor = '#ffdddd';
 				canvas.style.cursor = 'crosshair';
 			} else {
 				exitRemovalMode();
@@ -454,7 +454,6 @@ define([
 		function exitRemovalMode() {
 			isRemovalMode = false;
 			document.getElementById('minus-button').style.backgroundColor = '';
-			document.getElementById('minus-button').style.border = '';
 			canvas.style.cursor = 'default';
 		}
 
@@ -1007,7 +1006,7 @@ define([
 			}
 
 			if (isRemovalMode) {
-				exitRemovalMode();
+				// Stay in removal mode when clicking on canvas - don't exit
 				return;
 			}
 
