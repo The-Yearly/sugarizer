@@ -652,6 +652,14 @@ define([
 				if (frames.length > 1) {
 					frames.splice(index, 1);
 					currentFrame = Math.min(currentFrame, frames.length - 1);
+					
+					// Load stickmen data from the new current frame
+					if (frames.length > 0) {
+						stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+						neckManuallyMoved = false;
+						stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
+					}
+					
 					updateTimeline();
 				}
 			});
