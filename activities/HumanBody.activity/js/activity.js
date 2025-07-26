@@ -1,6 +1,7 @@
 define([
 	"sugar-web/activity/activity",
 	"sugar-web/env",
+	"sugar-web/datastore",
 	"activity/palettes/colorpalettefill",
 	"activity/palettes/zoompalette",
 	"activity/palettes/modelpalette",
@@ -8,9 +9,11 @@ define([
 	"sugar-web/graphics/presencepalette",
 	"l10n",
 	"tutorial",
+	"humane"
 ], function (
 	activity,
 	env,
+	datastore,
 	colorpaletteFill,
 	zoompalette,
 	modelpalette,
@@ -18,6 +21,7 @@ define([
 	presencepalette,
 	l10n,
 	tutorial,
+	humane
 ) {
 	requirejs(["domReady!"], function (doc) {
 		activity.setup();
@@ -33,6 +37,7 @@ define([
 		let cameraPosition = { x: 0, y: 10, z: 20 };
 		let cameraTarget = { x: 0, y: 0, z: 0 };
 		let cameraFov = 45;
+		let renderer = null;
 
 		// MODE VARIABLES  
 		let isPaintActive = true;
@@ -165,6 +170,11 @@ define([
 		// Launch tutorial
 		document.getElementById("help-button").addEventListener('click', function (e) {
 			tutorial.start();
+		});
+
+		// Save as Image
+		document.getElementById("image-button").addEventListener('click', function (e) {
+			saveAsImage();
 		});
 
 		env.getEnvironment(function (err, environment) {
@@ -307,6 +317,35 @@ define([
 				});
 			}
 		});
+
+		// Save as Image function
+		function saveAsImage() {
+			// Ensure renderer is available
+			if (!renderer || !renderer.domElement) {
+				console.error("Renderer not available for image capture");
+				return;
+			}
+
+			try {
+				var mimetype = 'image/jpeg';
+				var inputData = renderer.domElement.toDataURL(mimetype);
+				var metadata = {
+					mimetype: mimetype,
+					title: "HumanBody Image " + currentModelName,
+					activity: "org.olpcfrance.MediaViewerActivity",
+					timestamp: new Date().getTime(),
+					creation_time: new Date().getTime(),
+					file_size: 0
+				};
+
+				datastore.create(metadata, function() {
+					showModal(l10n.get("ImageSaved") || "Image saved successfully!");
+					console.log("Image export done.");
+				}, inputData);
+			} catch (error) {
+				console.error("Error saving image:", error);
+			}
+		}
 
 		function logAllMeshesAsJSON(model) {
 			const meshData = [];
@@ -1767,11 +1806,14 @@ define([
 				fillColor;
 			updateSlidersFill(selectedColorFill);
 		});
-		const renderer = new THREE.WebGLRenderer({
+
+		renderer = new THREE.WebGLRenderer({
 			antialias: true,
 			alpha: true,
-			logarithmicDepthBuffer: true
+			logarithmicDepthBuffer: true,
+			preserveDrawingBuffer: true
 		});
+
 		renderer.shadowMap.enabled = true;
 		renderer.setSize(window.innerWidth, window.innerHeight);
 		const canvas = document.getElementById("canvas");

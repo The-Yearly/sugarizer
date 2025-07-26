@@ -6,6 +6,7 @@
 	"ZoomPalette": "Palette de Zoom",
 	"Settings": "Paramètres",
 	"Stop": "Arrêter",
+	"SaveAsImage": "Enregistrer comme Image",
 	"Leaderboard": "Classement",
 	"PlayerName": "Nom du Joueur",
 	"Score": "Score",
@@ -31,6 +32,7 @@
 	"Green": "Vert",
 	"Blue": "Bleu",
 	"RemindYou": "Rappel : Trouvez le/la",
+	"ImageSaved": "Image sauvegardée avec succès !",
 
 	"TutorialWelcomeTitle": "Activité Corps Humain",
 	"TutorialWelcomeIntro": "Bienvenue dans l’activité Corps Humain. Explorez le corps humain en 3D avec des couches interactives. Changez de vue, mettez en surbrillance des parties et jouez à des quiz amusants avec vos amis en mode Docteur.",
