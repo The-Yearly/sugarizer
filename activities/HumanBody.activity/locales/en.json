@@ -6,6 +6,7 @@
 	"ZoomPalette": "Zoom Palette",
 	"Settings": "Settings",
 	"Stop": "Stop",
+	"SaveAsImage": "Save As Image",
 	"Leaderboard": "Leaderboard",
 	"PlayerName": "Player Name",
 	"Score": "Score",
@@ -31,6 +32,7 @@
 	"Green": "Green",
 	"Blue": "Blue",
 	"RemindYou": "Reminder: Find the",
+	"ImageSaved": "Image saved successfully!",
 
 	"TutorialWelcomeTitle": "Human Body Activity",
 	"TutorialWelcomeIntro": "Welcome into the Human Body Activity. Explore the human body in 3D with interactive layers. Switch views, highlight parts, and play fun quizzes with friends in Doctor Mode.",

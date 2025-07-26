@@ -244,6 +244,10 @@ body {
     background-image: url(../icons/model-organs.svg);
 }
 
+#image-button {
+    background-image: url(../icons/save-image.svg);
+}
+
 #settings-button {
     height: 45px;
     width: 45px;
