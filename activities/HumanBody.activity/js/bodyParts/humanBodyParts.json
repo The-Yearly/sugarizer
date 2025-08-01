@@ -8,7 +8,7 @@
   { "name": "Neck", "mesh": "Neck_mesh", "position": [0.04, 5.54, -0.23], "frontView": true },
   { "name": "Chest", "mesh": "Chest_mesh", "position": [0.04, 4.55, 0.11], "frontView": true },
   { "name": "Back", "mesh": "back_mesh", "position": [0.04, 3.78, -0.83], "frontView": false },
-  { "name": "Stomach", "mesh": "stomach_mesh", "position": [0.04, 2.41, 0.2], "frontView": true },
+  { "name": "Belly", "mesh": "stomach_mesh", "position": [0.04, 2.41, 0.2], "frontView": true },
 
   { "name": "LeftShoulder", "mesh": "leftshoulder_mesh", "position": [1.41, 4.69, -0.56], "frontView": true },
   { "name": "LeftArmUpper", "mesh": "leftarmup_mesh", "position": [1.73, 3.65, -0.68], "frontView": true },
