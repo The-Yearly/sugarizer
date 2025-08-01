@@ -193,12 +193,17 @@ define([
 					body: [],
 					organs: []
 				};
-				loadModel({
-					...availableModels.body,
-					callback: (loadedModel) => {
-						currentModel = loadedModel;
-					}
-				});
+				
+				if (!environment.sharedId) {
+					loadModel({
+						...availableModels.body,
+						callback: (loadedModel) => {
+							currentModel = loadedModel;
+						}
+					});
+				} else {
+					console.log("Shared new instance - waiting for host data");
+				}
 			} else {
 				activity
 					.getDatastoreObject()
@@ -298,6 +303,9 @@ define([
 				console.log("Shared instance");
 				window.sharedActivity = true; // Set global flag
 				window.isHost = false; // Default to false until we know
+
+				removeCurrentModel();
+
 				presence = activity.getPresenceObject(function (
 					error,
 					network
@@ -305,6 +313,8 @@ define([
 					network.onDataReceived(onNetworkDataReceived);
 					network.onSharedActivityUserChanged(onNetworkUserChanged);
 				});
+
+				return; 
 			}
 		});
 
@@ -462,7 +472,6 @@ define([
 				}
 			});
 
-			// Remove found models
 			childrenToRemove.forEach(child => {
 				console.log(`Removing model: ${child.name}`);
 				scene.remove(child);
@@ -799,9 +808,34 @@ define([
 
 			if (msg.action == "switchModel") {
 				const newModel = msg.content;
-				if (currentModelName !== newModel) {
-					switchModel(newModel);
-				}
+				
+				removeCurrentModel();
+				currentModelName = newModel;
+
+				loadModel({
+					...availableModels[newModel],
+					callback: (loadedModel) => {
+						currentModel = loadedModel;
+						
+						// Apply existing colors if available
+						if (modelPaintData[newModel] && modelPaintData[newModel].length > 0) {
+							partsColored = [...modelPaintData[newModel]];
+							applyModelColors(loadedModel, newModel);
+						}
+						
+						// Update the UI to reflect the new model
+						const modelButton = document.getElementById('model-button');
+						if (modelButton) {
+							modelButton.classList.remove('skeleton-icon', 'body-icon', 'organs-icon');
+							modelButton.classList.add(`${newModel}-icon`);
+						}
+						
+						// Update the model palette if available
+						if (paletteModel && paletteModel.updateActiveModel) {
+							paletteModel.updateActiveModel(newModel);
+						}
+					}
+				});
 			}
 
 			if (msg.action == "modeChange") {
@@ -915,6 +949,8 @@ define([
 
 				// Check if we need to switch models
 				if (msg.content.modelName && msg.content.modelName !== currentModelName) {
+					// Remove current model first
+					removeCurrentModel();
 
 					const originalCallback = availableModels[msg.content.modelName].callback;
 
@@ -939,8 +975,6 @@ define([
 							}
 						}
 					});
-
-					removeCurrentModel();
 
 					// Restore paint data for new model
 					if (modelPaintData[msg.content.modelName] && modelPaintData[msg.content.modelName].length > 0) {
@@ -1052,15 +1086,14 @@ define([
 				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
-						action: "modeChange",
-						content: currentModeIndex,
-					});
-
-					// Send current model info
-					presence.sendMessage(presence.getSharedInfo().id, {
-						user: presence.getUserInfo(),
 						action: "switchModel",
 						content: currentModelName,
+					});
+
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: currentModeIndex,
 					});
 
 					// Send initialization data
