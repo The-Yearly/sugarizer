@@ -20,8 +20,8 @@ define([
 
 		// STATE VARIABLES
 		let canvas, ctx;
-		let frames = [];
-		let currentFrame = 0;
+		let frames = {};  
+		let currentFrameIndices = {}; 
 		let isPlaying = false;
 		let speed = 1;
 		let stickmen = []; // Array of stickmen
@@ -40,7 +40,7 @@ define([
 		let isRotating = false;
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
-		let neckManuallyMoved = false; // Track if neck has been manually positioned
+		let neckManuallyMoved = false; 
 
 		// Joint hierarchy - defines parent-child relationships for rotation
 		const jointHierarchy = {
@@ -106,15 +106,33 @@ define([
 							const savedData = JSON.parse(data);
 
 							// Restore saved state
-							frames = savedData.frames || [];
-							currentFrame = savedData.currentFrame || 0;
+							frames = savedData.frames || {};
+							currentFrameIndices = savedData.currentFrameIndices || {};
 							speed = savedData.speed || 1;
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
 
-							if (frames.length > 0) {
-								stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+							// Load stickmen from their current frames
+							if (Object.keys(frames).length > 0) {
+								stickmen = [];
+								
+								// Reconstruct stickmen array from frames
+								Object.keys(frames).forEach(stickmanIdStr => {
+									const stickmanId = parseInt(stickmanIdStr);
+									const stickmanFrames = frames[stickmanId];
+									if (stickmanFrames && stickmanFrames.length > 0) {
+										const frameIndex = currentFrameIndices[stickmanId] || 0;
+										const stickman = JSON.parse(JSON.stringify(stickmanFrames[frameIndex]));
+										stickmen.push(stickman);
+									}
+								});
+								
 								stickmen.forEach((_, index) => updateMiddleJoint(index));
+								
+								// Select first stickman by default
+								if (stickmen.length > 0) {
+									selectedStickmanIndex = 0;
+								}
 							} else {
 								createInitialStickman();
 								addFrame();
@@ -172,7 +190,7 @@ define([
 
 			const saveData = {
 				frames: frames,
-				currentFrame: currentFrame,
+				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
 				nextStickmanId: nextStickmanId
@@ -275,7 +293,13 @@ define([
 			const centerX = canvas.width / 2;
 			const centerY = canvas.height / 2 - 20;
 
-			stickmen = [createStickmanJoints(centerX, centerY, nextStickmanId++)];
+			const initialStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
+			stickmen = [initialStickman];
+			
+			// Initialize frames for this stickman
+			frames[initialStickman.id] = [];
+			currentFrameIndices[initialStickman.id] = 0;
+			
 			neckManuallyMoved = false; // Reset flag for new stickman
 			updateMiddleJoint(0);
 			// by default first stickman is selected
@@ -309,18 +333,12 @@ define([
 			stickmen.push(newStickman);
 			updateMiddleJoint(stickmen.length - 1);
 
-			// Add the new stickman to all existing frames
-			frames.forEach(frame => {
-				frame.push(JSON.parse(JSON.stringify(newStickman)));
-			});
-
-			// Move back to frame 1 (index 0)
-			if (frames.length > 0) {
-				currentFrame = 0;
-				stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
-				neckManuallyMoved = false;
-				stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
-			}
+			// Initialize frames array for this stickman
+			frames[newStickman.id] = [];
+			currentFrameIndices[newStickman.id] = 0;
+			frames[newStickman.id].push(JSON.parse(JSON.stringify(newStickman)));
+			selectedStickmanIndex = stickmen.length - 1;
+			neckManuallyMoved = false;
 
 			updateTimeline();
 			updateRemoveButtonState(); 
@@ -374,13 +392,14 @@ define([
 				document.body.removeChild(modalOverlay);
 
 				if (stickmen.length > 1) {
+					const stickmanId = stickmen[stickmanToRemove].id;
+					
 					// Remove from current stickmen array
 					stickmen.splice(stickmanToRemove, 1);
 
-					// Remove from all frames
-					frames.forEach(frame => {
-						frame.splice(stickmanToRemove, 1);
-					});
+					// Remove stickman frames
+					delete frames[stickmanId];
+					delete currentFrameIndices[stickmanId];
 
 					// Adjust selected stickman index if needed
 					if (selectedStickmanIndex === stickmanToRemove) {
@@ -466,8 +485,8 @@ define([
 		}
 
 		function createNew() {
-			frames = [];
-			currentFrame = 0;
+			frames = {};
+			currentFrameIndices = {};
 			stickmen = [];
 			selectedJoint = null;
 			selectedStickmanIndex = -1;
@@ -485,29 +504,61 @@ define([
 				}
 				const templateData = await response.json();
 
-				// For now, templates only work with single stickman
-				// Reset to single stickman and load template
-				stickmen = [createStickmanJoints(canvas.width / 2, canvas.height / 2, nextStickmanId++)];
-
-				frames = JSON.parse(JSON.stringify(templateData.frames));
-				frames.forEach(frame => {
-					// Ensure frame is array of stickmen
-					if (!Array.isArray(frame[0])) {
-						if (frame.length === 11) {
-							frame.push({
-								x: (frame[1].x + frame[2].x) / 2,
-								y: (frame[1].y + frame[2].y) / 2,
-								name: 'middle'
-							});
+				// Create a new stickman with next ID
+				const newStickmanId = nextStickmanId++;
+				const newStickman = createStickmanJoints(canvas.width / 2, canvas.height / 2, newStickmanId);
+				
+				// Reset to single stickman
+				stickmen = [newStickman];
+				selectedStickmanIndex = 0;
+				
+				// Initialize frame structure for this stickman
+				frames = {};
+				frames[newStickmanId] = [];
+				currentFrameIndices = {};
+				currentFrameIndices[newStickmanId] = 0;
+				
+				// Convert template frames to new format
+				const templateFrames = JSON.parse(JSON.stringify(templateData.frames));
+				templateFrames.forEach(frame => {
+					// Ensure frame has proper structure
+					let stickmanFrame;
+					
+					if (Array.isArray(frame) && frame.length > 0) {
+						if (Array.isArray(frame[0])) {
+							// Take first stickman from the frame
+							stickmanFrame = { id: newStickmanId, joints: frame[0] };
+						} else if (frame[0].joints) {
+							// Frame already has stickman objects
+							stickmanFrame = { id: newStickmanId, joints: frame[0].joints };
+						} else {
+							// Frame is just an array of joints
+							stickmanFrame = { id: newStickmanId, joints: frame };
 						}
-						frame = [{ id: 0, joints: frame }];
+					} else if (frame.joints) {
+						// Frame is a single stickman object
+						stickmanFrame = { id: newStickmanId, joints: frame.joints };
+					} else {
+						// Assume frame is the joints directly
+						stickmanFrame = { id: newStickmanId, joints: frame };
 					}
+					
+					if (stickmanFrame.joints.length === 11) {
+						stickmanFrame.joints.push({
+							x: (stickmanFrame.joints[1].x + stickmanFrame.joints[2].x) / 2,
+							y: (stickmanFrame.joints[1].y + stickmanFrame.joints[2].y) / 2,
+							name: 'middle'
+						});
+					}
+					
+					frames[newStickmanId].push(stickmanFrame);
 				});
 
-				currentFrame = 0;
-				if (frames.length > 0) {
-					stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
+				if (frames[newStickmanId].length > 0) {
+					stickmen[0] = JSON.parse(JSON.stringify(frames[newStickmanId][0]));
 				}
+				
+				neckManuallyMoved = false;
 				updateMiddleJoint(0);
 				updateTimeline();
 			} catch (error) {
@@ -520,31 +571,59 @@ define([
 		// FRAME MANAGEMENT
 
 		function addFrame() {
-			// Update middle joints for all stickmen
-			stickmen.forEach((_, index) => updateMiddleJoint(index));
-
-			// Reset neck manually moved flag when adding a new frame
+			// If no stickman is selected, add frame for all stickmen Otherwise, add frame only for selected stickman
+			const targetStickmanIndices = selectedStickmanIndex >= 0 ? 
+				[selectedStickmanIndex] : stickmen.map((_, index) => index);
+			
+			targetStickmanIndices.forEach(index => {
+				updateMiddleJoint(index);
+				
+				const stickman = stickmen[index];
+				const stickmanId = stickman.id;
+				
+				if (!frames[stickmanId]) {
+					frames[stickmanId] = [];
+					currentFrameIndices[stickmanId] = 0;
+				}
+				
+				// Deep copy the stickman for this frame
+				const stickmanCopy = JSON.parse(JSON.stringify(stickman));
+				frames[stickmanId].push(stickmanCopy);
+				currentFrameIndices[stickmanId] = frames[stickmanId].length - 1;
+			});
+			
 			neckManuallyMoved = false;
-
-			// Deep copy all stickmen for this frame
-			const frameData = JSON.parse(JSON.stringify(stickmen));
-			frames.push(frameData);
-			currentFrame = frames.length - 1;
+			
 			updateTimeline();
 		}
 
 		function saveCurrentFrame() {
-			if (currentFrame >= 0) {
-				// Don't update middle joints if we're currently rotating the neck
-				// or if we're dragging the neck joint individually
-				const isNeckOperation = (isRotating || isDragging) && selectedJoint && stickmen[selectedStickmanIndex] && 
-					stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
+			// If no stickman is selected or being manipulated, save all stickmen Otherwise, save only the selected stickman
+			const targetStickmanIndices = selectedStickmanIndex >= 0 ? 
+				[selectedStickmanIndex] : stickmen.map((_, index) => index);
+				
+			targetStickmanIndices.forEach(index => {
+				const stickman = stickmen[index];
+				const stickmanId = stickman.id;
+				
+				// Skip if no frames for this stickman
+				if (!frames[stickmanId] || frames[stickmanId].length === 0) {
+					return;
+				}
+				
+				const isNeckOperation = (isRotating || isDragging) && selectedJoint && 
+					stickmen[index] === stickman && 
+					stickmen[index].joints.indexOf(selectedJoint) === 1;
 				
 				if (!isNeckOperation) {
-					stickmen.forEach((_, index) => updateMiddleJoint(index));
+					updateMiddleJoint(index);
 				}
-				frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
-			}
+				
+				const currentFrameIndex = currentFrameIndices[stickmanId];
+				if (currentFrameIndex >= 0 && currentFrameIndex < frames[stickmanId].length) {
+					frames[stickmanId][currentFrameIndex] = JSON.parse(JSON.stringify(stickman));
+				}
+			});
 		}
 
 		// TIMELINE FUNCTIONS
@@ -552,19 +631,34 @@ define([
 		function updateTimeline() {
 			const timeline = document.getElementById('timeline');
 			timeline.innerHTML = '';
-
-			frames.forEach((frame, index) => {
+			
+			// If no stickmen exist, don't show timeline
+			if (stickmen.length === 0) {
+				return;
+			}
+			
+			// Get the currently selected stickman (or first one if none selected)
+			const stickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
+			const selectedStickman = stickmen[stickmanIndex];
+			const stickmanId = selectedStickman.id;
+			const stickmanFrames = frames[stickmanId] || [];
+			const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
+			
+			// For each frame of the selected stickman, create a preview
+			stickmanFrames.forEach((frameData, index) => {
 				const frameContainer = document.createElement('div');
 				frameContainer.className = 'frame-container';
 
-				const previewCanvas = createPreviewCanvas(frame, index);
-				const deleteBtn = createDeleteButton(index);
+				const previewCanvas = createPreviewCanvas(frameData, index, stickmanId);
+				const deleteBtn = createDeleteButton(index, stickmanId);
 
 				previewCanvas.addEventListener('click', () => {
-					currentFrame = index;
-					stickmen = JSON.parse(JSON.stringify(frame));
+					currentFrameIndices[stickmanId] = index;
+
+					stickmen[stickmanIndex] = JSON.parse(JSON.stringify(frameData));
+					
 					neckManuallyMoved = false; // Reset flag when switching frames
-					stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
+					updateMiddleJoint(stickmanIndex);
 					updateTimeline();
 					render();
 				});
@@ -595,31 +689,21 @@ define([
 			}
 		}
 
-		function createPreviewCanvas(frame, index) {
+		function createPreviewCanvas(frameData, index, stickmanId) {
 			const previewCanvas = document.createElement('canvas');
 			previewCanvas.width = 80;
 			previewCanvas.height = 80;
 
-			const isActive = index === currentFrame;
+			const isActive = index === currentFrameIndices[stickmanId];
 			previewCanvas.className = `frame ${isActive ? 'active' : ''}`;
 
 			const previewCtx = previewCanvas.getContext('2d');
 			previewCtx.fillStyle = isActive ? '#e6f3ff' : '#ffffff';
 			previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-			// stickman to preview based on selection
-			let stickmanToPreview = null;
-
-			if (selectedStickmanIndex >= 0 && selectedStickmanIndex < frame.length) {
-				// Show selected stickman
-				stickmanToPreview = frame[selectedStickmanIndex];
-			} else if (frame.length > 0) {
-				// Show first stickman if no selection
-				stickmanToPreview = frame[0];
-			}
-
-			if (stickmanToPreview && stickmanToPreview.joints) {
-				const joints = stickmanToPreview.joints;
+			// Draw the stickman frame data
+			if (frameData && frameData.joints) {
+				const joints = frameData.joints;
 
 				// Calculate bounds for this single stickman
 				const stickmanHeight = Math.max(...joints.map(p => p.y)) - Math.min(...joints.map(p => p.y));
@@ -634,7 +718,7 @@ define([
 				previewCtx.scale(scale, scale);
 				previewCtx.translate(-centerX, -centerY);
 
-				// Draw only the selected stickman in preview
+				// Draw stickman in preview
 				drawStickmanPreview(previewCtx, joints);
 
 				previewCtx.restore();
@@ -643,21 +727,33 @@ define([
 			return previewCanvas;
 		}
 
-		function createDeleteButton(index) {
+		function createDeleteButton(index, stickmanId) {
 			const deleteBtn = document.createElement('button');
 			deleteBtn.className = 'delete-frame';
 			deleteBtn.innerHTML = '';
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				if (frames.length > 1) {
-					frames.splice(index, 1);
-					currentFrame = Math.min(currentFrame, frames.length - 1);
+				const stickmanFrames = frames[stickmanId] || [];
+				
+				if (stickmanFrames.length > 1) {
+					// Remove this frame for the stickman
+					stickmanFrames.splice(index, 1);
 					
-					// Load stickmen data from the new current frame
-					if (frames.length > 0) {
-						stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
-						neckManuallyMoved = false;
-						stickmen.forEach((_, stickmanIndex) => updateMiddleJoint(stickmanIndex));
+					// Adjust current frame index if needed
+					currentFrameIndices[stickmanId] = Math.min(
+						currentFrameIndices[stickmanId], 
+						stickmanFrames.length - 1
+					);
+					
+					// Find the stickman with this ID in the current stickmen array
+					for (let i = 0; i < stickmen.length; i++) {
+						if (stickmen[i].id === stickmanId) {
+							const newIndex = currentFrameIndices[stickmanId];
+							stickmen[i] = JSON.parse(JSON.stringify(stickmanFrames[newIndex]));
+							neckManuallyMoved = false;
+							updateMiddleJoint(i);
+							break;
+						}
 					}
 					
 					updateTimeline();
@@ -985,12 +1081,25 @@ define([
 		}
 
 		function animate() {
-			if (!isPlaying) return;
+			if (!isPlaying) 
+				return;
 
-			currentFrame = (currentFrame + 1) % frames.length;
-			stickmen = JSON.parse(JSON.stringify(frames[currentFrame]));
-			neckManuallyMoved = false; // Reset flag during animation
-			stickmen.forEach((_, index) => updateMiddleJoint(index));
+			stickmen.forEach((stickman, index) => {
+				const stickmanId = stickman.id;
+				const stickmanFrames = frames[stickmanId] || [];
+				
+				if (stickmanFrames.length > 1) {  
+					// Only animate if there are multiple frames
+					// Move to next frame for this stickman
+					currentFrameIndices[stickmanId] = (currentFrameIndices[stickmanId] + 1) % stickmanFrames.length;
+					const newFrameIndex = currentFrameIndices[stickmanId];
+
+					stickmen[index] = JSON.parse(JSON.stringify(stickmanFrames[newFrameIndex]));
+					updateMiddleJoint(index);
+				}
+			});
+			
+			neckManuallyMoved = false; 
 			updateTimeline();
 
 			setTimeout(() => {
@@ -1031,16 +1140,15 @@ define([
 
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
-				if (selectedJointIndex === 2) { 
+				originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
 
+				if (selectedJointIndex === 2) { 
 					// Hip joint - drag whole stickman
 					isDraggingWhole = true;
 					dragStartPos = { 
 						x: mouseX, 
 						y: mouseY 
 					};
-					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
-
 				} else if (isRotationalJoint(selectedJointIndex)) {
 					// Start rotation for hierarchical joints
 					isRotating = true;
@@ -1051,7 +1159,6 @@ define([
 							y: mouseY 
 						}
 					);
-					originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
 				} else {
 					// Regular joint dragging for non-hierarchical joints (head, hands, feet)
 					isDragging = true;
@@ -1060,6 +1167,7 @@ define([
 				const previousSelectedIndex = selectedStickmanIndex;
 				selectedJoint = null;
 				selectedStickmanIndex = -1;
+				originalJoints = [];
 
 				// Update timeline if selection was cleared
 				if (previousSelectedIndex !== -1) {
@@ -1147,18 +1255,23 @@ define([
 			isDraggingWhole = false;
 			isRotating = false;
 			rotationPivot = null;
-			originalJoints = [];
-
-			if (currentFrame >= 0) {
+			
+			if (selectedStickmanIndex >= 0 && originalJoints.length > 0) {
 				// Don't update middle joint if we just finished rotating or dragging the neck
 				if (!wasRotatingNeck && !wasDraggingNeck) {
 					saveCurrentFrame();
 				} else {
-					// Save without updating middle joints
-					frames[currentFrame] = JSON.parse(JSON.stringify(stickmen));
+					// Save current frame without updating middle joints
+					const stickmanId = stickmen[selectedStickmanIndex].id;
+					if (frames[stickmanId] && currentFrameIndices[stickmanId] >= 0) {
+						frames[stickmanId][currentFrameIndices[stickmanId]] = 
+							JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex]));
+					}
 				}
 				updateTimeline();
 			}
+			
+			originalJoints = [];
 		}
 
 		function getCanvasCoordinates(e) {
@@ -1232,42 +1345,44 @@ define([
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 			// Draw onion skin of previous frame - only for selected stickman
-			// do not show for the first frame
-			if (frames.length > 1 && !isPlaying && currentFrame > 0) {
-				const prevFrameIndex = currentFrame - 1;
-				const prevFrame = frames[prevFrameIndex];
-
-				// Only show shadow for selected stickman, or first stickman if none selected
-				const shadowStickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
+			// do not show during playback
+			if (!isPlaying && selectedStickmanIndex >= 0) {
+				const stickmanId = stickmen[selectedStickmanIndex].id;
+				const stickmanFrames = frames[stickmanId] || [];
+				const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 				
-				if (shadowStickmanIndex < prevFrame.length) {
-					const shadowStickman = prevFrame[shadowStickmanIndex];
+				// Only show onion skin if there's a previous frame
+				if (stickmanFrames.length > 1 && currentFrameIndex > 0) {
+					const prevFrameIndex = currentFrameIndex - 1;
+					const prevFrame = stickmanFrames[prevFrameIndex];
+					
+					if (prevFrame) {
+						ctx.save();
+						ctx.globalAlpha = 0.3;
+						ctx.strokeStyle = '#0066cc';
+						ctx.lineWidth = 2;
+						ctx.lineCap = 'round';
+						ctx.lineJoin = 'round';
 
-					ctx.save();
-					ctx.globalAlpha = 0.3;
-					ctx.strokeStyle = '#0066cc';
-					ctx.lineWidth = 2;
-					ctx.lineCap = 'round';
-					ctx.lineJoin = 'round';
+						drawStickmanSkeleton(ctx, prevFrame.joints);
 
-					drawStickmanSkeleton(ctx, shadowStickman.joints);
+						ctx.fillStyle = '#0066cc';
+						prevFrame.joints.forEach((joint, index) => {
+							// Skip middle joint
+							if (index === 11) 
+								return;
 
-					ctx.fillStyle = '#0066cc';
-					shadowStickman.joints.forEach((joint, index) => {
-						// Skip middle joint
-						if (index === 11) 
-							return;
+							ctx.beginPath();
+							if (index === 0) {
+								ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+							} else {
+								ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
+							}
+							ctx.fill();
+						});
 
-						ctx.beginPath();
-						if (index === 0) {
-							ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
-						} else {
-							ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
-						}
-						ctx.fill();
-					});
-
-					ctx.restore();
+						ctx.restore();
+					}
 				}
 			}
 
@@ -1302,9 +1417,24 @@ define([
 
 			mediaRecorder.start();
 
+			// Find the maximum number of frames across all stickmen
+			let maxFrames = 0;
+			Object.values(frames).forEach(stickmanFrames => {
+				maxFrames = Math.max(maxFrames, stickmanFrames.length);
+			});
+			
+			// Create a copy of current stickmen for animation
+			let animationStickmen = JSON.parse(JSON.stringify(stickmen));
+			let exportFrameIndices = {};
+			
+			// Initialize frame indices for export
+			stickmen.forEach(stickman => {
+				exportFrameIndices[stickman.id] = 0;
+			});
+			
 			let currentExportFrame = 0;
 			const renderFrame = () => {
-				if (currentExportFrame >= frames.length) {
+				if (currentExportFrame >= maxFrames) {
 					mediaRecorder.stop();
 					return;
 				}
@@ -1312,11 +1442,26 @@ define([
 				recordCtx.fillStyle = '#ffffff';
 				recordCtx.fillRect(0, 0, recordCanvas.width, recordCanvas.height);
 
-				const frameStickmen = frames[currentExportFrame];
-				frameStickmen.forEach(stickman => {
-					recordCtx.strokeStyle = '#000';
-					recordCtx.lineWidth = 8;
-					drawStickmanSkeleton(recordCtx, stickman.joints);
+				// Update each stickman to its current frame for this export frame
+				animationStickmen.forEach((stickman, index) => {
+					const stickmanId = stickman.id;
+					const stickmanFrames = frames[stickmanId] || [];
+					
+					if (stickmanFrames.length > 0) {
+						// Only advance frame if this stickman has more frames
+						if (exportFrameIndices[stickmanId] < stickmanFrames.length) {
+							const frameIndex = exportFrameIndices[stickmanId];
+							animationStickmen[index] = JSON.parse(JSON.stringify(stickmanFrames[frameIndex]));
+							
+							// Move to next frame for next export frame
+							exportFrameIndices[stickmanId] = (exportFrameIndices[stickmanId] + 1) % stickmanFrames.length;
+						}
+						
+						// Draw the stickman in its current state
+						recordCtx.strokeStyle = '#000';
+						recordCtx.lineWidth = 8;
+						drawStickmanSkeleton(recordCtx, animationStickmen[index].joints);
+					}
 				});
 
 				currentExportFrame++;
@@ -1331,7 +1476,6 @@ define([
 		// Process localize event
 		window.addEventListener("localized", function() {
 			console.log("Localization initialized");
-			// Translate toolbar buttons after localization is ready
 			translateToolbarButtons();
 		});
 		
