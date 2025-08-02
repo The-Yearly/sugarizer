@@ -20,11 +20,14 @@ define([
 
 		// STATE VARIABLES
 		let canvas, ctx;
-		let frames = {};  
+
+		let baseFrames = {}; 	// Store first frame with absolute positions for each stickman
+		let deltaFrames = {}; 	// Store relative movement deltas for subsequent frames
+		let stickmen = []; 		// Array of stickmen (current working positions)
+
 		let currentFrameIndices = {}; 
 		let isPlaying = false;
 		let speed = 1;
-		let stickmen = []; // Array of stickmen
 		let selectedJoint = null;
 		let selectedStickmanIndex = -1;
 		let isDragging = false;
@@ -68,6 +71,154 @@ define([
 			{ from: 9, to: 10, length: 30 }    // right elbow to hand
 		];
 
+		// DELTA FRAME SYSTEM FUNCTIONS
+
+		function calculateDeltas(currentJoints, previousJoints) {
+			if (!previousJoints || currentJoints.length !== previousJoints.length) {
+				return null;
+			}
+			
+			// Create a copy of current joints and enforce constraints
+			const constrainedJoints = JSON.parse(JSON.stringify(currentJoints));
+			enforceJointDistances(constrainedJoints);
+			
+			return constrainedJoints.map((joint, index) => ({
+				dx: joint.x - previousJoints[index].x,
+				dy: joint.y - previousJoints[index].y,
+				name: joint.name
+			}));
+		}
+
+		function applyDeltas(baseJoints, deltas) {
+			if (!deltas || baseJoints.length !== deltas.length) {
+				return JSON.parse(JSON.stringify(baseJoints));
+			}
+			
+			const newJoints = baseJoints.map((joint, index) => ({
+				x: joint.x + deltas[index].dx,
+				y: joint.y + deltas[index].dy,
+				name: joint.name
+			}));
+			
+			// Apply distance constraints to maintain limb lengths
+			enforceJointDistances(newJoints);
+			
+			return newJoints;
+		}
+
+		function enforceJointDistances(joints) {
+			// Apply joint distance constraints multiple times for stability
+			for (let iteration = 0; iteration < 3; iteration++) {
+				jointConnections.forEach(conn => {
+					const joint1 = joints[conn.from];
+					const joint2 = joints[conn.to];
+					
+					if (!joint1 || !joint2) return;
+					
+					// Skip middle joint connections as they're calculated dynamically
+					if (conn.from === 11 || conn.to === 11) return;
+					
+					// Calculate current distance
+					const dx = joint2.x - joint1.x;
+					const dy = joint2.y - joint1.y;
+					const currentDistance = Math.sqrt(dx * dx + dy * dy);
+					
+					if (currentDistance > 0 && Math.abs(currentDistance - conn.length) > 0.5) {
+						// Calculate the correction needed
+						const ratio = conn.length / currentDistance;
+						const correctionX = (dx * ratio - dx) * 0.5;
+						const correctionY = (dy * ratio - dy) * 0.5;
+						
+						// Apply correction to both joints (split the difference)
+						// This prevents one joint from being "anchored" and maintains overall pose
+						joint1.x -= correctionX;
+						joint1.y -= correctionY;
+						joint2.x += correctionX;
+						joint2.y += correctionY;
+					}
+				});
+			}
+		}
+
+		function reconstructFrameFromDeltas(stickmanId, frameIndex) {
+			if (!baseFrames[stickmanId] || frameIndex < 0) {
+				return null;
+			}
+			
+			if (frameIndex === 0) {
+				// First frame is always the base frame
+				return JSON.parse(JSON.stringify({
+					id: stickmanId,
+					joints: baseFrames[stickmanId]
+				}));
+			}
+			
+			if (!deltaFrames[stickmanId] || frameIndex - 1 >= deltaFrames[stickmanId].length) {
+				return null;
+			}
+			
+			// Start with base frame and apply deltas incrementally
+			let currentJoints = JSON.parse(JSON.stringify(baseFrames[stickmanId]));
+			
+			for (let i = 0; i < frameIndex; i++) {
+				if (deltaFrames[stickmanId][i]) {
+					currentJoints = applyDeltas(currentJoints, deltaFrames[stickmanId][i]);
+					// Enforce joint distance constraints after each delta application
+					enforceJointDistances(currentJoints);
+				}
+			}
+			
+			return {
+				id: stickmanId,
+				joints: currentJoints
+			};
+		}
+
+		function getTotalFrameCount(stickmanId) {
+			if (!baseFrames[stickmanId]) return 0;
+			return 1 + (deltaFrames[stickmanId] ? deltaFrames[stickmanId].length : 0);
+		}
+
+		function rebaseDeltas(stickmanId, removedFrameIndex) {
+			if (!deltaFrames[stickmanId] || removedFrameIndex <= 0) return;
+			
+			if (removedFrameIndex === 1) {
+				// Removing second frame - need to update base frame and recompute all deltas
+				const newBaseFrame = reconstructFrameFromDeltas(stickmanId, 1);
+				if (newBaseFrame) {
+					baseFrames[stickmanId] = newBaseFrame.joints;
+					
+					// Recompute all deltas relative to new base
+					const newDeltas = [];
+					for (let i = 2; i < getTotalFrameCount(stickmanId); i++) {
+						const frame = reconstructFrameFromDeltas(stickmanId, i);
+						if (frame) {
+							const delta = calculateDeltas(frame.joints, baseFrames[stickmanId]);
+							if (delta) newDeltas.push(delta);
+						}
+					}
+					deltaFrames[stickmanId] = newDeltas;
+				}
+			} else {
+				// Remove delta frame and recompute subsequent deltas
+				const originalDeltas = [...deltaFrames[stickmanId]];
+				deltaFrames[stickmanId].splice(removedFrameIndex - 1, 1);
+				
+				// Recompute deltas for frames after the removed one
+				for (let i = removedFrameIndex - 1; i < deltaFrames[stickmanId].length; i++) {
+					const currentFrame = reconstructFrameFromDeltas(stickmanId, i + 1);
+					const previousFrame = reconstructFrameFromDeltas(stickmanId, i);
+					
+					if (currentFrame && previousFrame) {
+						const newDelta = calculateDeltas(currentFrame.joints, previousFrame.joints);
+						if (newDelta) {
+							deltaFrames[stickmanId][i] = newDelta;
+						}
+					}
+				}
+			}
+		}
+
 		// INITIALIZATION FUNCTIONS
 
 		function initializeAnimator() {
@@ -98,31 +249,31 @@ define([
 				if (!environment.objectId) {
 					console.log("New instance");
 					createInitialStickman();
-					addFrame(); 
+					updateTimeline();
+					updateRemoveButtonState();
+					render();
 				} else {
 					// load saved data
 					activity.getDatastoreObject().loadAsText(function (error, metadata, data) {
 						if (error == null && data != null) {
 							const savedData = JSON.parse(data);
 
-							// Restore saved state
-							frames = savedData.frames || {};
+							baseFrames = savedData.baseFrames || {};
+							deltaFrames = savedData.deltaFrames || {};
 							currentFrameIndices = savedData.currentFrameIndices || {};
 							speed = savedData.speed || 1;
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
 
-							// Load stickmen from their current frames
-							if (Object.keys(frames).length > 0) {
+							// Reconstruct stickmen 
+							if (Object.keys(baseFrames).length > 0) {
 								stickmen = [];
 								
-								// Reconstruct stickmen array from frames
-								Object.keys(frames).forEach(stickmanIdStr => {
+								Object.keys(baseFrames).forEach(stickmanIdStr => {
 									const stickmanId = parseInt(stickmanIdStr);
-									const stickmanFrames = frames[stickmanId];
-									if (stickmanFrames && stickmanFrames.length > 0) {
-										const frameIndex = currentFrameIndices[stickmanId] || 0;
-										const stickman = JSON.parse(JSON.stringify(stickmanFrames[frameIndex]));
+									const frameIndex = currentFrameIndices[stickmanId] || 0;
+									const stickman = reconstructFrameFromDeltas(stickmanId, frameIndex);
+									if (stickman) {
 										stickmen.push(stickman);
 									}
 								});
@@ -135,16 +286,17 @@ define([
 								}
 							} else {
 								createInitialStickman();
-								addFrame();
 							}
 
 							updateTimeline();
-							updateRemoveButtonState(); // Update button state after loading
+							updateRemoveButtonState(); 
 							render();
 						} else {
 							console.log("No instance found, creating new instance");
 							createInitialStickman();
-							addFrame();
+							updateTimeline();
+							updateRemoveButtonState(); 
+							render();
 						}
 					});
 				}
@@ -189,7 +341,8 @@ define([
 			console.log("writing...");
 
 			const saveData = {
-				frames: frames,
+				baseFrames: baseFrames,
+				deltaFrames: deltaFrames,
 				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
@@ -294,10 +447,15 @@ define([
 			const centerY = canvas.height / 2 - 20;
 
 			const initialStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
+			
+			// Ensure the initial stickman has proper joint distances
+			enforceJointDistances(initialStickman.joints);
+			
 			stickmen = [initialStickman];
 			
-			// Initialize frames for this stickman
-			frames[initialStickman.id] = [];
+			// Initialize base frame for this stickman
+			baseFrames[initialStickman.id] = JSON.parse(JSON.stringify(initialStickman.joints));
+			deltaFrames[initialStickman.id] = [];
 			currentFrameIndices[initialStickman.id] = 0;
 			
 			neckManuallyMoved = false; // Reset flag for new stickman
@@ -330,13 +488,18 @@ define([
 			const centerY = Math.random() * (safeMaxY - safeMinY) + safeMinY;
 
 			const newStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
+			
+			// Ensure proper joint distances
+			enforceJointDistances(newStickman.joints);
+			
 			stickmen.push(newStickman);
 			updateMiddleJoint(stickmen.length - 1);
 
-			// Initialize frames array for this stickman
-			frames[newStickman.id] = [];
+			// Initialize base and delta frames for this stickman
+			baseFrames[newStickman.id] = JSON.parse(JSON.stringify(newStickman.joints));
+			deltaFrames[newStickman.id] = [];
 			currentFrameIndices[newStickman.id] = 0;
-			frames[newStickman.id].push(JSON.parse(JSON.stringify(newStickman)));
+			
 			selectedStickmanIndex = stickmen.length - 1;
 			neckManuallyMoved = false;
 
@@ -398,7 +561,8 @@ define([
 					stickmen.splice(stickmanToRemove, 1);
 
 					// Remove stickman frames
-					delete frames[stickmanId];
+					delete baseFrames[stickmanId];
+					delete deltaFrames[stickmanId];
 					delete currentFrameIndices[stickmanId];
 
 					// Adjust selected stickman index if needed
@@ -485,13 +649,13 @@ define([
 		}
 
 		function createNew() {
-			frames = {};
+			baseFrames = {};
+			deltaFrames = {};
 			currentFrameIndices = {};
 			stickmen = [];
 			selectedJoint = null;
 			selectedStickmanIndex = -1;
 			createInitialStickman();
-			addFrame();
 			updateTimeline();
 			pause();
 		}
@@ -512,50 +676,96 @@ define([
 				stickmen = [newStickman];
 				selectedStickmanIndex = 0;
 				
-				// Initialize frame structure for this stickman
-				frames = {};
-				frames[newStickmanId] = [];
+				// Initialize delta structure for this stickman
+				baseFrames = {};
+				deltaFrames = {};
 				currentFrameIndices = {};
 				currentFrameIndices[newStickmanId] = 0;
 				
 				// Convert template frames to new format
 				const templateFrames = JSON.parse(JSON.stringify(templateData.frames));
-				templateFrames.forEach(frame => {
-					// Ensure frame has proper structure
-					let stickmanFrame;
+				if (templateFrames.length > 0) {
+					// Process first frame as base frame
+					let firstFrame = templateFrames[0];
 					
-					if (Array.isArray(frame) && frame.length > 0) {
-						if (Array.isArray(frame[0])) {
-							// Take first stickman from the frame
-							stickmanFrame = { id: newStickmanId, joints: frame[0] };
-						} else if (frame[0].joints) {
-							// Frame already has stickman objects
-							stickmanFrame = { id: newStickmanId, joints: frame[0].joints };
+					if (Array.isArray(firstFrame) && firstFrame.length > 0) {
+						if (Array.isArray(firstFrame[0])) {
+							baseFrames[newStickmanId] = firstFrame[0];
+						} else if (firstFrame[0].joints) {
+							baseFrames[newStickmanId] = firstFrame[0].joints;
 						} else {
-							// Frame is just an array of joints
-							stickmanFrame = { id: newStickmanId, joints: frame };
+							baseFrames[newStickmanId] = firstFrame;
 						}
-					} else if (frame.joints) {
-						// Frame is a single stickman object
-						stickmanFrame = { id: newStickmanId, joints: frame.joints };
+					} else if (firstFrame.joints) {
+						baseFrames[newStickmanId] = firstFrame.joints;
 					} else {
-						// Assume frame is the joints directly
-						stickmanFrame = { id: newStickmanId, joints: frame };
+						baseFrames[newStickmanId] = firstFrame;
 					}
 					
-					if (stickmanFrame.joints.length === 11) {
-						stickmanFrame.joints.push({
-							x: (stickmanFrame.joints[1].x + stickmanFrame.joints[2].x) / 2,
-							y: (stickmanFrame.joints[1].y + stickmanFrame.joints[2].y) / 2,
+					// Ensure middle joint exists
+					if (baseFrames[newStickmanId].length === 11) {
+						baseFrames[newStickmanId].push({
+							x: (baseFrames[newStickmanId][1].x + baseFrames[newStickmanId][2].x) / 2,
+							y: (baseFrames[newStickmanId][1].y + baseFrames[newStickmanId][2].y) / 2,
 							name: 'middle'
 						});
 					}
 					
-					frames[newStickmanId].push(stickmanFrame);
-				});
-
-				if (frames[newStickmanId].length > 0) {
-					stickmen[0] = JSON.parse(JSON.stringify(frames[newStickmanId][0]));
+					// Process subsequent frames as deltas
+					deltaFrames[newStickmanId] = [];
+					for (let i = 1; i < templateFrames.length; i++) {
+						let currentFrame = templateFrames[i];
+						let previousFrame = templateFrames[i - 1];
+						
+						// Normalize frame structure
+						let currentJoints, previousJoints;
+						
+						if (Array.isArray(currentFrame) && currentFrame.length > 0) {
+							currentJoints = Array.isArray(currentFrame[0]) ? currentFrame[0] : 
+								(currentFrame[0].joints ? currentFrame[0].joints : currentFrame);
+						} else if (currentFrame.joints) {
+							currentJoints = currentFrame.joints;
+						} else {
+							currentJoints = currentFrame;
+						}
+						
+						if (Array.isArray(previousFrame) && previousFrame.length > 0) {
+							previousJoints = Array.isArray(previousFrame[0]) ? previousFrame[0] : 
+								(previousFrame[0].joints ? previousFrame[0].joints : previousFrame);
+						} else if (previousFrame.joints) {
+							previousJoints = previousFrame.joints;
+						} else {
+							previousJoints = previousFrame;
+						}
+						
+						// Ensure middle joint exists in both frames
+						if (currentJoints.length === 11) {
+							currentJoints.push({
+								x: (currentJoints[1].x + currentJoints[2].x) / 2,
+								y: (currentJoints[1].y + currentJoints[2].y) / 2,
+								name: 'middle'
+							});
+						}
+						if (previousJoints.length === 11) {
+							previousJoints.push({
+								x: (previousJoints[1].x + previousJoints[2].x) / 2,
+								y: (previousJoints[1].y + previousJoints[2].y) / 2,
+								name: 'middle'
+							});
+						}
+						
+						// Calculate delta
+						const delta = calculateDeltas(currentJoints, previousJoints);
+						if (delta) {
+							deltaFrames[newStickmanId].push(delta);
+						}
+					}
+					
+					// Update current stickman to base frame
+					stickmen[0] = {
+						id: newStickmanId,
+						joints: JSON.parse(JSON.stringify(baseFrames[newStickmanId]))
+					};
 				}
 				
 				neckManuallyMoved = false;
@@ -564,7 +774,6 @@ define([
 			} catch (error) {
 				console.error('Error loading template:', error);
 				createInitialStickman();
-				addFrame();
 			}
 		}
 
@@ -581,19 +790,30 @@ define([
 				const stickman = stickmen[index];
 				const stickmanId = stickman.id;
 				
-				if (!frames[stickmanId]) {
-					frames[stickmanId] = [];
-					currentFrameIndices[stickmanId] = 0;
-				}
+				// Ensure current stickman joints have proper distances before processing
+				enforceJointDistances(stickman.joints);
 				
-				// Deep copy the stickman for this frame
-				const stickmanCopy = JSON.parse(JSON.stringify(stickman));
-				frames[stickmanId].push(stickmanCopy);
-				currentFrameIndices[stickmanId] = frames[stickmanId].length - 1;
+				if (!baseFrames[stickmanId]) {
+					// First frame - create base frame
+					baseFrames[stickmanId] = JSON.parse(JSON.stringify(stickman.joints));
+					deltaFrames[stickmanId] = [];
+					currentFrameIndices[stickmanId] = 0;
+				} else {
+					// Additional frame - calculate delta from current position
+					const currentFrameIndex = currentFrameIndices[stickmanId];
+					const previousFrame = reconstructFrameFromDeltas(stickmanId, currentFrameIndex);
+					
+					if (previousFrame) {
+						const delta = calculateDeltas(stickman.joints, previousFrame.joints);
+						if (delta) {
+							deltaFrames[stickmanId].push(delta);
+							currentFrameIndices[stickmanId] = getTotalFrameCount(stickmanId) - 1;
+						}
+					}
+				}
 			});
 			
 			neckManuallyMoved = false;
-			
 			updateTimeline();
 		}
 
@@ -607,7 +827,7 @@ define([
 				const stickmanId = stickman.id;
 				
 				// Skip if no frames for this stickman
-				if (!frames[stickmanId] || frames[stickmanId].length === 0) {
+				if (!baseFrames[stickmanId]) {
 					return;
 				}
 				
@@ -619,9 +839,63 @@ define([
 					updateMiddleJoint(index);
 				}
 				
+				// Enforce joint distance constraints before saving
+				enforceJointDistances(stickman.joints);
+				
 				const currentFrameIndex = currentFrameIndices[stickmanId];
-				if (currentFrameIndex >= 0 && currentFrameIndex < frames[stickmanId].length) {
-					frames[stickmanId][currentFrameIndex] = JSON.parse(JSON.stringify(stickman));
+				const totalFrames = getTotalFrameCount(stickmanId);
+				
+				if (currentFrameIndex === 0) {
+					// Update base frame
+					baseFrames[stickmanId] = JSON.parse(JSON.stringify(stickman.joints));
+					
+					// Recompute ALL deltas since base frame changed
+					const newDeltas = [];
+					for (let i = 1; i < totalFrames; i++) {
+						const frame = reconstructFrameFromDeltas(stickmanId, i);
+						const prevFrame = reconstructFrameFromDeltas(stickmanId, i - 1);
+						
+						if (frame && prevFrame) {
+							const delta = calculateDeltas(frame.joints, prevFrame.joints);
+							if (delta) {
+								newDeltas.push(delta);
+							}
+						}
+					}
+					deltaFrames[stickmanId] = newDeltas;
+					
+				} else if (currentFrameIndex > 0) {
+					// Update a delta frame - need to recompute this and all subsequent deltas
+					const deltaIndex = currentFrameIndex - 1;
+					
+					if (deltaIndex >= 0 && deltaIndex < deltaFrames[stickmanId].length) {
+						// First, temporarily store the current stickman position
+						const currentJoints = JSON.parse(JSON.stringify(stickman.joints));
+						
+						// Get the previous frame
+						const previousFrame = reconstructFrameFromDeltas(stickmanId, currentFrameIndex - 1);
+						
+						if (previousFrame) {
+							// Calculate new delta for current frame
+							const newDelta = calculateDeltas(currentJoints, previousFrame.joints);
+							if (newDelta) {
+								deltaFrames[stickmanId][deltaIndex] = newDelta;
+							}
+							
+							// Now recompute all subsequent deltas
+							for (let i = currentFrameIndex + 1; i < totalFrames; i++) {
+								const nextFrameOld = reconstructFrameFromDeltas(stickmanId, i);
+								const prevFrameNew = reconstructFrameFromDeltas(stickmanId, i - 1);
+								
+								if (nextFrameOld && prevFrameNew) {
+									const subsequentDelta = calculateDeltas(nextFrameOld.joints, prevFrameNew.joints);
+									if (subsequentDelta) {
+										deltaFrames[stickmanId][i - 1] = subsequentDelta;
+									}
+								}
+							}
+						}
+					}
 				}
 			});
 		}
@@ -641,32 +915,36 @@ define([
 			const stickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
 			const selectedStickman = stickmen[stickmanIndex];
 			const stickmanId = selectedStickman.id;
-			const stickmanFrames = frames[stickmanId] || [];
+			const totalFrames = getTotalFrameCount(stickmanId);
 			const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 			
 			// For each frame of the selected stickman, create a preview
-			stickmanFrames.forEach((frameData, index) => {
+			for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
 				const frameContainer = document.createElement('div');
 				frameContainer.className = 'frame-container';
 
-				const previewCanvas = createPreviewCanvas(frameData, index, stickmanId);
-				const deleteBtn = createDeleteButton(index, stickmanId);
+				const frameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
+				const previewCanvas = createPreviewCanvas(frameData, frameIndex, stickmanId);
+				const deleteBtn = createDeleteButton(frameIndex, stickmanId);
 
 				previewCanvas.addEventListener('click', () => {
-					currentFrameIndices[stickmanId] = index;
+					currentFrameIndices[stickmanId] = frameIndex;
 
-					stickmen[stickmanIndex] = JSON.parse(JSON.stringify(frameData));
-					
-					neckManuallyMoved = false; // Reset flag when switching frames
-					updateMiddleJoint(stickmanIndex);
-					updateTimeline();
-					render();
+					const newFrameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
+					if (newFrameData) {
+						stickmen[stickmanIndex] = newFrameData;
+						
+						neckManuallyMoved = false; // Reset flag when switching frames
+						updateMiddleJoint(stickmanIndex);
+						updateTimeline();
+						render();
+					}
 				});
 
 				frameContainer.appendChild(previewCanvas);
 				frameContainer.appendChild(deleteBtn);
 				timeline.appendChild(frameContainer);
-			});
+			}
 
 			scrollToActiveFrame();
 		}
@@ -727,35 +1005,68 @@ define([
 			return previewCanvas;
 		}
 
-		function createDeleteButton(index, stickmanId) {
+		function createDeleteButton(frameIndex, stickmanId) {
 			const deleteBtn = document.createElement('button');
 			deleteBtn.className = 'delete-frame';
 			deleteBtn.innerHTML = '';
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				const stickmanFrames = frames[stickmanId] || [];
+				const totalFrames = getTotalFrameCount(stickmanId);
 				
-				if (stickmanFrames.length > 1) {
-					// Remove this frame for the stickman
-					stickmanFrames.splice(index, 1);
+				if (totalFrames > 1) {
+					// Remove this frame using delta system
+					if (frameIndex === 0) {
+						// Removing base frame - promote second frame to base
+						const secondFrame = reconstructFrameFromDeltas(stickmanId, 1);
+
+						if (secondFrame) {
+							baseFrames[stickmanId] = secondFrame.joints;
+
+							// Remove first delta and recompute remaining deltas
+							deltaFrames[stickmanId].shift();
+							
+							// Recompute all remaining deltas relative to new base
+							const newDeltas = [];
+
+							for (let i = 1; i < deltaFrames[stickmanId].length + 1; i++) {
+								const currentFrame = reconstructFrameFromDeltas(stickmanId, i);
+								const previousFrame = reconstructFrameFromDeltas(stickmanId, i - 1);
+
+								if (currentFrame && previousFrame) {
+									const delta = calculateDeltas(currentFrame.joints, previousFrame.joints);
+									if (delta) newDeltas.push(delta);
+								}
+							}
+
+							deltaFrames[stickmanId] = newDeltas;
+						}
+					} else {
+						// Remove delta frame and rebase subsequent deltas
+						rebaseDeltas(stickmanId, frameIndex);
+					}
 					
 					// Adjust current frame index if needed
+					const newTotalFrames = getTotalFrameCount(stickmanId);
 					currentFrameIndices[stickmanId] = Math.min(
 						currentFrameIndices[stickmanId], 
-						stickmanFrames.length - 1
+						newTotalFrames - 1
 					);
 					
 					// Find the stickman with this ID in the current stickmen array
 					for (let i = 0; i < stickmen.length; i++) {
 						if (stickmen[i].id === stickmanId) {
-							const newIndex = currentFrameIndices[stickmanId];
-							stickmen[i] = JSON.parse(JSON.stringify(stickmanFrames[newIndex]));
-							neckManuallyMoved = false;
-							updateMiddleJoint(i);
+							const newFrameIndex = currentFrameIndices[stickmanId];
+							const newFrameData = reconstructFrameFromDeltas(stickmanId, newFrameIndex);
+
+							if (newFrameData) {
+								stickmen[i] = newFrameData;
+								neckManuallyMoved = false;
+								updateMiddleJoint(i);
+							}
+
 							break;
 						}
 					}
-					
 					updateTimeline();
 				}
 			});
@@ -1086,16 +1397,19 @@ define([
 
 			stickmen.forEach((stickman, index) => {
 				const stickmanId = stickman.id;
-				const stickmanFrames = frames[stickmanId] || [];
+				const totalFrames = getTotalFrameCount(stickmanId);
 				
-				if (stickmanFrames.length > 1) {  
+				if (totalFrames > 1) {
 					// Only animate if there are multiple frames
 					// Move to next frame for this stickman
-					currentFrameIndices[stickmanId] = (currentFrameIndices[stickmanId] + 1) % stickmanFrames.length;
+					currentFrameIndices[stickmanId] = (currentFrameIndices[stickmanId] + 1) % totalFrames;
 					const newFrameIndex = currentFrameIndices[stickmanId];
 
-					stickmen[index] = JSON.parse(JSON.stringify(stickmanFrames[newFrameIndex]));
-					updateMiddleJoint(index);
+					const newFrameData = reconstructFrameFromDeltas(stickmanId, newFrameIndex);
+					if (newFrameData) {
+						stickmen[index] = newFrameData;
+						updateMiddleJoint(index);
+					}
 				}
 			});
 			
@@ -1189,6 +1503,7 @@ define([
 					joint.y = originalJoints[index].y + deltaY;
 				});
 
+				// No need to enforce constraints when moving the whole stickman
 				saveCurrentFrame();
 				updateTimeline();
 			} else if (isRotating && selectedJoint && selectedStickmanIndex >= 0 && rotationPivot) {
@@ -1206,6 +1521,9 @@ define([
 				
 				// Apply rotation
 				rotateJointHierarchy(selectedStickmanIndex, selectedJointIndex, angleDiff);
+				
+				// Enforce joint distance constraints after rotation
+				enforceJointDistances(stickmen[selectedStickmanIndex].joints);
 				
 				// Mark neck as manually moved if we're rotating the neck joint
 				if (selectedJointIndex === 1) {
@@ -1231,8 +1549,11 @@ define([
 					neckManuallyMoved = true;
 				}
 
-				// Maintain distances only for the moved joint
+				// Maintain distances only for the moved joint (original system)
 				maintainJointDistances(selectedStickmanIndex, selectedJointIndex);
+				
+				// Also apply full constraint enforcement for stability
+				enforceJointDistances(stickmen[selectedStickmanIndex].joints);
 
 				// Update middle joint position only when hips moved (not when body/neck moved)
 				if (selectedJointIndex === 2) {
@@ -1257,17 +1578,8 @@ define([
 			rotationPivot = null;
 			
 			if (selectedStickmanIndex >= 0 && originalJoints.length > 0) {
-				// Don't update middle joint if we just finished rotating or dragging the neck
-				if (!wasRotatingNeck && !wasDraggingNeck) {
-					saveCurrentFrame();
-				} else {
-					// Save current frame without updating middle joints
-					const stickmanId = stickmen[selectedStickmanIndex].id;
-					if (frames[stickmanId] && currentFrameIndices[stickmanId] >= 0) {
-						frames[stickmanId][currentFrameIndices[stickmanId]] = 
-							JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex]));
-					}
-				}
+				// Always save the current frame - the saveCurrentFrame function handles delta recomputation
+				saveCurrentFrame();
 				updateTimeline();
 			}
 			
@@ -1348,13 +1660,13 @@ define([
 			// do not show during playback
 			if (!isPlaying && selectedStickmanIndex >= 0) {
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				const stickmanFrames = frames[stickmanId] || [];
+				const totalFrames = getTotalFrameCount(stickmanId);
 				const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 				
 				// Only show onion skin if there's a previous frame
-				if (stickmanFrames.length > 1 && currentFrameIndex > 0) {
+				if (totalFrames > 1 && currentFrameIndex > 0) {
 					const prevFrameIndex = currentFrameIndex - 1;
-					const prevFrame = stickmanFrames[prevFrameIndex];
+					const prevFrame = reconstructFrameFromDeltas(stickmanId, prevFrameIndex);
 					
 					if (prevFrame) {
 						ctx.save();
@@ -1419,8 +1731,8 @@ define([
 
 			// Find the maximum number of frames across all stickmen
 			let maxFrames = 0;
-			Object.values(frames).forEach(stickmanFrames => {
-				maxFrames = Math.max(maxFrames, stickmanFrames.length);
+			Object.keys(baseFrames).forEach(stickmanId => {
+				maxFrames = Math.max(maxFrames, getTotalFrameCount(parseInt(stickmanId)));
 			});
 			
 			// Create a copy of current stickmen for animation
@@ -1445,16 +1757,20 @@ define([
 				// Update each stickman to its current frame for this export frame
 				animationStickmen.forEach((stickman, index) => {
 					const stickmanId = stickman.id;
-					const stickmanFrames = frames[stickmanId] || [];
+					const totalFrames = getTotalFrameCount(stickmanId);
 					
-					if (stickmanFrames.length > 0) {
+					if (totalFrames > 0) {
 						// Only advance frame if this stickman has more frames
-						if (exportFrameIndices[stickmanId] < stickmanFrames.length) {
+						if (exportFrameIndices[stickmanId] < totalFrames) {
 							const frameIndex = exportFrameIndices[stickmanId];
-							animationStickmen[index] = JSON.parse(JSON.stringify(stickmanFrames[frameIndex]));
+							const frameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
 							
-							// Move to next frame for next export frame
-							exportFrameIndices[stickmanId] = (exportFrameIndices[stickmanId] + 1) % stickmanFrames.length;
+							if (frameData) {
+								animationStickmen[index] = frameData;
+								
+								// Move to next frame for next export frame
+								exportFrameIndices[stickmanId] = (exportFrameIndices[stickmanId] + 1) % totalFrames;
+							}
 						}
 						
 						// Draw the stickman in its current state
