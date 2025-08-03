@@ -69,9 +69,9 @@ define([
 
 		// Joint connections with proper distances
 		const jointConnections = [
-			{ from: 0, to: 1, length: 20 },    // head to body 
-			{ from: 1, to: 11, length: 30 },   // body to middle
-			{ from: 11, to: 2, length: 30 },   // middle to hips
+			{ from: 1, to: 0, length: 20 },    // body to head 
+			{ from: 11, to: 1, length: 30 },   // middle to body
+			{ from: 2, to: 11, length: 30 },   // hips to middle
 			{ from: 2, to: 3, length: 40 },    // hips to left knee
 			{ from: 3, to: 4, length: 40 },    // left knee to foot
 			{ from: 2, to: 5, length: 40 },    // hips to right knee
@@ -1226,6 +1226,15 @@ define([
 						// Hip joint - drag anchor
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
+					} else if (index === 0) {
+						// Head joint - use fill color in shared mode, red in solo mode
+						if (userColor && (isShared || isHost || presence)) {
+							ctx.fillStyle = userColor.fill || '#ff0000';
+							ctx.strokeStyle = userColor.fill || '#ff0000';
+						} else {
+							ctx.fillStyle = '#ff0000';
+							ctx.strokeStyle = '#cc0000';
+						}
 					} else if (isRotationalJoint(index)) { 
 						// Rotational joints
 						ctx.fillStyle = '#ff8800';
@@ -1301,15 +1310,19 @@ define([
 			ctx.lineTo(joints[10].x, joints[10].y);  // right hand
 			ctx.stroke();
 
-			// head circle - use user color in shared/host mode, otherwise black
+			// head circle - use stroke color for fill in shared mode, black in solo mode
 			ctx.beginPath();
 			ctx.arc(joints[0].x, joints[0].y, 17, 0, Math.PI * 2);
 			if (userColor && (isShared || isHost || presence)) {
-				ctx.fillStyle = userColor.fill || '#000000';
+				ctx.fillStyle = userColor.stroke || '#000000';
 			} else {
 				ctx.fillStyle = '#000000';
 			}
 			ctx.fill();
+			
+			// Restore context state
+			ctx.strokeStyle = '#000000';
+			ctx.lineWidth = 12;
 		}
 
 		// HIERARCHICAL ROTATION SYSTEM
