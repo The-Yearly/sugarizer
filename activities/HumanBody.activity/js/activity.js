@@ -1173,6 +1173,40 @@ define([
 				hideLeaderboard();
 			}
 
+			const buttonsToTranslate = [
+				{ id: 'network-button', key: 'Network' },
+				{ id: 'stop-button', key: 'Stop' },
+				{ id: 'fullscreen-button', key: 'Fullscreen' },
+				{ id: "color-button-fill", key: 'FillColor' },
+				{ id: 'help-button', key: 'Tutorial' },
+				{ id: 'settings-button', key: 'Settings' },
+				{ id: 'paint-button', key: 'Paint' },
+				{ id: 'tour-button', key: 'Tour' },
+				{ id: 'doctor-button', key: 'Doctor' },
+				{ id: 'model-body-button', key: 'BodyModel' },
+				{ id: 'model-skeleton-button', key: 'SkeletonModel' },
+				{ id: 'model-organs-button', key: 'OrgansModel' },
+				{ id: 'zoom-in-button', key: 'ZoomIn' },
+				{ id: 'zoom-out-button', key: 'ZoomOut' },
+				{ id: 'zoom-to-button', key: 'ZoomTo' },
+				{ id: 'zoom-equal-button', key: 'ZoomEqual' },
+				{ id: 'zoom-button', key: 'ZoomPalette' },
+				{ id: 'image-button', key: 'SaveAsImage' },
+				{ id: 'model-button', key: 'SelectModel' }
+			];
+
+			buttonsToTranslate.forEach(button => {
+				const element = document.getElementById(button.id);
+				if (element) {
+					const translatedText = l10n.get(button.key);
+					if (translatedText) {
+						element.title = translatedText;
+						if (button.id === 'doctor-button' || button.id === 'tour-button' || button.id === 'paint-button') {
+							document.getElementById(button.id+'-label').textContent = translatedText;
+						}
+					}
+				}
+			});
 			const modeKey = modes[currentModeIndex];
 
 			// Check if modeTextElem exists before setting textContent
@@ -1756,7 +1790,7 @@ define([
 					document.body.removeChild(modal);
 					numModals--;
 				}
-			}, 1500);
+			}, 3000);
 		}
 
 		const redSliderFill = document.getElementById("red-slider-fill");
@@ -2218,7 +2252,7 @@ define([
 					// Show reminder if needed
 					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
 						const currentPart = bodyParts[presenceCorrectIndex];
-						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+						showModal(l10n.get("RemindYou", {name: l10n.get(currentPart.name)}));
 					}
 
 					// Wrong answer - color red temporarily
@@ -2278,7 +2312,7 @@ define([
 					// Show reminder if needed
 					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
 						const currentPart = bodyParts[currentBodyPartIndex];
-						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+						showModal(l10n.get("RemindYou", {name: l10n.get(currentPart.name)}))
 					}
 
 					// Wrong answer - color red temporarily

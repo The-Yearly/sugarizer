@@ -370,6 +370,7 @@
 	"PrivacyRemoveRemote": "Supprimer compte serveur",
 	"TutoActivityMeasureactivity": "L'activité Measure permet d'apprendre les concepts du son.",
 	"TutoActivityStoryactivity": "L'activité Story vous invite à raconter une histoire à partir d'un ensemble d'images. Vous devez essayer de raconter une histoire qui relie les images entre elles pour former un récit complet.",
+	"TutoActivityHumanBodyactivity": "Explorez le corps humain en 3D avec des couches interactives. Changez de vue, coloriez les organes et jouez à un quiz amusant avec vos amis en mode Docteur.",
 	"FilterAssignment": "Filtrer Devoirs",
 	"SecondsSubmitted": "Rendu à l'instant",
 	"Submitted": "Rendu il y a {{time}}",

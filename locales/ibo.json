@@ -369,6 +369,7 @@
 	"PrivacyRemoveRemote": "Delete server account",
 	"TutoActivityMeasureactivity": "Measure activity is an activity to learn the concepts of sound.",
 	"TutoActivityStoryactivity": "Story Activity uses images to prompt you to tell a story. You should try to tell a story that ties the images together into a comprehensive narrative.",
+	"TutoActivityHumanBodyactivity": "Explore the human body in 3D with interactive layers. Switch views, highlight parts, and play fun quizzes with friends in Doctor Mode.",
 	"FilterAssignment": "Filter Assignments",
 	"SecondsSubmitted": "Submitted seconds ago",
 	"Submitted": "Submitted {{time}} ago",
