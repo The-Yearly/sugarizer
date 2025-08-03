@@ -48,6 +48,7 @@ define([
 		// PRESENCE VARIABLES
 		let presence = null;
 		let isHost = false;
+		let stickmanUserColors = {}; // Maps stickman ID to user color data
 
 		// UTILITY FUNCTIONS
 		
@@ -283,6 +284,7 @@ define([
 							speed = savedData.speed || 1;
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
+							stickmanUserColors = savedData.stickmanUserColors || {};
 
 							// Reconstruct stickmen 
 							if (Object.keys(baseFrames).length > 0) {
@@ -373,7 +375,8 @@ define([
 				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
-				nextStickmanId: nextStickmanId
+				nextStickmanId: nextStickmanId,
+				stickmanUserColors: stickmanUserColors
 			};
 
 			var jsonData = JSON.stringify(saveData);
@@ -463,6 +466,7 @@ define([
 					network.createSharedActivity('org.sugarlabs.Stickman', function(groupId) {
 						console.log("Activity shared");
 						isHost = true;
+						isShared = true; // Set shared mode for host as well
 					});
 					network.onDataReceived(onNetworkDataReceived);
 					network.onSharedActivityUserChanged(onNetworkUserChanged);
@@ -525,6 +529,11 @@ define([
 			deltaFrames[initialStickman.id] = [];
 			currentFrameIndices[initialStickman.id] = 0;
 			
+			// Associate this stickman with current user's color (for potential sharing)
+			if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+				stickmanUserColors[initialStickman.id] = currentenv.user.colorvalue;
+			}
+			
 			neckManuallyMoved = false; // Reset flag for new stickman
 			updateMiddleJoint(0);
 			// by default first stickman is selected
@@ -585,6 +594,11 @@ define([
 			baseFrames[newStickman.id] = deepClone(newStickman.joints);
 			deltaFrames[newStickman.id] = [];
 			currentFrameIndices[newStickman.id] = 0;
+			
+			// Associate this stickman with current user's color (for potential sharing)
+			if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+				stickmanUserColors[newStickman.id] = currentenv.user.colorvalue;
+			}
 			
 			selectedStickmanIndex = stickmen.length - 1;
 			neckManuallyMoved = false;
@@ -1180,7 +1194,21 @@ define([
 			ctx.lineWidth = 3;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
-			drawStickmanSkeleton(ctx, joints);
+			
+			// Get user color - either from stickman-specific data or current user
+			let userColor = null;
+			if (stickmanIndex < stickmen.length) {
+				const stickmanId = stickmen[stickmanIndex].id;
+				// First check if we have stored color data for this specific stickman
+				if (stickmanUserColors[stickmanId]) {
+					userColor = stickmanUserColors[stickmanId];
+				} else if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+					// Fallback to current user's color (for own stickmen)
+					userColor = currentenv.user.colorvalue;
+				}
+			}
+			
+			drawStickmanSkeleton(ctx, joints, userColor);
 
 			// Show joints for selected stickman, or first stickman if none selected
 			const shouldShowJoints = (selectedStickmanIndex >= 0)
@@ -1229,7 +1257,7 @@ define([
 			}
 		}
 
-		function drawStickmanSkeleton(ctx, joints) {
+		function drawStickmanSkeleton(ctx, joints, userColor = null) {
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 12;
 			ctx.lineCap = 'round';
@@ -1273,10 +1301,14 @@ define([
 			ctx.lineTo(joints[10].x, joints[10].y);  // right hand
 			ctx.stroke();
 
-			// head circle (solid black)
+			// head circle - use user color in shared/host mode, otherwise black
 			ctx.beginPath();
 			ctx.arc(joints[0].x, joints[0].y, 17, 0, Math.PI * 2);
-			ctx.fillStyle = '#000000';
+			if (userColor && (isShared || isHost || presence)) {
+				ctx.fillStyle = userColor.fill || '#000000';
+			} else {
+				ctx.fillStyle = '#000000';
+			}
 			ctx.fill();
 		}
 
@@ -1794,7 +1826,13 @@ define([
 						// Draw the stickman in its current state
 						recordCtx.strokeStyle = '#000';
 						recordCtx.lineWidth = 8;
-						drawStickmanSkeleton(recordCtx, animationStickmen[index].joints);
+						
+						// Get user color for shared mode
+						const userColor = (currentenv && currentenv.user && currentenv.user.colorvalue) 
+							? currentenv.user.colorvalue 
+							: null;
+						
+						drawStickmanSkeleton(recordCtx, animationStickmen[index].joints, userColor);
 					}
 				});
 
