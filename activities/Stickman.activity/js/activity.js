@@ -45,6 +45,16 @@ define([
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false; 
 
+		// PRESENCE VARIABLES
+		let presence = null;
+		let isHost = false;
+
+		// UTILITY FUNCTIONS
+		
+		function deepClone(obj) {
+			return JSON.parse(JSON.stringify(obj));
+		} 
+
 		// Joint hierarchy - defines parent-child relationships for rotation
 		const jointHierarchy = {
 			2: [11], 		// hip -> middle
@@ -79,7 +89,7 @@ define([
 			}
 			
 			// Create a copy of current joints and enforce constraints
-			const constrainedJoints = JSON.parse(JSON.stringify(currentJoints));
+			const constrainedJoints = deepClone(currentJoints);
 			enforceJointDistances(constrainedJoints);
 			
 			return constrainedJoints.map((joint, index) => ({
@@ -91,7 +101,7 @@ define([
 
 		function applyDeltas(baseJoints, deltas) {
 			if (!deltas || baseJoints.length !== deltas.length) {
-				return JSON.parse(JSON.stringify(baseJoints));
+				return deepClone(baseJoints);
 			}
 			
 			const newJoints = baseJoints.map((joint, index) => ({
@@ -107,34 +117,43 @@ define([
 		}
 
 		function enforceJointDistances(joints) {
-			// Apply joint distance constraints multiple times for stability
-			for (let iteration = 0; iteration < 3; iteration++) {
-				jointConnections.forEach(conn => {
+			// Apply joint distance constraints with a hierarchical approach
+			// Start from the root (hips) and work outward to maintain stability
+			const processOrder = [
+				{ from: 2, to: 11 },   // hips to middle
+				{ from: 11, to: 1 },   // middle to body  
+				{ from: 1, to: 0 },    // body to head
+				{ from: 1, to: 7 },    // body to left elbow
+				{ from: 7, to: 8 },    // left elbow to left hand
+				{ from: 1, to: 9 },    // body to right elbow
+				{ from: 9, to: 10 },   // right elbow to right hand
+				{ from: 2, to: 3 },    // hips to left knee
+				{ from: 3, to: 4 },    // left knee to left foot
+				{ from: 2, to: 5 },    // hips to right knee
+				{ from: 5, to: 6 }     // right knee to right foot
+			];
+			
+			// Apply constraints in hierarchical order
+			for (let iteration = 0; iteration < 2; iteration++) {
+				processOrder.forEach(conn => {
 					const joint1 = joints[conn.from];
 					const joint2 = joints[conn.to];
 					
 					if (!joint1 || !joint2) return;
 					
-					// Skip middle joint connections as they're calculated dynamically
-					if (conn.from === 11 || conn.to === 11) return;
-					
-					// Calculate current distance
 					const dx = joint2.x - joint1.x;
 					const dy = joint2.y - joint1.y;
 					const currentDistance = Math.sqrt(dx * dx + dy * dy);
+					const targetDistance = jointConnections.find(jc => jc.from === conn.from && jc.to === conn.to)?.length;
 					
-					if (currentDistance > 0 && Math.abs(currentDistance - conn.length) > 0.5) {
-						// Calculate the correction needed
-						const ratio = conn.length / currentDistance;
-						const correctionX = (dx * ratio - dx) * 0.5;
-						const correctionY = (dy * ratio - dy) * 0.5;
+					if (targetDistance && currentDistance > 0 && Math.abs(currentDistance - targetDistance) > 0.5) {
+						const ratio = targetDistance / currentDistance;
+						const newX = joint1.x + dx * ratio;
+						const newY = joint1.y + dy * ratio;
 						
-						// Apply correction to both joints (split the difference)
-						// This prevents one joint from being "anchored" and maintains overall pose
-						joint1.x -= correctionX;
-						joint1.y -= correctionY;
-						joint2.x += correctionX;
-						joint2.y += correctionY;
+						// Move the child joint to maintain distance from parent
+						joint2.x = newX;
+						joint2.y = newY;
 					}
 				});
 			}
@@ -158,7 +177,7 @@ define([
 			}
 			
 			// Start with base frame and apply deltas incrementally
-			let currentJoints = JSON.parse(JSON.stringify(baseFrames[stickmanId]));
+			let currentJoints = deepClone(baseFrames[stickmanId]);
 			
 			for (let i = 0; i < frameIndex; i++) {
 				if (deltaFrames[stickmanId][i]) {
@@ -174,13 +193,13 @@ define([
 			};
 		}
 
-		function getTotalFrameCount(stickmanId) {
-			if (!baseFrames[stickmanId]) return 0;
-			return 1 + (deltaFrames[stickmanId] ? deltaFrames[stickmanId].length : 0);
-		}
-
 		function rebaseDeltas(stickmanId, removedFrameIndex) {
 			if (!deltaFrames[stickmanId] || removedFrameIndex <= 0) return;
+			
+			const getTotalFrameCount = (id) => {
+				if (!baseFrames[id]) return 0;
+				return 1 + (deltaFrames[id] ? deltaFrames[id].length : 0);
+			};
 			
 			if (removedFrameIndex === 1) {
 				// Removing second frame - need to update base frame and recompute all deltas
@@ -304,12 +323,20 @@ define([
 				if (environment.sharedId) {
 					console.log("Shared instance");
 					isShared = true;
-					// shared activity logic goes here
+					presence = activity.getPresenceObject(function(error, network) {
+						if (error) {
+							console.log("Error joining shared activity");
+							return;
+						}
+						console.log("Joined shared activity");
+						network.onDataReceived(onNetworkDataReceived);
+						network.onSharedActivityUserChanged(onNetworkUserChanged);
+					});
 				}
 			});
 		}
 
-		// translate toolbar buttons 
+		// translate toolbar buttons (localize the toolbar buttons)
 		function translateToolbarButtons() {
 			const buttonsToTranslate = [
 				{ id: 'network-button', key: 'Network' },
@@ -418,26 +445,66 @@ define([
 			document.addEventListener('template-selected', function (e) {
 				loadTemplate(e.detail.template);
 			});
+
+			// Presence palette setup
+			var palette = new presencepalette.PresencePalette(
+				document.getElementById("network-button"),
+				undefined
+			);
+
+			palette.addEventListener('shared', function() {
+				palette.popDown();
+				console.log("Want to share");
+				presence = activity.getPresenceObject(function(error, network) {
+					if (error) {
+						console.log("Sharing error");
+						return;
+					}
+					network.createSharedActivity('org.sugarlabs.Stickman', function(groupId) {
+						console.log("Activity shared");
+						isHost = true;
+					});
+					network.onDataReceived(onNetworkDataReceived);
+					network.onSharedActivityUserChanged(onNetworkUserChanged);
+				});
+			});
 		}
+
+		// NETWORK CALLBACKS
+
+		var onNetworkDataReceived = function (msg) {
+			if (presence.getUserInfo().networkId === msg.user.networkId) {
+				return;
+			}
+			console.log("Network data received:", msg);
+			// TODO: Handle different message types
+		};
+
+		var onNetworkUserChanged = function (msg) {
+			console.log("User " + msg.user.name + " " + (msg.move == 1 ? "join" : "leave"));
+			// TODO: Handle user join/leave events
+		};
 
 		// STICKMAN CREATION & MANAGEMENT
 
 		function createStickmanJoints(centerX, centerY, id) {
+			const scale = 1.0; // Can be adjusted for different sizes
+			
 			return {
 				id: id,
 				joints: [
-					{ x: centerX, y: centerY - 60, name: 'head' },            // 0 - head
-					{ x: centerX, y: centerY - 40, name: 'body' },            // 1 - body
-					{ x: centerX, y: centerY + 20, name: 'hips' },            // 2 - hips
-					{ x: centerX - 20, y: centerY + 60, name: 'leftKnee' },   // 3 - left knee
-					{ x: centerX - 25, y: centerY + 100, name: 'leftFoot' },  // 4 - left foot
-					{ x: centerX + 20, y: centerY + 60, name: 'rightKnee' },  // 5 - right knee
-					{ x: centerX + 25, y: centerY + 100, name: 'rightFoot' }, // 6 - right foot
-					{ x: centerX - 30, y: centerY - 30, name: 'leftElbow' },  // 7 - left elbow
-					{ x: centerX - 45, y: centerY, name: 'leftHand' },        // 8 - left hand
-					{ x: centerX + 30, y: centerY - 30, name: 'rightElbow' }, // 9 - right elbow
-					{ x: centerX + 45, y: centerY, name: 'rightHand' },       // 10 - right hand
-					{ x: centerX, y: centerY - 10, name: 'middle' }           // 11 - middle (drag joint)
+					{ x: centerX, y: centerY - 65 * scale, name: 'head' },                    // 0 - head
+					{ x: centerX, y: centerY - 45 * scale, name: 'body' },                    // 1 - body (neck)
+					{ x: centerX, y: centerY + 15 * scale, name: 'hips' },                    // 2 - hips
+					{ x: centerX - 15 * scale, y: centerY + 55 * scale, name: 'leftKnee' },   // 3 - left knee
+					{ x: centerX - 20 * scale, y: centerY + 95 * scale, name: 'leftFoot' },   // 4 - left foot
+					{ x: centerX + 15 * scale, y: centerY + 55 * scale, name: 'rightKnee' },  // 5 - right knee
+					{ x: centerX + 20 * scale, y: centerY + 95 * scale, name: 'rightFoot' },  // 6 - right foot
+					{ x: centerX - 25 * scale, y: centerY - 35 * scale, name: 'leftElbow' },  // 7 - left elbow
+					{ x: centerX - 40 * scale, y: centerY - 5 * scale, name: 'leftHand' },    // 8 - left hand
+					{ x: centerX + 25 * scale, y: centerY - 35 * scale, name: 'rightElbow' }, // 9 - right elbow
+					{ x: centerX + 40 * scale, y: centerY - 5 * scale, name: 'rightHand' },   // 10 - right hand
+					{ x: centerX, y: centerY - 15 * scale, name: 'middle' }                   // 11 - middle (torso center)
 				]
 			};
 		}
@@ -454,7 +521,7 @@ define([
 			stickmen = [initialStickman];
 			
 			// Initialize base frame for this stickman
-			baseFrames[initialStickman.id] = JSON.parse(JSON.stringify(initialStickman.joints));
+			baseFrames[initialStickman.id] = deepClone(initialStickman.joints);
 			deltaFrames[initialStickman.id] = [];
 			currentFrameIndices[initialStickman.id] = 0;
 			
@@ -466,26 +533,45 @@ define([
 		}
 
 		function addNewStickman() {
-			// Calculate safe boundaries to keep the entire stickman visible
-			// Stickman dimensions: roughly 140 pixels tall (60 above center + 100 below center) and 90 pixels wide (45 on each side)
-			const stickmanHeight = 140;
-			const stickmanWidth = 90;
-			const margin = 20; 
+			// Calculate safe boundaries based on the improved stickman proportions
+			const stickmanHeight = 160; // Head to feet distance (65 + 95)
+			const stickmanWidth = 80;   // Hand to hand span (40 + 40)
+			const margin = 30; 
 			
 			const minX = stickmanWidth / 2 + margin;
 			const maxX = canvas.width - stickmanWidth / 2 - margin;
-			const minY = 60 + margin; // Head is 60 pixels above center
-			const maxY = canvas.height - 100 - margin; // Feet are 100 pixels below center
+			const minY = 65 + margin; // Head distance above center
+			const maxY = canvas.height - 95 - margin; // Feet distance below center
 
-			// Ensure valid bounds
-			const safeMinX = Math.max(minX, 50);
-			const safeMaxX = Math.min(maxX, canvas.width - 50);
-			const safeMinY = Math.max(minY, 80);
-			const safeMaxY = Math.min(maxY, canvas.height - 120);
+			// Ensure valid bounds exist
+			if (maxX <= minX || maxY <= minY) {
+				console.warn("Canvas too small for new stickman");
+				return;
+			}
 			
-			// within canvas bounds
-			const centerX = Math.random() * (safeMaxX - safeMinX) + safeMinX;
-			const centerY = Math.random() * (safeMaxY - safeMinY) + safeMinY;
+			// Try to find a position that doesn't overlap with existing stickmen
+			let centerX, centerY;
+			let attempts = 0;
+			const maxAttempts = 20;
+			const minDistance = 100; // Minimum distance between stickman centers
+			
+			do {
+				centerX = Math.random() * (maxX - minX) + minX;
+				centerY = Math.random() * (maxY - minY) + minY;
+				
+				// Check if position is too close to existing stickmen
+				const isTooClose = stickmen.some(stickman => {
+					const existingCenter = stickman.joints[11]; // middle joint
+					const distance = Math.sqrt(
+						Math.pow(centerX - existingCenter.x, 2) + 
+						Math.pow(centerY - existingCenter.y, 2)
+					);
+					return distance < minDistance;
+				});
+				
+				if (!isTooClose) break;
+				attempts++;
+			} while (attempts < maxAttempts);
 
 			const newStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
 			
@@ -496,7 +582,7 @@ define([
 			updateMiddleJoint(stickmen.length - 1);
 
 			// Initialize base and delta frames for this stickman
-			baseFrames[newStickman.id] = JSON.parse(JSON.stringify(newStickman.joints));
+			baseFrames[newStickman.id] = deepClone(newStickman.joints);
 			deltaFrames[newStickman.id] = [];
 			currentFrameIndices[newStickman.id] = 0;
 			
@@ -648,18 +734,6 @@ define([
 			}
 		}
 
-		function createNew() {
-			baseFrames = {};
-			deltaFrames = {};
-			currentFrameIndices = {};
-			stickmen = [];
-			selectedJoint = null;
-			selectedStickmanIndex = -1;
-			createInitialStickman();
-			updateTimeline();
-			pause();
-		}
-
 		async function loadTemplate(templateName) {
 			try {
 				const response = await fetch(`js/templates/${templateName}.json`);
@@ -807,7 +881,9 @@ define([
 						const delta = calculateDeltas(stickman.joints, previousFrame.joints);
 						if (delta) {
 							deltaFrames[stickmanId].push(delta);
-							currentFrameIndices[stickmanId] = getTotalFrameCount(stickmanId) - 1;
+							// Update current frame index to the new frame
+							const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
+							currentFrameIndices[stickmanId] = totalFrames - 1;
 						}
 					}
 				}
@@ -843,7 +919,7 @@ define([
 				enforceJointDistances(stickman.joints);
 				
 				const currentFrameIndex = currentFrameIndices[stickmanId];
-				const totalFrames = getTotalFrameCount(stickmanId);
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				
 				if (currentFrameIndex === 0) {
 					// Update base frame
@@ -915,7 +991,7 @@ define([
 			const stickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
 			const selectedStickman = stickmen[stickmanIndex];
 			const stickmanId = selectedStickman.id;
-			const totalFrames = getTotalFrameCount(stickmanId);
+			const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 			const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 			
 			// For each frame of the selected stickman, create a preview
@@ -946,13 +1022,8 @@ define([
 				timeline.appendChild(frameContainer);
 			}
 
-			scrollToActiveFrame();
-		}
-
-		function scrollToActiveFrame() {
-			const timeline = document.getElementById('timeline');
+			// Scroll to active frame inline
 			const activeFrame = timeline.querySelector('.frame.active');
-
 			if (activeFrame) {
 				const timelineRect = timeline.getBoundingClientRect();
 				const activeFrameRect = activeFrame.getBoundingClientRect();
@@ -1011,7 +1082,7 @@ define([
 			deleteBtn.innerHTML = '';
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				const totalFrames = getTotalFrameCount(stickmanId);
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				
 				if (totalFrames > 1) {
 					// Remove this frame using delta system
@@ -1046,7 +1117,7 @@ define([
 					}
 					
 					// Adjust current frame index if needed
-					const newTotalFrames = getTotalFrameCount(stickmanId);
+					const newTotalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 					currentFrameIndices[stickmanId] = Math.min(
 						currentFrameIndices[stickmanId], 
 						newTotalFrames - 1
@@ -1209,45 +1280,6 @@ define([
 			ctx.fill();
 		}
 
-		function maintainJointDistances(stickmanIndex, movedJointIndex) {
-			// Skip distance maintenance for middle joint 
-			if (movedJointIndex === 11) 
-				return;
-
-			const joints = stickmen[stickmanIndex].joints;
-
-			// Get all connections for this joint
-			const connections = jointConnections.filter(conn =>
-				conn.from === movedJointIndex || conn.to === movedJointIndex
-			);
-
-			connections.forEach(conn => {
-				const otherJointIndex = conn.from === movedJointIndex ? conn.to : conn.from;
-
-				if (otherJointIndex === 11) 
-					return;
-
-				const movedJoint = joints[movedJointIndex];
-				const otherJoint = joints[otherJointIndex];
-
-				// Calculate current distance
-				const dx = movedJoint.x - otherJoint.x;
-				const dy = movedJoint.y - otherJoint.y;
-				const currentDistance = Math.sqrt(dx * dx + dy * dy);
-
-				if (Math.abs(currentDistance - conn.length) > 1.0) {
-					// Adjust the connected joint to maintain the proper distance
-					const ratio = conn.length / currentDistance;
-					const targetX = otherJoint.x + dx * ratio;
-					const targetY = otherJoint.y + dy * ratio;
-
-					// Move the moved joint to the correct position
-					movedJoint.x = targetX;
-					movedJoint.y = targetY;
-				}
-			});
-		}
-
 		// HIERARCHICAL ROTATION SYSTEM
 
 		function rotatePointAroundPivot(point, pivot, angle) {
@@ -1349,23 +1381,17 @@ define([
 		function getRotationPivot(stickmanIndex, jointIndex) {
 			const joints = stickmen[stickmanIndex].joints;
 			
-			// Define pivot points for each rotational joint
-			switch (jointIndex) {
-				case 11: // middle joint rotates around hip
-					return joints[2];
-				case 1: // body/neck rotates around middle joint and return a copy of the middle joint position to prevent interference
-					return { x: joints[11].x, y: joints[11].y };
-				case 7: // left elbow rotates around body
-					return joints[1];
-				case 9: // right elbow rotates around body
-					return joints[1];
-				case 3: // left knee rotates around hip
-					return joints[2];
-				case 5: // right knee rotates around hip
-					return joints[2];
-				default:
-					return joints[jointIndex]; // fallback
-			}
+			// Define pivot mapping for rotational joints
+			const pivotMap = {
+				11: joints[2],  // middle joint rotates around hip
+				1: { x: joints[11].x, y: joints[11].y },  // body/neck rotates around middle joint
+				7: joints[1],   // left elbow rotates around body
+				9: joints[1],   // right elbow rotates around body
+				3: joints[2],   // left knee rotates around hip
+				5: joints[2]    // right knee rotates around hip
+			};
+			
+			return pivotMap[jointIndex] || joints[jointIndex]; // fallback to joint itself
 		}
 
 		// ANIMATION CONTROL
@@ -1397,7 +1423,7 @@ define([
 
 			stickmen.forEach((stickman, index) => {
 				const stickmanId = stickman.id;
-				const totalFrames = getTotalFrameCount(stickmanId);
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				
 				if (totalFrames > 1) {
 					// Only animate if there are multiple frames
@@ -1454,7 +1480,19 @@ define([
 
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
 
-				originalJoints = JSON.parse(JSON.stringify(stickmen[selectedStickmanIndex].joints));
+				originalJoints = deepClone(stickmen[selectedStickmanIndex].joints);
+
+				// create frame if none exists at current position for this stickman
+				const stickman = stickmen[selectedStickmanIndex];
+				const stickmanId = stickman.id;
+				if (!baseFrames[stickmanId]) {
+					updateMiddleJoint(selectedStickmanIndex);
+					enforceJointDistances(stickman.joints);
+					baseFrames[stickmanId] = deepClone(stickman.joints);
+					deltaFrames[stickmanId] = [];
+					currentFrameIndices[stickmanId] = 0;
+					updateTimeline();
+				}
 
 				if (selectedJointIndex === 2) { 
 					// Hip joint - drag whole stickman
@@ -1549,10 +1587,6 @@ define([
 					neckManuallyMoved = true;
 				}
 
-				// Maintain distances only for the moved joint (original system)
-				maintainJointDistances(selectedStickmanIndex, selectedJointIndex);
-				
-				// Also apply full constraint enforcement for stability
 				enforceJointDistances(stickmen[selectedStickmanIndex].joints);
 
 				// Update middle joint position only when hips moved (not when body/neck moved)
@@ -1566,12 +1600,6 @@ define([
 		}
 
 		function handleMouseUp() {
-			const wasRotatingNeck = isRotating && selectedJoint && selectedStickmanIndex >= 0 && 
-				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
-			
-			const wasDraggingNeck = isDragging && selectedJoint && selectedStickmanIndex >= 0 && 
-				stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint) === 1;
-
 			isDragging = false;
 			isDraggingWhole = false;
 			isRotating = false;
@@ -1597,48 +1625,37 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			// Check all stickmen, starting from the last one
+			// Check all stickmen, starting from the last one (top layer)
 			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
 				const joints = stickmen[stickmanIndex].joints;
 
-				// First check hip joint (index 2) - prioritize for whole stickman dragging
-				const hipJoint = joints[2];
-				if (hipJoint) {
-					const dx = hipJoint.x - x;
-					const dy = hipJoint.y - y;
-					const distance = Math.sqrt(dx * dx + dy * dy);
-					if (distance < 10) {
-						return { 
-							joint: hipJoint, 
-							stickmanIndex: stickmanIndex 
-						};
+				// Define hit radii for different joint types
+				const getHitRadius = (jointIndex) => {
+					switch (jointIndex) {
+						case 0: 
+							return 15; // head - largest hit area
+						case 2: 
+							return 12; // hips - large for whole stickman drag
+						case 11: 
+							return 10; // middle - medium for rotation
+						case 1: 
+							return 10; // body/neck - medium for rotation
+						default: 
+							return 8;  // hands, feet, elbows, knees
 					}
-				}
+				};
 
-				// Check middle joint for rotation
-				const middleJoint = joints[11];
-				if (middleJoint) {
-					const dx = middleJoint.x - x;
-					const dy = middleJoint.y - y;
-					const distance = Math.sqrt(dx * dx + dy * dy);
-					if (distance < 8) {
-						return { 
-							joint: middleJoint, 
-							stickmanIndex: stickmanIndex 
-						};
-					}
-				}
-
-				// Check other joints
-				for (let i = joints.length - 2; i >= 0; i--) {
-					if (i === 2) 
-						continue; // Skip hip joint as it's already checked
-					const joint = joints[i];
+				// Check joints in order of interaction priority
+				const priorityOrder = [2, 11, 1, 0, 7, 9, 3, 5, 8, 10, 4, 6];
+				
+				for (const jointIndex of priorityOrder) {
+					if (jointIndex >= joints.length) continue;
+					
+					const joint = joints[jointIndex];
 					const dx = joint.x - x;
 					const dy = joint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
-
-					const hitRadius = i === 0 ? 12 : 8;
+					const hitRadius = getHitRadius(jointIndex);
 
 					if (distance < hitRadius) {
 						return { 
@@ -1660,7 +1677,7 @@ define([
 			// do not show during playback
 			if (!isPlaying && selectedStickmanIndex >= 0) {
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				const totalFrames = getTotalFrameCount(stickmanId);
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 				
 				// Only show onion skin if there's a previous frame
@@ -1732,7 +1749,8 @@ define([
 			// Find the maximum number of frames across all stickmen
 			let maxFrames = 0;
 			Object.keys(baseFrames).forEach(stickmanId => {
-				maxFrames = Math.max(maxFrames, getTotalFrameCount(parseInt(stickmanId)));
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
+				maxFrames = Math.max(maxFrames, totalFrames);
 			});
 			
 			// Create a copy of current stickmen for animation
@@ -1757,7 +1775,7 @@ define([
 				// Update each stickman to its current frame for this export frame
 				animationStickmen.forEach((stickman, index) => {
 					const stickmanId = stickman.id;
-					const totalFrames = getTotalFrameCount(stickmanId);
+					const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 					
 					if (totalFrames > 0) {
 						// Only advance frame if this stickman has more frames
