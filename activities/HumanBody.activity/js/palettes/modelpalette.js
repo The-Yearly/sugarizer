@@ -15,6 +15,12 @@ define([
 
 		// Add event listeners for model buttons after content is set
 		this.setupModelButtons();
+
+		// Listen for mode changes to update button states
+		var self = this;
+		document.addEventListener('mode-changed', function (event) {
+			self.updateButtonStates(event.detail.mode);
+		});
 	};
 
 	// Setup event listeners for model buttons
@@ -43,31 +49,101 @@ define([
 				body: bodyButton,
 				organs: organsButton
 			};
+			self.allButtons = buttons;
+
+			// Check current mode and update button states
+			self.updateButtonStates(self.getCurrentMode());
 
 			if (skeletonButton) {
 				skeletonButton.addEventListener('click', function () {
-					setActiveButton(skeletonButton);
-					self.fireEvent('model-selected', { model: 'skeleton' });
-					self.popDown();
+					if (self.isButtonClickable()) {
+						setActiveButton(skeletonButton);
+						self.fireEvent('model-selected', { model: 'skeleton' });
+						self.popDown();
+					}
 				});
 			}
 
 			if (bodyButton) {
 				bodyButton.addEventListener('click', function () {
-					setActiveButton(bodyButton);
-					self.fireEvent('model-selected', { model: 'body' });
-					self.popDown();
+					if (self.isButtonClickable()) {
+						setActiveButton(bodyButton);
+						self.fireEvent('model-selected', { model: 'body' });
+						self.popDown();
+					}
 				});
 			}
 
 			if (organsButton) {
 				organsButton.addEventListener('click', function () {
-					setActiveButton(organsButton);
-					self.fireEvent('model-selected', { model: 'organs' });
-					self.popDown();
+					if (self.isButtonClickable()) {
+						setActiveButton(organsButton);
+						self.fireEvent('model-selected', { model: 'organs' });
+						self.popDown();
+					}
 				});
 			}
 		}, 100);
+	};
+
+	// Get current mode (0 = Paint, 1 = Tour, 2 = Doctor)
+	modelpalette.ModelPalette.prototype.getCurrentMode = function () {
+		// Try to get current mode from global variable or default to 0 (Paint)
+		if (typeof window.currentModeIndex !== 'undefined') {
+			return window.currentModeIndex;
+		}
+		// Fallback: check mode text element
+		var modeTextElem = document.getElementById("mode-text");
+		if (modeTextElem) {
+			var modeText = modeTextElem.textContent.toLowerCase();
+			if (modeText.includes('tour')) return 1;
+			if (modeText.includes('doctor')) return 2;
+		}
+		return 0; // Default to Paint mode
+	};
+
+	// Check if buttons should be clickable based on shared mode and current mode
+	modelpalette.ModelPalette.prototype.isButtonClickable = function () {
+		var isSharedNonHost = window.sharedActivity && !window.isHost;
+		var currentMode = this.getCurrentMode();
+
+		if (!isSharedNonHost) {
+			// Host or local user - always can change model
+			return true;
+		}
+
+		// Non-host user in shared mode
+		if (currentMode === 0) {
+			// Paint mode - non-host can change model
+			return true;
+		} else {
+			// Tour (1) or Doctor (2) mode - non-host cannot change model
+			return false;
+		}
+	};
+
+	// Update button states based on current mode and user role
+	modelpalette.ModelPalette.prototype.updateButtonStates = function (modeIndex) {
+		if (!this.allButtons) return;
+
+		var isSharedNonHost = window.sharedActivity && !window.isHost;
+		var shouldDisable = isSharedNonHost && (modeIndex === 1 || modeIndex === 2); // Tour or Doctor mode
+
+		this.allButtons.forEach(function (button) {
+			if (button) {
+				if (shouldDisable) {
+					button.disabled = true;
+					button.style.opacity = "0.5";
+					button.style.cursor = "not-allowed";
+					button.style.pointerEvents = "none";
+				} else {
+					button.disabled = false;
+					button.style.opacity = "1";
+					button.style.cursor = "pointer";
+					button.style.pointerEvents = "auto";
+				}
+			}
+		});
 	};
 
 	// update the active button based on current model
@@ -118,6 +194,24 @@ define([
 			},
 			fireEvent: {
 				value: modelpalette.ModelPalette.prototype.fireEvent,
+				enumerable: true,
+				configurable: true,
+				writable: true,
+			},
+			getCurrentMode: {
+				value: modelpalette.ModelPalette.prototype.getCurrentMode,
+				enumerable: true,
+				configurable: true,
+				writable: true,
+			},
+			isButtonClickable: {
+				value: modelpalette.ModelPalette.prototype.isButtonClickable,
+				enumerable: true,
+				configurable: true,
+				writable: true,
+			},
+			updateButtonStates: {
+				value: modelpalette.ModelPalette.prototype.updateButtonStates,
 				enumerable: true,
 				configurable: true,
 				writable: true,

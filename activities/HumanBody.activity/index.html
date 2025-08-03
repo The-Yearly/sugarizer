@@ -25,7 +25,6 @@
 	
 
 		<link rel="stylesheet" href="css/activity.css" />
-        <link rel="stylesheet" href="css/leaderboard.css" /> <!-- External CSS for the leaderboard -->
 		<link rel="stylesheet" href="css/introjs.css">
 		<script src="lib/intro.js"></script>
 		<script data-main="js/loader" src="lib/require.js"></script>
@@ -72,12 +71,21 @@
 			></button>
 
 			<div class="seprator-line"></div>
-
+			
 			<button
 				class="toolbutton"
 				id="zoom-button"
 				title="zoom palette"
 				data-l10n-id="ZoomPalette"
+			></button>
+
+			<div class="seprator-line"></div>
+
+			<button 
+				class="toolbutton" 
+				id="image-button" 
+				title="Save As Image"
+				data-l10n-id="SaveAsImage"
 			></button>
 
 			<!-- Add more buttons here -->
@@ -105,9 +113,7 @@
 			></button>
 		</div>
 		<div id="canvas">
-			<!-- <button id="throw-button">Throw the Dice</button> -->
 			<div id="score-container">
-				<!-- <p id="total-score">Total Score: <span id="score">0</span> </p> -->
 				<div class="arrow-container" id="orientation-buttons">
 					<button 
 						id="up-button" 

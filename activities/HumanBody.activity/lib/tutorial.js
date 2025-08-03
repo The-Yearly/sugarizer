@@ -42,6 +42,12 @@ define([
 				intro: l10n.get("TutorialZoomIntro"),
 			},
 			{
+				element: "#image-button",
+				position: "bottom",
+				title: l10n.get("TutorialImageTitle"),
+				intro: l10n.get("TutorialImageIntro"),
+			},
+			{
 				element: "#orientation-buttons",
 				position: "bottom",
 				title: l10n.get("TutorialOrientationTitle"),

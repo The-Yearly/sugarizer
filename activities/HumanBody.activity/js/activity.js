@@ -1,6 +1,7 @@
 define([
 	"sugar-web/activity/activity",
 	"sugar-web/env",
+	"sugar-web/datastore",
 	"activity/palettes/colorpalettefill",
 	"activity/palettes/zoompalette",
 	"activity/palettes/modelpalette",
@@ -8,9 +9,11 @@ define([
 	"sugar-web/graphics/presencepalette",
 	"l10n",
 	"tutorial",
+	"humane"
 ], function (
 	activity,
 	env,
+	datastore,
 	colorpaletteFill,
 	zoompalette,
 	modelpalette,
@@ -18,6 +21,7 @@ define([
 	presencepalette,
 	l10n,
 	tutorial,
+	humane
 ) {
 	requirejs(["domReady!"], function (doc) {
 		activity.setup();
@@ -33,6 +37,7 @@ define([
 		let cameraPosition = { x: 0, y: 10, z: 20 };
 		let cameraTarget = { x: 0, y: 0, z: 0 };
 		let cameraFov = 45;
+		let renderer = null;
 
 		// MODE VARIABLES  
 		let isPaintActive = true;
@@ -167,6 +172,11 @@ define([
 			tutorial.start();
 		});
 
+		// Save as Image
+		document.getElementById("image-button").addEventListener('click', function (e) {
+			saveAsImage();
+		});
+
 		env.getEnvironment(function (err, environment) {
 			currentenv = environment;
 
@@ -193,12 +203,17 @@ define([
 					body: [],
 					organs: []
 				};
-				loadModel({
-					...availableModels.body,
-					callback: (loadedModel) => {
-						currentModel = loadedModel;
-					}
-				});
+				
+				if (!environment.sharedId) {
+					loadModel({
+						...availableModels.body,
+						callback: (loadedModel) => {
+							currentModel = loadedModel;
+						}
+					});
+				} else {
+					console.log("Shared new instance - waiting for host data");
+				}
 			} else {
 				activity
 					.getDatastoreObject()
@@ -209,7 +224,6 @@ define([
 							// Load model paint data if available
 							if (savedData.modelPaintData) {
 								modelPaintData = savedData.modelPaintData;
-								console.log("Loaded model paint data:", modelPaintData);
 							} else {
 								modelPaintData = {
 									skeleton: [],
@@ -221,17 +235,14 @@ define([
 							// Load camera state if available
 							if (savedData.cameraPosition) {
 								cameraPosition = savedData.cameraPosition;
-								console.log("Loaded camera position:", cameraPosition);
 							}
 
 							if (savedData.cameraTarget) {
 								cameraTarget = savedData.cameraTarget;
-								console.log("Loaded camera target:", cameraTarget);
 							}
 
 							if (savedData.cameraFov) {
 								cameraFov = savedData.cameraFov;
-								console.log("Loaded camera FOV:", cameraFov);
 							}
 
 							// Check if saved data includes model information
@@ -302,6 +313,9 @@ define([
 				console.log("Shared instance");
 				window.sharedActivity = true; // Set global flag
 				window.isHost = false; // Default to false until we know
+
+				removeCurrentModel();
+
 				presence = activity.getPresenceObject(function (
 					error,
 					network
@@ -309,8 +323,39 @@ define([
 					network.onDataReceived(onNetworkDataReceived);
 					network.onSharedActivityUserChanged(onNetworkUserChanged);
 				});
+
+				return; 
 			}
 		});
+
+		// Save as Image function
+		function saveAsImage() {
+			// Ensure renderer is available
+			if (!renderer || !renderer.domElement) {
+				console.error("Renderer not available for image capture");
+				return;
+			}
+
+			try {
+				var mimetype = 'image/jpeg';
+				var inputData = renderer.domElement.toDataURL(mimetype);
+				var metadata = {
+					mimetype: mimetype,
+					title: "HumanBody Image " + currentModelName,
+					activity: "org.olpcfrance.MediaViewerActivity",
+					timestamp: new Date().getTime(),
+					creation_time: new Date().getTime(),
+					file_size: 0
+				};
+
+				datastore.create(metadata, function() {
+					showModal(l10n.get("ImageSaved") || "Image saved successfully!");
+					console.log("Image export done.");
+				}, inputData);
+			} catch (error) {
+				console.error("Error saving image:", error);
+			}
+		}
 
 		function logAllMeshesAsJSON(model) {
 			const meshData = [];
@@ -462,12 +507,10 @@ define([
 
 			scene.children.forEach(child => {
 				if (child.name && modelNamesToRemove.includes(child.name)) {
-					console.log(`Found model to remove by name: ${child.name}`);
 					childrenToRemove.push(child);
 				}
 			});
 
-			// Remove found models
 			childrenToRemove.forEach(child => {
 				console.log(`Removing model: ${child.name}`);
 				scene.remove(child);
@@ -475,7 +518,6 @@ define([
 				// Clean up resources
 				child.traverse((node) => {
 					if (node.isMesh) {
-						// console.log(`Disposing mesh from ${child.name}: ${node.name}`);
 						if (node.geometry) {
 							node.geometry.dispose();
 						}
@@ -501,7 +543,6 @@ define([
 			}
 
 			if (currentModelName === modelKey) {
-				console.log(`Model ${modelKey} is already loaded`);
 				return;
 			}
 
@@ -612,7 +653,7 @@ define([
 					presenceIndex = 0;
 				}
 			} else {
-				console.warn(`No body parts data found for model: ${modelName}`);
+				// console.warn(`No body parts data found for model: ${modelName}`);
 			}
 		}
 
@@ -698,7 +739,6 @@ define([
 			if (msg.action == "init") {
 				partsColored = msg.content[0];
 				players = msg.content[1];
-				console.log(partsColored);
 
 				// Update the model palette to show the correct active button
 				if (paletteModel.updateActiveModel) {
@@ -737,7 +777,6 @@ define([
 			}
 
 			if (msg.action == "answer") {
-				console.log("Received answer from", msg.user.name);
 
 				// Only host processes answers
 				if (!ifDoctorHost || !firstAnswer) {
@@ -781,6 +820,24 @@ define([
 			}
 
 			if (msg.action == "startDoctor") {
+
+				updateBodyPartsForModel(msg.content.modelName);
+
+				// switch models, before starting doctor mode
+				if (msg.content.modelName !== currentModelName) {
+					switchModel(msg.content.modelName);
+
+					// Wait for model to load before starting doctor mode
+					setTimeout(() => {
+						showLeaderboard();
+						isPaintActive = false;
+						isLearnActive = false;
+						isTourActive = false;
+						isDoctorActive = true;
+					}, 500);
+					return;
+				}
+
 				showLeaderboard();
 				isPaintActive = false;
 				isLearnActive = false;
@@ -790,9 +847,34 @@ define([
 
 			if (msg.action == "switchModel") {
 				const newModel = msg.content;
-				if (currentModelName !== newModel) {
-					switchModel(newModel);
-				}
+				
+				removeCurrentModel();
+				currentModelName = newModel;
+
+				loadModel({
+					...availableModels[newModel],
+					callback: (loadedModel) => {
+						currentModel = loadedModel;
+						
+						// Apply existing colors if available
+						if (modelPaintData[newModel] && modelPaintData[newModel].length > 0) {
+							partsColored = [...modelPaintData[newModel]];
+							applyModelColors(loadedModel, newModel);
+						}
+						
+						// Update the UI to reflect the new model
+						const modelButton = document.getElementById('model-button');
+						if (modelButton) {
+							modelButton.classList.remove('skeleton-icon', 'body-icon', 'organs-icon');
+							modelButton.classList.add(`${newModel}-icon`);
+						}
+						
+						// Update the model palette if available
+						if (paletteModel && paletteModel.updateActiveModel) {
+							paletteModel.updateActiveModel(newModel);
+						}
+					}
+				});
 			}
 
 			if (msg.action == "modeChange") {
@@ -872,6 +954,14 @@ define([
 					updateModeText();
 				}
 
+				// Update body parts data if provided
+				if (msg.content.bodyPartsData) {
+					bodyParts = msg.content.bodyPartsData;
+				} else {
+					// Fallback: update body parts for current model
+					updateBodyPartsForModel(msg.content.modelName || currentModelName);
+				}
+
 				shownParts = msg.content.shownParts || [];
 				tourIndex = msg.content.currentIndex || 0;
 
@@ -881,17 +971,57 @@ define([
 					tourTimer = null;
 				}
 
-				// Start syncing with host
-				if (bodyParts[tourIndex]) {
-					const part = bodyParts[tourIndex];
-					syncTourStep(
-						tourIndex,
-						part.name,
-						shownParts,
-						part.position,
-						part.frontView,
-						part.sideView
-					);
+				// Function to start tour sync once model is ready
+				const startTourSync = () => {
+					if (bodyParts[tourIndex]) {
+						const part = bodyParts[tourIndex];
+						syncTourStep(
+							tourIndex,
+							part.name,
+							shownParts,
+							part.position,
+							part.frontView,
+							part.sideView
+						);
+					}
+				};
+
+				// Check if we need to switch models
+				if (msg.content.modelName && msg.content.modelName !== currentModelName) {
+					// Remove current model first
+					removeCurrentModel();
+
+					const originalCallback = availableModels[msg.content.modelName].callback;
+
+					// Temporarily override the model load callback
+					const modelConfig = availableModels[msg.content.modelName];
+					loadModel({
+						...modelConfig,
+						callback: (loadedModel) => {
+							currentModel = loadedModel;
+							applyModelColors(loadedModel, msg.content.modelName);
+
+							currentModelName = msg.content.modelName;
+
+							const modelButton = document.getElementById('model-button');
+							modelButton.classList.remove('skeleton-icon', 'body-icon', 'organs-icon');
+							modelButton.classList.add(`${msg.content.modelName}-icon`);
+
+							startTourSync();
+							
+							if (originalCallback) {
+								originalCallback(loadedModel);
+							}
+						}
+					});
+
+					// Restore paint data for new model
+					if (modelPaintData[msg.content.modelName] && modelPaintData[msg.content.modelName].length > 0) {
+						partsColored = [...modelPaintData[msg.content.modelName]];
+					}
+				} else {
+					// Same model, start tour sync immediately
+					startTourSync();
 				}
 			}
 
@@ -995,15 +1125,14 @@ define([
 				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
-						action: "modeChange",
-						content: currentModeIndex,
-					});
-
-					// Send current model info
-					presence.sendMessage(presence.getSharedInfo().id, {
-						user: presence.getUserInfo(),
 						action: "switchModel",
 						content: currentModelName,
+					});
+
+					presence.sendMessage(presence.getSharedInfo().id, {
+						user: presence.getUserInfo(),
+						action: "modeChange",
+						content: currentModeIndex,
 					});
 
 					// Send initialization data
@@ -1016,12 +1145,15 @@ define([
 			}
 
 			if (isDoctorActive) {
-				// Send doctor mode start message - with safety check
 				if (presence && presence.getSharedInfo() && presence.getSharedInfo().id) {
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 				}
 				ifDoctorHost = true;
@@ -1041,6 +1173,40 @@ define([
 				hideLeaderboard();
 			}
 
+			const buttonsToTranslate = [
+				{ id: 'network-button', key: 'Network' },
+				{ id: 'stop-button', key: 'Stop' },
+				{ id: 'fullscreen-button', key: 'Fullscreen' },
+				{ id: "color-button-fill", key: 'FillColor' },
+				{ id: 'help-button', key: 'Tutorial' },
+				{ id: 'settings-button', key: 'Settings' },
+				{ id: 'paint-button', key: 'Paint' },
+				{ id: 'tour-button', key: 'Tour' },
+				{ id: 'doctor-button', key: 'Doctor' },
+				{ id: 'model-body-button', key: 'BodyModel' },
+				{ id: 'model-skeleton-button', key: 'SkeletonModel' },
+				{ id: 'model-organs-button', key: 'OrgansModel' },
+				{ id: 'zoom-in-button', key: 'ZoomIn' },
+				{ id: 'zoom-out-button', key: 'ZoomOut' },
+				{ id: 'zoom-to-button', key: 'ZoomTo' },
+				{ id: 'zoom-equal-button', key: 'ZoomEqual' },
+				{ id: 'zoom-button', key: 'ZoomPalette' },
+				{ id: 'image-button', key: 'SaveAsImage' },
+				{ id: 'model-button', key: 'SelectModel' }
+			];
+
+			buttonsToTranslate.forEach(button => {
+				const element = document.getElementById(button.id);
+				if (element) {
+					const translatedText = l10n.get(button.key);
+					if (translatedText) {
+						element.title = translatedText;
+						if (button.id === 'doctor-button' || button.id === 'tour-button' || button.id === 'paint-button') {
+							document.getElementById(button.id+'-label').textContent = translatedText;
+						}
+					}
+				}
+			});
 			const modeKey = modes[currentModeIndex];
 
 			// Check if modeTextElem exists before setting textContent
@@ -1053,6 +1219,8 @@ define([
 			isTourActive = currentModeIndex === 1;
 			isDoctorActive = currentModeIndex === 2;
 
+			window.currentModeIndex = currentModeIndex;
+			
 			// If switching to Tour mode, start it
 			if (isTourActive) {
 				startTourMode();
@@ -1066,7 +1234,11 @@ define([
 					presence.sendMessage(presence.getSharedInfo().id, {
 						user: presence.getUserInfo(),
 						action: "startDoctor",
-						content: players,
+						content: {
+							players: players,
+							modelName: currentModelName,
+							bodyPartsData: bodyParts
+						},
 					});
 					ifDoctorHost = true;
 					startDoctorModePresence();
@@ -1118,6 +1290,8 @@ define([
 		
 		function startTourMode() {
 			shownParts = []; // Reset shown parts
+			updateBodyPartsForModel(currentModelName);
+
 			tourIndex = getRandomUnshownPartIndex();
 			previousMesh = null;
 
@@ -1133,7 +1307,9 @@ define([
 					action: "tourStart",
 					content: {
 						shownParts: shownParts,
-						currentIndex: tourIndex
+						currentIndex: tourIndex,
+						modelName: currentModelName, 
+						bodyPartsData: bodyParts 
 					},
 				});
 			}
@@ -1579,7 +1755,6 @@ define([
 				// Set initial body parts based on current model
 				updateBodyPartsForModel(currentModelName);
 
-				console.log("All body parts data loaded successfully");
 			} catch (error) {
 				console.error("Error loading body parts data:", error);
 			}
@@ -1615,7 +1790,7 @@ define([
 					document.body.removeChild(modal);
 					numModals--;
 				}
-			}, 1500);
+			}, 3000);
 		}
 
 		const redSliderFill = document.getElementById("red-slider-fill");
@@ -1698,11 +1873,14 @@ define([
 				fillColor;
 			updateSlidersFill(selectedColorFill);
 		});
-		const renderer = new THREE.WebGLRenderer({
+
+		renderer = new THREE.WebGLRenderer({
 			antialias: true,
 			alpha: true,
-			logarithmicDepthBuffer: true
+			logarithmicDepthBuffer: true,
+			preserveDrawingBuffer: true
 		});
+
 		renderer.shadowMap.enabled = true;
 		renderer.setSize(window.innerWidth, window.innerHeight);
 		const canvas = document.getElementById("canvas");
@@ -1965,7 +2143,6 @@ define([
 				});
 			} else {
 				object.material = object.userData.originalMaterial.clone();
-				console.log("Restored original material");
 			}
 
 			if (presence) {
@@ -2075,7 +2252,7 @@ define([
 					// Show reminder if needed
 					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
 						const currentPart = bodyParts[presenceCorrectIndex];
-						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+						showModal(l10n.get("RemindYou", {name: l10n.get(currentPart.name)}));
 					}
 
 					// Wrong answer - color red temporarily
@@ -2119,17 +2296,14 @@ define([
 					// Show "Correct!" modal first
 					showModal(l10n.get("Correct"));
 
-					// Increment the body part index
-					currentBodyPartIndex++;
-
-					// After delay, show next part or game over
+					// After delay, get next random part
 					setTimeout(() => {
-						if (currentBodyPartIndex < bodyParts.length) {
-							showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
-						} else {
-							showModal(l10n.get("GameOver"));
-							stopDoctorMode();
-						}
+						// Get next random part index
+						currentBodyPartIndex = getRandomUnshownPartIndex();
+						shownParts.push(currentBodyPartIndex);
+
+						// Show next question
+						showModal(l10n.get("FindThe", { name: l10n.get(bodyParts[currentBodyPartIndex].name) }));
 					}, 2000);
 				} else {
 					// Wrong answer - increment failed attempts
@@ -2138,7 +2312,7 @@ define([
 					// Show reminder if needed
 					if (failedAttempts % REMINDER_AFTER_ATTEMPTS === 0) {
 						const currentPart = bodyParts[currentBodyPartIndex];
-						showModal(l10n.get("RemindYou") + " " + l10n.get(currentPart.name));
+						showModal(l10n.get("RemindYou", {name: l10n.get(currentPart.name)}))
 					}
 
 					// Wrong answer - color red temporarily
