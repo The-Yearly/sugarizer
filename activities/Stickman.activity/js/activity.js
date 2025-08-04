@@ -265,13 +265,65 @@ define([
 				var language = environment.user ? environment.user.language : defaultLanguage;
 				l10n.init(language);
 
+				if (environment.sharedId) {
+					console.log("Shared instance");
+					isShared = true;
+					presence = activity.getPresenceObject(function (error, network) {
+						if (error) {
+							console.log("Error joining shared activity:", error);
+							return;
+						}
+						console.log("Joined shared activity");
+
+						// Set up handlers immediately - like HumanBody
+						network.onDataReceived(onNetworkDataReceived);
+						network.onSharedActivityUserChanged(onNetworkUserChanged);
+
+						// Improved host status detection
+						try {
+							const sharedInfo = network.getSharedInfo();
+							const userInfo = network.getUserInfo();
+
+							console.log("Shared info:", sharedInfo);
+							console.log("User info:", userInfo);
+
+							// More robust host detection
+							if (sharedInfo && userInfo && sharedInfo.owner && userInfo.networkId) {
+								isHost = userInfo.networkId === sharedInfo.owner;
+							} else {
+								// If we can't determine host status, assume not host
+								isHost = false;
+							}
+
+							console.log("Host status:", isHost);
+
+						} catch (e) {
+							console.log("Error checking host status:", e);
+							isHost = false;
+							console.log("Fallback host status:", isHost);
+						}
+					});
+				}
+
 				// Load from datastore
 				if (!environment.objectId) {
 					console.log("New instance");
-					createInitialStickman();
-					updateTimeline();
-					updateRemoveButtonState();
-					render();
+
+					// Only create initial stickman if NOT in shared mode or if we're the host
+					if (!environment.sharedId) {
+						createInitialStickman();
+						updateTimeline();
+						updateRemoveButtonState();
+						render();
+					} else {
+						// In shared mode, non-host users start with empty canvas
+						// and wait for data from host
+						console.log("Shared mode - waiting for host data");
+						stickmen = [];
+						updateTimeline();
+						updateRemoveButtonState();
+						render();
+					}
 				} else {
 					// load saved data
 					activity.getDatastoreObject().loadAsText(function (error, metadata, data) {
@@ -291,7 +343,7 @@ define([
 								stickmen = [];
 								
 								Object.keys(baseFrames).forEach(stickmanIdStr => {
-									const stickmanId = parseInt(stickmanIdStr);
+									const stickmanId = stickmanIdStr; // Keep as string for networkId format
 									const frameIndex = currentFrameIndices[stickmanId] || 0;
 									const stickman = reconstructFrameFromDeltas(stickmanId, frameIndex);
 									if (stickman) {
@@ -316,23 +368,9 @@ define([
 							console.log("No instance found, creating new instance");
 							createInitialStickman();
 							updateTimeline();
-							updateRemoveButtonState(); 
+							updateRemoveButtonState();
 							render();
 						}
-					});
-				}
-
-				if (environment.sharedId) {
-					console.log("Shared instance");
-					isShared = true;
-					presence = activity.getPresenceObject(function(error, network) {
-						if (error) {
-							console.log("Error joining shared activity");
-							return;
-						}
-						console.log("Joined shared activity");
-						network.onDataReceived(onNetworkDataReceived);
-						network.onSharedActivityUserChanged(onNetworkUserChanged);
 					});
 				}
 			});
@@ -455,21 +493,65 @@ define([
 				undefined
 			);
 
-			palette.addEventListener('shared', function() {
+			palette.addEventListener('shared', function () {
 				palette.popDown();
-				console.log("Want to share");
-				presence = activity.getPresenceObject(function(error, network) {
+				presence = activity.getPresenceObject(function (error, network) {
 					if (error) {
-						console.log("Sharing error");
+						console.log("Sharing error:", error);
 						return;
 					}
-					network.createSharedActivity('org.sugarlabs.Stickman', function(groupId) {
+
+					network.createSharedActivity('org.sugarlabs.Stickman', function (groupId) {
 						console.log("Activity shared");
+						isShared = true;
 						isHost = true;
-						isShared = true; // Set shared mode for host as well
+
+						// Initialize network handlers
+						network.onDataReceived(onNetworkDataReceived);
+						network.onSharedActivityUserChanged(onNetworkUserChanged);
+
+						// Create initial stickman for host if none exists
+						if (stickmen.length === 0) {
+							createInitialStickman();
+							updateTimeline();
+							updateRemoveButtonState();
+						}
+
+						// Update existing stickman IDs to use network format
+						if (stickmen.length > 0) {
+							stickmen.forEach(stickman => {
+								if (typeof stickman.id === 'number') {
+									const oldId = stickman.id;
+									const newId = `${currentenv.user.networkId}_${Date.now()}`;
+
+									// Update stickman ID
+									stickman.id = newId;
+
+									// Update all related data structures
+									if (baseFrames[oldId]) {
+										baseFrames[newId] = baseFrames[oldId];
+										delete baseFrames[oldId];
+									}
+									if (deltaFrames[oldId]) {
+										deltaFrames[newId] = deltaFrames[oldId];
+										delete deltaFrames[oldId];
+									}
+									if (currentFrameIndices[oldId] !== undefined) {
+										currentFrameIndices[newId] = currentFrameIndices[oldId];
+										delete currentFrameIndices[oldId];
+									}
+									if (stickmanUserColors[oldId]) {
+										stickmanUserColors[newId] = stickmanUserColors[oldId];
+										delete stickmanUserColors[oldId];
+									}
+								}
+							});
+							updateTimeline();
+						}
+
+						// Send initial data to any waiting users
+						setTimeout(sendAllStickmen, 500);
 					});
-					network.onDataReceived(onNetworkDataReceived);
-					network.onSharedActivityUserChanged(onNetworkUserChanged);
 				});
 			});
 		}
@@ -477,17 +559,156 @@ define([
 		// NETWORK CALLBACKS
 
 		var onNetworkDataReceived = function (msg) {
+			console.log("Raw message received:", msg);
+
 			if (presence.getUserInfo().networkId === msg.user.networkId) {
+				console.log("Ignoring own message");
 				return;
 			}
-			console.log("Network data received:", msg);
-			// TODO: Handle different message types
+
+			console.log("Processing message from:", msg.user.networkId);
+
+			if (msg.action === 'new_stickman') {
+				console.log("Received new stickman with ID", msg.content.stickman.id);
+				processIncomingStickman(msg.content.stickman, msg.content.stickman.id, msg.content.color);
+				render();
+			}
+
+			if (msg.action === 'all_stickmen') {
+				console.log("Receiving all stickmen, count:", msg.content.length);
+				msg.content.forEach(stickman => {
+					console.log("Processing stickman from all_stickmen:", stickman.id);
+					processIncomingStickman(stickman, stickman.id, stickman.color);
+				});
+				render();
+			}
+
+			if (msg.action === 'stickman_update') {
+				console.log("Receiving stickman update for", msg.content.stickmanId);
+				updateStickmanFromNetwork(msg.content);
+				render();
+			}
 		};
 
 		var onNetworkUserChanged = function (msg) {
-			console.log("User " + msg.user.name + " " + (msg.move == 1 ? "join" : "leave"));
-			// TODO: Handle user join/leave events
+			if (!msg || !msg.user) return;
+
+			console.log("User " + msg.user.name + " " + (msg.move == 1 ? "joined" : "left"));
+
+			if (isHost && msg.move == 1) {
+				// Host sends all stickmen to new user
+				console.log("Host sending all stickmen to new user");
+				setTimeout(sendAllStickmen, 500); // Small delay to ensure connection is ready
+			}
 		};
+
+		function sendAllStickmen() {
+			if (!isHost || !presence) {
+				console.log("Not host or presence not available");
+				return;
+			}
+
+			try {
+				const stickmenData = stickmen.map(stickman => {
+					const id = stickman.id;
+					return {
+						id: id,
+						joints: stickman.joints,
+						baseFrame: baseFrames[id],
+						deltaFrames: deltaFrames[id],
+						color: stickmanUserColors[id],
+						currentFrameIndex: currentFrameIndices[id] || 0
+					};
+				});
+
+				console.log("Sending all stickmen data:", stickmenData);
+
+				// Use HumanBody style message sending
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: "all_stickmen", // Note: using 'action' instead of 'type'
+					content: stickmenData
+				});
+			} catch (error) {
+				console.log("Error sending stickmen data:", error);
+				setTimeout(sendAllStickmen, 1000);
+			}
+		}
+
+		function broadcastStickman(stickmanData) {
+			if (!isHost || !presence) {
+				console.log("Not host or presence not available");
+				return;
+			}
+
+			try {
+				console.log("Broadcasting new stickman:", stickmanData);
+				presence.sendMessage({
+					type: 'new_stickman',
+					stickman: stickmanData.stickman,
+					color: stickmanData.color
+				});
+			} catch (error) {
+				console.log("Error broadcasting stickman:", error);
+				setTimeout(() => broadcastStickman(stickmanData), 1000);
+			}
+		}
+
+		function processIncomingStickman(stickmanData, newId, color) {
+			console.log("Processing incoming stickman - ID:", newId, "Current stickmen IDs:", stickmen.map(s => s.id));
+
+			// Check if stickman already exists
+			if (stickmen.some(s => s.id === newId)) {
+				console.log("Stickman already exists:", newId);
+				return;
+			}
+
+			console.log("Adding new stickman with data:", stickmanData);
+			const newStickman = {
+				id: newId,
+				joints: deepClone(stickmanData.joints)
+			};
+
+			stickmen.push(newStickman);
+			baseFrames[newId] = deepClone(stickmanData.baseFrame || stickmanData.joints);
+			deltaFrames[newId] = deepClone(stickmanData.deltaFrames || []);
+			currentFrameIndices[newId] = stickmanData.currentFrameIndex || 0;
+			stickmanUserColors[newId] = color;
+
+			console.log("Stickman added successfully. Total stickmen:", stickmen.length);
+			console.log("New stickmen array:", stickmen.map(s => ({ id: s.id, joints: s.joints.length })));
+
+			updateMiddleJoint(stickmen.length - 1);
+			updateTimeline();
+			updateRemoveButtonState();
+
+			return {
+				stickman: newStickman,
+				color: color
+			};
+		}
+
+		function updateStickmanFromNetwork(data) {
+			const stickmanId = data.stickmanId;
+			console.log("Updating stickman from network:", stickmanId);
+
+			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
+			if (stickmanIndex >= 0) {
+				baseFrames[stickmanId] = deepClone(data.baseFrame);
+				deltaFrames[stickmanId] = deepClone(data.deltaFrames);
+				currentFrameIndices[stickmanId] = data.currentFrameIndex;
+
+				// Reconstruct current frame
+				const frame = reconstructFrameFromDeltas(stickmanId, data.currentFrameIndex);
+				if (frame) {
+					stickmen[stickmanIndex] = frame;
+					updateMiddleJoint(stickmanIndex);
+					updateTimeline();
+				}
+			} else {
+				console.log("Stickman not found for update:", stickmanId);
+			}
+		}
 
 		// STICKMAN CREATION & MANAGEMENT
 
@@ -517,95 +738,119 @@ define([
 			const centerX = canvas.width / 2;
 			const centerY = canvas.height / 2 - 20;
 
-			const initialStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
-			
+			// Always use unique ID format in shared mode
+			let stickmanId;
+			if (isShared && currentenv && currentenv.user) {
+				stickmanId = `${currentenv.user.networkId}_${Date.now()}`;
+			} else {
+				stickmanId = nextStickmanId++;
+			}
+
+			const initialStickman = createStickmanJoints(centerX, centerY, stickmanId);
+
 			// Ensure the initial stickman has proper joint distances
 			enforceJointDistances(initialStickman.joints);
-			
+
 			stickmen = [initialStickman];
-			
+
 			// Initialize base frame for this stickman
 			baseFrames[initialStickman.id] = deepClone(initialStickman.joints);
 			deltaFrames[initialStickman.id] = [];
 			currentFrameIndices[initialStickman.id] = 0;
-			
-			// Associate this stickman with current user's color (for potential sharing)
+
+			// Associate this stickman with current user's color
 			if (currentenv && currentenv.user && currentenv.user.colorvalue) {
 				stickmanUserColors[initialStickman.id] = currentenv.user.colorvalue;
 			}
-			
-			neckManuallyMoved = false; // Reset flag for new stickman
+
+			neckManuallyMoved = false;
 			updateMiddleJoint(0);
-			// by default first stickman is selected
 			selectedStickmanIndex = 0;
-			updateRemoveButtonState(); 
+			updateRemoveButtonState();
 		}
 
 		function addNewStickman() {
 			// Calculate safe boundaries based on the improved stickman proportions
-			const stickmanHeight = 160; // Head to feet distance (65 + 95)
-			const stickmanWidth = 80;   // Hand to hand span (40 + 40)
-			const margin = 30; 
-			
+			const stickmanHeight = 160;
+			const stickmanWidth = 80;
+			const margin = 30;
+
 			const minX = stickmanWidth / 2 + margin;
 			const maxX = canvas.width - stickmanWidth / 2 - margin;
-			const minY = 65 + margin; // Head distance above center
-			const maxY = canvas.height - 95 - margin; // Feet distance below center
+			const minY = 65 + margin;
+			const maxY = canvas.height - 95 - margin;
 
-			// Ensure valid bounds exist
 			if (maxX <= minX || maxY <= minY) {
 				console.warn("Canvas too small for new stickman");
 				return;
 			}
-			
-			// Try to find a position that doesn't overlap with existing stickmen
+
 			let centerX, centerY;
 			let attempts = 0;
 			const maxAttempts = 20;
-			const minDistance = 100; // Minimum distance between stickman centers
-			
+			const minDistance = 100;
+
 			do {
 				centerX = Math.random() * (maxX - minX) + minX;
 				centerY = Math.random() * (maxY - minY) + minY;
-				
-				// Check if position is too close to existing stickmen
+
 				const isTooClose = stickmen.some(stickman => {
-					const existingCenter = stickman.joints[11]; // middle joint
+					const existingCenter = stickman.joints[11];
 					const distance = Math.sqrt(
-						Math.pow(centerX - existingCenter.x, 2) + 
+						Math.pow(centerX - existingCenter.x, 2) +
 						Math.pow(centerY - existingCenter.y, 2)
 					);
 					return distance < minDistance;
 				});
-				
+
 				if (!isTooClose) break;
 				attempts++;
 			} while (attempts < maxAttempts);
 
-			const newStickman = createStickmanJoints(centerX, centerY, nextStickmanId++);
-			
-			// Ensure proper joint distances
-			enforceJointDistances(newStickman.joints);
-			
-			stickmen.push(newStickman);
-			updateMiddleJoint(stickmen.length - 1);
-
-			// Initialize base and delta frames for this stickman
-			baseFrames[newStickman.id] = deepClone(newStickman.joints);
-			deltaFrames[newStickman.id] = [];
-			currentFrameIndices[newStickman.id] = 0;
-			
-			// Associate this stickman with current user's color (for potential sharing)
-			if (currentenv && currentenv.user && currentenv.user.colorvalue) {
-				stickmanUserColors[newStickman.id] = currentenv.user.colorvalue;
+			// Always use unique ID format
+			let newId;
+			if (currentenv && currentenv.user) {
+				newId = `${currentenv.user.networkId}_${Date.now()}`;
+			} else {
+				newId = nextStickmanId++;
 			}
-			
+
+			const newStickman = createStickmanJoints(centerX, centerY, newId);
+			enforceJointDistances(newStickman.joints);
+			stickmen.push(newStickman);
+
+			// Initialize frames
+			baseFrames[newId] = deepClone(newStickman.joints);
+			deltaFrames[newId] = [];
+			currentFrameIndices[newId] = 0;
+
+			const userColor = currentenv.user.colorvalue;
+			stickmanUserColors[newId] = userColor;
+
+			// Always broadcast in shared mode
+			if (isShared && presence) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: 'new_stickman',
+					content: {
+						stickman: {
+							id: newId,
+							joints: newStickman.joints,
+							baseFrame: baseFrames[newId],
+							deltaFrames: deltaFrames[newId],
+							currentFrameIndex: currentFrameIndices[newId]
+						},
+						color: userColor
+					}
+				});
+			}
+
 			selectedStickmanIndex = stickmen.length - 1;
 			neckManuallyMoved = false;
 
 			updateTimeline();
-			updateRemoveButtonState(); 
-			console.log(`Added new stickman. Total: ${stickmen.length}`);
+			updateRemoveButtonState();
+			console.log(`Added new stickman with ID: ${newId}. Total: ${stickmen.length}`);
 		}
 
 		function confirmationModal(stickmanId, stickmanToRemove) {
@@ -909,8 +1154,7 @@ define([
 
 		function saveCurrentFrame() {
 			// If no stickman is selected or being manipulated, save all stickmen Otherwise, save only the selected stickman
-			const targetStickmanIndices = selectedStickmanIndex >= 0 ? 
-				[selectedStickmanIndex] : stickmen.map((_, index) => index);
+			const targetStickmanIndices = selectedStickmanIndex >= 0 ? [selectedStickmanIndex] : stickmen.map((_, index) => index);
 				
 			targetStickmanIndices.forEach(index => {
 				const stickman = stickmen[index];
@@ -988,6 +1232,32 @@ define([
 					}
 				}
 			});
+
+			// Sync updates in shared mode
+			if (isShared && selectedStickmanIndex >= 0) {
+				const stickman = stickmen[selectedStickmanIndex];
+				const stickmanId = stickman.id;
+
+				if (isHost) {
+					// Host broadcasts updates to all
+					presence.sendMessage({
+						type: 'stickman_update',
+						stickmanId: stickmanId,
+						baseFrame: baseFrames[stickmanId],
+						deltaFrames: deltaFrames[stickmanId],
+						currentFrameIndex: currentFrameIndices[stickmanId]
+					});
+				} else {
+					// Non-hosts send updates only to host
+					presence.sendMessage({
+						type: 'stickman_update_request',
+						stickmanId: stickmanId,
+						baseFrame: baseFrames[stickmanId],
+						deltaFrames: deltaFrames[stickmanId],
+						currentFrameIndex: currentFrameIndices[stickmanId]
+					});
+				}
+			}
 		}
 
 		// TIMELINE FUNCTIONS
