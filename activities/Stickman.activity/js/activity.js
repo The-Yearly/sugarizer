@@ -603,6 +603,12 @@ define([
 				updateStickmanFromNetwork(msg.content);
 				render();
 			}
+
+			if (msg.action === 'stickman_removal') {
+				console.log("Receiving stickman removal for", msg.content.stickmanId);
+				processStickmanRemoval(msg.content);
+				render();
+			}
 		};
 
 		var onNetworkUserChanged = function (msg) {
@@ -638,10 +644,10 @@ define([
 
 				console.log("Sending all stickmen data:", stickmenData);
 
-				// Use HumanBody style message sending
+				// Send even if empty array to sync removal state
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
-					action: "all_stickmen", // Note: using 'action' instead of 'type'
+					action: "all_stickmen",
 					content: stickmenData
 				});
 			} catch (error) {
@@ -714,8 +720,20 @@ define([
 			console.log("Processing incoming stickman - ID:", newId, "Current stickmen IDs:", stickmen.map(s => s.id));
 
 			// Check if stickman already exists
-			if (stickmen.some(s => s.id === newId)) {
-				console.log("Stickman already exists:", newId);
+			const existingIndex = stickmen.findIndex(s => s.id === newId);
+			if (existingIndex !== -1) {
+				console.log("Stickman already exists, updating:", newId);
+
+				// Update existing stickman instead of ignoring
+				stickmen[existingIndex].joints = deepClone(stickmanData.joints);
+				baseFrames[newId] = deepClone(stickmanData.baseFrame || stickmanData.joints);
+				deltaFrames[newId] = deepClone(stickmanData.deltaFrames || []);
+				currentFrameIndices[newId] = stickmanData.currentFrameIndex || 0;
+				stickmanUserColors[newId] = color;
+
+				updateMiddleJoint(existingIndex);
+				updateTimeline();
+				updateRemoveButtonState();
 				return;
 			}
 
@@ -849,6 +867,104 @@ define([
 				}
 			} else {
 				console.log("Stickman not found for update:", stickmanId);
+			}
+		}
+
+		function broadcastStickmanRemoval(stickmanId) {
+			if (!isShared || !presence) {
+				console.log("Not in shared mode or presence not available");
+				return;
+			}
+
+			try {
+				// Only broadcast removal of own stickmen
+				const currentUser = presence.getUserInfo();
+				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+					console.log("Cannot broadcast removal of non-owned stickman");
+					return;
+				}
+
+				const message = {
+					user: currentUser,
+					action: 'stickman_removal',
+					content: {
+						stickmanId: stickmanId,
+						timestamp: Date.now()
+					}
+				};
+
+				console.log("Broadcasting stickman removal:", stickmanId);
+				presence.sendMessage(presence.getSharedInfo().id, message);
+			} catch (error) {
+				console.log("Error broadcasting stickman removal:", error);
+			}
+		}
+
+		function processStickmanRemoval(removalData) {
+			const { stickmanId, timestamp } = removalData;
+			console.log("Processing stickman removal:", stickmanId);
+
+			// Find and remove the stickman
+			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
+			if (stickmanIndex === -1) {
+				console.log("Stickman not found for removal:", stickmanId);
+				return;
+			}
+
+			console.log("Removing stickman:", stickmanId, "at index:", stickmanIndex);
+
+			// Remove from current stickmen array
+			stickmen.splice(stickmanIndex, 1);
+
+			// Remove stickman data
+			delete baseFrames[stickmanId];
+			delete deltaFrames[stickmanId];
+			delete currentFrameIndices[stickmanId];
+			delete stickmanUserColors[stickmanId];
+
+			// Adjust selected stickman index if needed
+			if (selectedStickmanIndex === stickmanIndex) {
+				selectedJoint = null;
+				selectedStickmanIndex = stickmen.length > 0 ? 0 : -1;
+			} else if (selectedStickmanIndex > stickmanIndex) {
+				selectedStickmanIndex--;
+			}
+
+			console.log("Stickman removed. Total remaining:", stickmen.length);
+
+			updateTimeline();
+			updateRemoveButtonState();
+
+			// If no stickmen remain for current user, create a new one
+			if (stickmen.length === 0) {
+				console.log("No stickmen remaining, creating new one");
+				createInitialStickman();
+				updateTimeline();
+				updateRemoveButtonState();
+			}
+		}
+
+		function updateRemoveButtonState() {
+			const minusButton = document.getElementById('minus-button');
+
+			// Count only owned stickmen in shared mode
+			let ownedStickmenCount = stickmen.length;
+
+			if (isShared && presence) {
+				const currentUser = presence.getUserInfo();
+				if (currentUser) {
+					ownedStickmenCount = stickmen.filter(stickman =>
+						stickman.id.toString().startsWith(currentUser.networkId)
+					).length;
+				}
+			}
+
+			if (ownedStickmenCount <= 1) {
+				minusButton.disabled = true;
+				minusButton.title = l10n.get("CannotRemoveLastStickman");
+			} else {
+				minusButton.disabled = false;
+				minusButton.title = l10n.get("RemoveStickmanTooltip");
 			}
 		}
 
@@ -1043,7 +1159,12 @@ define([
 
 				if (stickmen.length > 1) {
 					const stickmanId = stickmen[stickmanToRemove].id;
-					
+
+					// Broadcast removal in shared mode BEFORE removing locally
+					if (isShared && presence) {
+						broadcastStickmanRemoval(stickmanId);
+					}
+
 					// Remove from current stickmen array
 					stickmen.splice(stickmanToRemove, 1);
 
@@ -1051,6 +1172,7 @@ define([
 					delete baseFrames[stickmanId];
 					delete deltaFrames[stickmanId];
 					delete currentFrameIndices[stickmanId];
+					delete stickmanUserColors[stickmanId];
 
 					// Adjust selected stickman index if needed
 					if (selectedStickmanIndex === stickmanToRemove) {
@@ -2199,6 +2321,16 @@ define([
 
 		function render() {
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			// Handle empty canvas state
+			if (stickmen.length === 0) {
+				ctx.fillStyle = '#888888';
+				ctx.font = '20px Arial';
+				ctx.textAlign = 'center';
+				ctx.fillText('Waiting for stickmen...', canvas.width / 2, canvas.height / 2);
+				requestAnimationFrame(render);
+				return;
+			}
 
 			// Draw onion skin of previous frame - only for selected stickman
 			// do not show during playback
