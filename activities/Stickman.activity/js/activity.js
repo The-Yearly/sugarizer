@@ -45,6 +45,9 @@ define([
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false; 
 
+		let lastMovementBroadcast = 0;
+		const MOVEMENT_BROADCAST_THROTTLE = 50;
+
 		// PRESENCE VARIABLES
 		let presence = null;
 		let isHost = false;
@@ -588,6 +591,18 @@ define([
 				updateStickmanFromNetwork(msg.content);
 				render();
 			}
+
+			if (msg.action === 'stickman_movement') {
+				console.log("Receiving real-time movement for", msg.content.stickmanId);
+				processStickmanMovement(msg.content);
+				render();
+			}
+
+			if (msg.action === 'stickman_final_position') {
+				console.log("Receiving final position for", msg.content.stickmanId);
+				updateStickmanFromNetwork(msg.content);
+				render();
+			}
 		};
 
 		var onNetworkUserChanged = function (msg) {
@@ -654,6 +669,47 @@ define([
 			}
 		}
 
+		function broadcastStickmanMovement(stickmanIndex, movementType, data = {}) {
+			if (!isShared || !presence || stickmanIndex < 0 || stickmanIndex >= stickmen.length) {
+				return;
+			}
+
+			// Throttle movement broadcasts to prevent spam
+			const now = Date.now();
+			if (now - lastMovementBroadcast < MOVEMENT_BROADCAST_THROTTLE) {
+				return;
+			}
+			lastMovementBroadcast = now;
+
+			try {
+				const stickman = stickmen[stickmanIndex];
+				const stickmanId = stickman.id;
+
+				// Only broadcast movements of own stickmen
+				const currentUser = presence.getUserInfo();
+				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+					return;
+				}
+
+				const message = {
+					user: currentUser,
+					action: 'stickman_movement',
+					content: {
+						stickmanId: stickmanId,
+						movementType: movementType,
+						joints: deepClone(stickman.joints),
+						timestamp: now,
+						...data
+					}
+				};
+
+				console.log("Broadcasting movement:", movementType, "for stickman:", stickmanId);
+				presence.sendMessage(presence.getSharedInfo().id, message);
+			} catch (error) {
+				console.log("Error broadcasting movement:", error);
+			}
+		}
+
 		function processIncomingStickman(stickmanData, newId, color) {
 			console.log("Processing incoming stickman - ID:", newId, "Current stickmen IDs:", stickmen.map(s => s.id));
 
@@ -686,6 +742,92 @@ define([
 				stickman: newStickman,
 				color: color
 			};
+		}
+
+		function processStickmanMovement(movementData) {
+			const { stickmanId, movementType, joints, timestamp } = movementData;
+
+			console.log("Processing movement:", movementType, "for stickman:", stickmanId);
+
+			// Find the stickman to update
+			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
+			if (stickmanIndex === -1) {
+				console.log("Stickman not found for movement update:", stickmanId);
+				return;
+			}
+
+			// Don't process movements of currently selected stickman to avoid conflicts
+			if (stickmanIndex === selectedStickmanIndex && (isDragging || isDraggingWhole || isRotating)) {
+				console.log("Ignoring movement - stickman is currently being manipulated");
+				return;
+			}
+
+			// Update the stickman joints with received data
+			if (joints && joints.length === stickmen[stickmanIndex].joints.length) {
+				stickmen[stickmanIndex].joints = deepClone(joints);
+
+				// Update middle joint
+				updateMiddleJoint(stickmanIndex);
+
+				// Update current frame data to match the movement
+				if (baseFrames[stickmanId] && currentFrameIndices[stickmanId] !== undefined) {
+					const currentFrameIndex = currentFrameIndices[stickmanId];
+
+					if (currentFrameIndex === 0) {
+						// Update base frame
+						baseFrames[stickmanId] = deepClone(joints);
+					} else {
+						// Update delta frame
+						const previousFrame = reconstructFrameFromDeltas(stickmanId, currentFrameIndex - 1);
+						if (previousFrame) {
+							const newDelta = calculateDeltas(joints, previousFrame.joints);
+							if (newDelta && deltaFrames[stickmanId]) {
+								const deltaIndex = currentFrameIndex - 1;
+								if (deltaIndex >= 0 && deltaIndex < deltaFrames[stickmanId].length) {
+									deltaFrames[stickmanId][deltaIndex] = newDelta;
+								}
+							}
+						}
+					}
+				}
+
+				console.log("Updated stickman movement for:", stickmanId);
+			}
+		}
+
+		function broadcastStickmanFinalPosition(stickmanIndex) {
+			if (!isShared || !presence || stickmanIndex < 0 || stickmanIndex >= stickmen.length) {
+				return;
+			}
+
+			try {
+				const stickman = stickmen[stickmanIndex];
+				const stickmanId = stickman.id;
+
+				// Only broadcast final positions of own stickmen
+				const currentUser = presence.getUserInfo();
+				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+					return;
+				}
+
+				const message = {
+					user: currentUser,
+					action: 'stickman_final_position',
+					content: {
+						stickmanId: stickmanId,
+						joints: deepClone(stickman.joints),
+						baseFrame: baseFrames[stickmanId],
+						deltaFrames: deltaFrames[stickmanId],
+						currentFrameIndex: currentFrameIndices[stickmanId],
+						timestamp: Date.now()
+					}
+				};
+
+				console.log("Broadcasting final position for stickman:", stickmanId);
+				presence.sendMessage(presence.getSharedInfo().id, message);
+			} catch (error) {
+				console.log("Error broadcasting final position:", error);
+			}
 		}
 
 		function updateStickmanFromNetwork(data) {
@@ -1114,18 +1256,32 @@ define([
 
 		function addFrame() {
 			// If no stickman is selected, add frame for all stickmen Otherwise, add frame only for selected stickman
-			const targetStickmanIndices = selectedStickmanIndex >= 0 ? 
+			const targetStickmanIndices = selectedStickmanIndex >= 0 ?
 				[selectedStickmanIndex] : stickmen.map((_, index) => index);
-			
-			targetStickmanIndices.forEach(index => {
+
+			// Filter to only include owned stickmen in shared mode
+			const allowedIndices = targetStickmanIndices.filter(index => {
+				if (!isShared || !presence) return true;
+
+				const stickmanId = stickmen[index].id;
+				const currentUser = presence.getUserInfo();
+				return currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+			});
+
+			if (allowedIndices.length === 0) {
+				console.log("No owned stickmen to add frames for");
+				return;
+			}
+
+			allowedIndices.forEach(index => {
 				updateMiddleJoint(index);
-				
+
 				const stickman = stickmen[index];
 				const stickmanId = stickman.id;
-				
+
 				// Ensure current stickman joints have proper distances before processing
 				enforceJointDistances(stickman.joints);
-				
+
 				if (!baseFrames[stickmanId]) {
 					// First frame - create base frame
 					baseFrames[stickmanId] = JSON.parse(JSON.stringify(stickman.joints));
@@ -1135,7 +1291,7 @@ define([
 					// Additional frame - calculate delta from current position
 					const currentFrameIndex = currentFrameIndices[stickmanId];
 					const previousFrame = reconstructFrameFromDeltas(stickmanId, currentFrameIndex);
-					
+
 					if (previousFrame) {
 						const delta = calculateDeltas(stickman.joints, previousFrame.joints);
 						if (delta) {
@@ -1147,7 +1303,7 @@ define([
 					}
 				}
 			});
-			
+
 			neckManuallyMoved = false;
 			updateTimeline();
 		}
@@ -1464,11 +1620,20 @@ define([
 			ctx.lineWidth = 3;
 			ctx.lineCap = 'round';
 			ctx.lineJoin = 'round';
-			
-			// Get user color - either from stickman-specific data or current user
+
+			// Get user color and ownership info
 			let userColor = null;
+			let isOwnStickman = true; // Default to true for non-shared mode
+
 			if (stickmanIndex < stickmen.length) {
 				const stickmanId = stickmen[stickmanIndex].id;
+
+				// Check ownership in shared mode
+				if (isShared && presence) {
+					const currentUser = presence.getUserInfo();
+					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				}
+
 				// First check if we have stored color data for this specific stickman
 				if (stickmanUserColors[stickmanId]) {
 					userColor = stickmanUserColors[stickmanId];
@@ -1477,7 +1642,7 @@ define([
 					userColor = currentenv.user.colorvalue;
 				}
 			}
-			
+
 			drawStickmanSkeleton(ctx, joints, userColor);
 
 			// Show joints for selected stickman, or first stickman if none selected
@@ -1485,14 +1650,16 @@ define([
 				? stickmanIndex === selectedStickmanIndex
 				: stickmanIndex === 0;
 
-			// Only draw joints for the active stickman
-			if (shouldShowJoints) {
+			// Only draw joints if the stickman is owned by current user (or not in shared mode)
+			const canShowJoints = !isShared || isOwnStickman;
+
+			if (shouldShowJoints && canShowJoints) {
 				joints.forEach((joint, index) => {
-					if (index === 11) 
+					if (index === 11)
 						return; // Skip middle joint in regular drawing
 
 					// Different colors for different joint types
-					if (index === 2) { 
+					if (index === 2) {
 						// Hip joint - drag anchor
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
@@ -1505,11 +1672,11 @@ define([
 							ctx.fillStyle = '#ff0000';
 							ctx.strokeStyle = '#cc0000';
 						}
-					} else if (isRotationalJoint(index)) { 
+					} else if (isRotationalJoint(index)) {
 						// Rotational joints
 						ctx.fillStyle = '#ff8800';
 						ctx.strokeStyle = '#cc6600';
-					} else { 
+					} else {
 						// Regular joints
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
@@ -1521,10 +1688,8 @@ define([
 					ctx.fill();
 					ctx.stroke();
 				});
-			}
 
-			// Draw middle joint only for selected stickman 
-			if (shouldShowJoints) {
+				// Draw middle joint only for owned stickmen
 				const middleJoint = joints[11];
 				ctx.fillStyle = '#ff8800';
 				ctx.strokeStyle = '#cc6600';
@@ -1769,9 +1934,18 @@ define([
 			const result = findJointAtPosition(mouseX, mouseY);
 
 			if (isRemovalMode && result) {
-				// Remove the clicked stickman
+				// Remove the clicked stickman - only allow removing own stickmen in shared mode
 				const stickmanToRemove = result.stickmanIndex;
 				const stickmanId = stickmen[stickmanToRemove].id;
+
+				// Check ownership in shared mode
+				if (isShared && presence) {
+					const currentUser = presence.getUserInfo();
+					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+						console.log("Cannot remove other user's stickman");
+						return; // Simply return without any action
+					}
+				}
 
 				confirmationModal(stickmanId, stickmanToRemove);
 				return;
@@ -1784,6 +1958,18 @@ define([
 
 			// Normal selection 
 			if (result) {
+				const stickmanIndex = result.stickmanIndex;
+				const stickmanId = stickmen[stickmanIndex].id;
+
+				// Check ownership in shared mode before allowing interaction
+				if (isShared && presence) {
+					const currentUser = presence.getUserInfo();
+					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+						console.log("Cannot manipulate other user's stickman");
+						return; // Simply return without any action - joints become unclickable
+					}
+				}
+
 				const previousSelectedIndex = selectedStickmanIndex;
 				selectedJoint = result.joint;
 				selectedStickmanIndex = result.stickmanIndex;
@@ -1799,32 +1985,32 @@ define([
 
 				// create frame if none exists at current position for this stickman
 				const stickman = stickmen[selectedStickmanIndex];
-				const stickmanId = stickman.id;
-				if (!baseFrames[stickmanId]) {
+				const stickmanIdSelected = stickman.id;
+				if (!baseFrames[stickmanIdSelected]) {
 					updateMiddleJoint(selectedStickmanIndex);
 					enforceJointDistances(stickman.joints);
-					baseFrames[stickmanId] = deepClone(stickman.joints);
-					deltaFrames[stickmanId] = [];
-					currentFrameIndices[stickmanId] = 0;
+					baseFrames[stickmanIdSelected] = deepClone(stickman.joints);
+					deltaFrames[stickmanIdSelected] = [];
+					currentFrameIndices[stickmanIdSelected] = 0;
 					updateTimeline();
 				}
 
-				if (selectedJointIndex === 2) { 
+				if (selectedJointIndex === 2) {
 					// Hip joint - drag whole stickman
 					isDraggingWhole = true;
-					dragStartPos = { 
-						x: mouseX, 
-						y: mouseY 
+					dragStartPos = {
+						x: mouseX,
+						y: mouseY
 					};
 				} else if (isRotationalJoint(selectedJointIndex)) {
 					// Start rotation for hierarchical joints
 					isRotating = true;
 					rotationPivot = getRotationPivot(selectedStickmanIndex, selectedJointIndex);
 					rotationStartAngle = getAngle(
-						rotationPivot, { 
-							x: mouseX, 
-							y: mouseY 
-						}
+						rotationPivot, {
+						x: mouseX,
+						y: mouseY
+					}
 					);
 				} else {
 					// Regular joint dragging for non-hierarchical joints (head, hands, feet)
@@ -1856,37 +2042,48 @@ define([
 					joint.y = originalJoints[index].y + deltaY;
 				});
 
-				// No need to enforce constraints when moving the whole stickman
+				// Broadcast real-time movement in shared mode
+				if (isShared && presence) {
+					broadcastStickmanMovement(selectedStickmanIndex, 'drag_whole');
+				}
+
 				saveCurrentFrame();
 				updateTimeline();
 			} else if (isRotating && selectedJoint && selectedStickmanIndex >= 0 && rotationPivot) {
 				// Hierarchical rotation
 				const currentAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
 				const angleDiff = currentAngle - rotationStartAngle;
-				
+
 				const selectedJointIndex = stickmen[selectedStickmanIndex].joints.indexOf(selectedJoint);
-				
+
 				// Reset to original positions before applying rotation
 				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
 					joint.x = originalJoints[index].x;
 					joint.y = originalJoints[index].y;
 				});
-				
+
 				// Apply rotation
 				rotateJointHierarchy(selectedStickmanIndex, selectedJointIndex, angleDiff);
-				
+
 				// Enforce joint distance constraints after rotation
 				enforceJointDistances(stickmen[selectedStickmanIndex].joints);
-				
+
 				// Mark neck as manually moved if we're rotating the neck joint
 				if (selectedJointIndex === 1) {
 					neckManuallyMoved = true;
 				}
-				
-				// Only update middle joint position if we're not rotating the neck (body joint)
-				// When rotating the neck around the middle joint, the middle joint should stay fixed
+
+				// Only update middle joint position if we're not rotating the neck
 				if (selectedJointIndex !== 1) {
 					updateMiddleJoint(selectedStickmanIndex);
+				}
+
+				// Broadcast real-time rotation in shared mode
+				if (isShared && presence) {
+					broadcastStickmanMovement(selectedStickmanIndex, 'rotate', {
+						jointIndex: selectedJointIndex,
+						angle: angleDiff
+					});
 				}
 
 				saveCurrentFrame();
@@ -1904,9 +2101,17 @@ define([
 
 				enforceJointDistances(stickmen[selectedStickmanIndex].joints);
 
-				// Update middle joint position only when hips moved (not when body/neck moved)
+				// Update middle joint position only when hips moved
 				if (selectedJointIndex === 2) {
 					updateMiddleJoint(selectedStickmanIndex);
+				}
+
+				// Broadcast real-time joint movement in shared mode
+				if (isShared && presence) {
+					broadcastStickmanMovement(selectedStickmanIndex, 'drag_joint', {
+						jointIndex: selectedJointIndex,
+						position: { x: mouseX, y: mouseY }
+					});
 				}
 
 				saveCurrentFrame();
@@ -1915,17 +2120,24 @@ define([
 		}
 
 		function handleMouseUp() {
+			const wasInteracting = isDragging || isDraggingWhole || isRotating;
+
 			isDragging = false;
 			isDraggingWhole = false;
 			isRotating = false;
 			rotationPivot = null;
-			
+
 			if (selectedStickmanIndex >= 0 && originalJoints.length > 0) {
-				// Always save the current frame - the saveCurrentFrame function handles delta recomputation
+				// Always save the current frame
 				saveCurrentFrame();
 				updateTimeline();
+
+				// Send final position update in shared mode after interaction ends
+				if (wasInteracting && isShared && presence) {
+					broadcastStickmanFinalPosition(selectedStickmanIndex);
+				}
 			}
-			
+
 			originalJoints = [];
 		}
 
