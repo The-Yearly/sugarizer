@@ -93,6 +93,10 @@ body {
 	background-image: url(../icons/stickman-template.svg);
 }
 
+#importJournal-button {
+	background-image: url(../icons/stickman-journal.svg);
+}
+
 #import-button {
 	background-image: url(../icons/video-import.svg);
 }
