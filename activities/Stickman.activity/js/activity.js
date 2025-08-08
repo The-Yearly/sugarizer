@@ -1756,16 +1756,13 @@ define([
 					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
 				}
 
-				// First check if we have stored color data for this specific stickman
-				if (stickmanUserColors[stickmanId]) {
+				// Only get color for OTHER users' stickmen
+				if (!isOwnStickman && stickmanUserColors[stickmanId]) {
 					userColor = stickmanUserColors[stickmanId];
-				} else if (currentenv && currentenv.user && currentenv.user.colorvalue) {
-					// Fallback to current user's color (for own stickmen)
-					userColor = currentenv.user.colorvalue;
 				}
 			}
 
-			drawStickmanSkeleton(ctx, joints, userColor);
+			drawStickmanSkeleton(ctx, joints, userColor,isOwnStickman);
 
 			// Show joints for selected stickman, or first stickman if none selected
 			const shouldShowJoints = (selectedStickmanIndex >= 0)
@@ -1786,14 +1783,9 @@ define([
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
 					} else if (index === 0) {
-						// Head joint - use fill color in shared mode, red in solo mode
-						if (userColor && (isShared || isHost || presence)) {
-							ctx.fillStyle = userColor.fill || '#ff0000';
-							ctx.strokeStyle = userColor.fill || '#ff0000';
-						} else {
-							ctx.fillStyle = '#ff0000';
-							ctx.strokeStyle = '#cc0000';
-						}
+						// Head joint - always red for own stickmen in joint view
+						ctx.fillStyle = '#ff0000';
+						ctx.strokeStyle = '#cc0000';
 					} else if (isRotationalJoint(index)) {
 						// Rotational joints
 						ctx.fillStyle = '#ff8800';
@@ -1823,7 +1815,7 @@ define([
 			}
 		}
 
-		function drawStickmanSkeleton(ctx, joints, userColor = null) {
+		function drawStickmanSkeleton(ctx, joints, userColor = null, isOwnStickman = true) {
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 12;
 			ctx.lineCap = 'round';
@@ -1867,15 +1859,31 @@ define([
 			ctx.lineTo(joints[10].x, joints[10].y);  // right hand
 			ctx.stroke();
 
-			// head circle - use stroke color for fill in shared mode, black in solo mode
+			// head circle - use color only for OTHER users' stickmen
 			ctx.beginPath();
 			ctx.arc(joints[0].x, joints[0].y, 17, 0, Math.PI * 2);
-			if (userColor && (isShared || isHost || presence)) {
+			if (!isOwnStickman && userColor) {
+				// Other user's stickman - use their color
 				ctx.fillStyle = userColor.stroke || '#000000';
 			} else {
+				// Own stickman - always black
 				ctx.fillStyle = '#000000';
 			}
 			ctx.fill();
+
+			if (!isOwnStickman && userColor) {
+				ctx.beginPath();
+				ctx.arc(joints[0].x, joints[0].y, 6, 0, Math.PI * 2);
+				ctx.fillStyle = userColor.fill || userColor.stroke || '#ffffff';
+				ctx.fill();
+
+				// Add a small border to the center dot for better visibility
+				ctx.beginPath();
+				ctx.arc(joints[0].x, joints[0].y, 6, 0, Math.PI * 2);
+				ctx.strokeStyle = '#ffffff';
+				ctx.lineWidth = 1;
+				ctx.stroke();
+			}
 			
 			// Restore context state
 			ctx.strokeStyle = '#000000';
