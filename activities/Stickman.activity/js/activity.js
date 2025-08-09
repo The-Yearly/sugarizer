@@ -1,6 +1,7 @@
 define([
 	"sugar-web/activity/activity",
 	"sugar-web/env",
+	"sugar-web/datastore",
 	"sugar-web/graphics/presencepalette",
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
@@ -9,6 +10,7 @@ define([
 ], function (
 	activity,
 	env,
+	datastore,
 	presencepalette,
 	speedpalette,
 	templatepalette,
@@ -2403,12 +2405,14 @@ define([
 			mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
 			mediaRecorder.onstop = () => {
 				const blob = new Blob(chunks, { type: 'video/webm' });
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = 'stickman-animation.webm';
-				a.click();
-				URL.revokeObjectURL(url);
+				
+				// Convert blob to data URL for journal storage
+				const reader = new FileReader();
+				reader.onload = function() {
+					const dataURL = reader.result;
+					saveVideoToJournal(dataURL);
+				};
+				reader.readAsDataURL(blob);
 			};
 
 			mediaRecorder.start();
@@ -2476,6 +2480,101 @@ define([
 			};
 
 			renderFrame();
+		}
+
+		function saveVideoToJournal(dataURL) {
+			// Get the mimetype from the data URL
+			const mimetype = dataURL.split(';')[0].split(':')[1];
+			const type = mimetype.split('/')[0];
+			
+			// Create metadata for the video entry
+			const metadata = {
+				mimetype: mimetype,
+				title: "Video by " + (currentenv && currentenv.user ? currentenv.user.name : "User"),
+				activity: "org.olpcfrance.MediaViewerActivity",
+				timestamp: new Date().getTime(),
+				creation_time: new Date().getTime(),
+				file_size: 0
+			};
+
+			// Save to datastore
+			datastore.create(metadata, function(error, objectId) {
+				if (error) {
+					console.error("Error saving video to journal:", error);
+					// Fallback to download if journal save fails
+					const blob = dataURLtoBlob(dataURL);
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = 'stickman-animation.webm';
+					a.click();
+					URL.revokeObjectURL(url);
+				} else {
+					showSaveMessage(l10n.get("AnimationSavedToJournal") || "Animation has been successfully saved to your Journal!");
+				}
+			}, dataURL);
+		}
+
+		function dataURLtoBlob(dataURL) {
+			const arr = dataURL.split(',');
+			const mime = arr[0].match(/:(.*?);/)[1];
+			const bstr = atob(arr[1]);
+			let n = bstr.length;
+			const u8arr = new Uint8Array(n);
+			while (n--) {
+				u8arr[n] = bstr.charCodeAt(n);
+			}
+			return new Blob([u8arr], { type: mime });
+		}
+
+		function showSaveMessage(message) {
+			const modalOverlay = document.createElement('div');
+			modalOverlay.className = 'modal-overlay';
+
+			const modal = document.createElement('div');
+			modal.className = 'modal-content';
+
+			const header = document.createElement('div');
+			header.className = 'modal-header';
+
+			const title = document.createElement('h3');
+			title.textContent = l10n.get("ExportSuccess") || "Export Success";
+			title.className = 'modal-title';
+
+			const body = document.createElement('div');
+			body.className = 'modal-body';
+
+			const messageElement = document.createElement('p');
+			messageElement.textContent = message;
+			messageElement.className = 'modal-message';
+
+			const buttonContainer = document.createElement('div');
+			buttonContainer.className = 'modal-button-container';
+			const okButton = document.createElement('button');
+			okButton.className = 'modal-button modal-button-confirm';
+			okButton.innerHTML = `
+				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("Ok") || "Ok"}
+			`;
+
+			okButton.onclick = () => {
+				document.body.removeChild(modalOverlay);
+			};
+
+			modalOverlay.onclick = (e) => {
+				if (e.target === modalOverlay) {
+					document.body.removeChild(modalOverlay);
+				}
+			};
+
+			header.appendChild(title);
+			body.appendChild(messageElement);
+			buttonContainer.appendChild(okButton);
+			body.appendChild(buttonContainer);
+			modal.appendChild(header);
+			modal.appendChild(body);
+			modalOverlay.appendChild(modal);
+
+			document.body.appendChild(modalOverlay);
 		}
 
 		// START APPLICATION
