@@ -602,6 +602,12 @@ define([
 				render();
 			}
 
+			if (msg.action === 'remote_stickman_movement') {
+				console.log("Receiving remote stickman movement for", msg.content.stickmanId);
+				processRemoteStickmanMovement(msg.content);
+				render();
+			}
+
 			if (msg.action === 'stickman_final_position') {
 				console.log("Receiving final position for", msg.content.stickmanId);
 				updateStickmanFromNetwork(msg.content);
@@ -676,6 +682,72 @@ define([
 			} catch (error) {
 				console.log("Error broadcasting stickman:", error);
 				setTimeout(() => broadcastStickman(stickmanData), 1000);
+			}
+		}
+
+		// Allows users to drag remote stickmen (created by other users) across the screen
+		function broadcastRemoteStickmanMovement(stickmanIndex, movementType, data = {}) {
+			if (!isShared || !presence || stickmanIndex < 0 || stickmanIndex >= stickmen.length) {
+				return;
+			}
+
+			// Throttle movement broadcasts to prevent spam
+			const now = Date.now();
+			if (now - lastMovementBroadcast < MOVEMENT_BROADCAST_THROTTLE) {
+				return;
+			}
+			lastMovementBroadcast = now;
+
+			try {
+				const stickman = stickmen[stickmanIndex];
+				const stickmanId = stickman.id;
+
+				const message = {
+					user: presence.getUserInfo(),
+					action: 'remote_stickman_movement',
+					content: {
+						stickmanId: stickmanId,
+						movementType: movementType,
+						joints: deepClone(stickman.joints),
+						timestamp: now,
+						...data
+					}
+				};
+
+				console.log("Broadcasting remote movement:", movementType, "for stickman:", stickmanId);
+				presence.sendMessage(presence.getSharedInfo().id, message);
+			} catch (error) {
+				console.log("Error broadcasting remote movement:", error);
+			}
+		}
+
+		function processRemoteStickmanMovement(movementData) {
+			const { 
+				stickmanId, 
+				movementType, 
+				joints
+			} = movementData;
+
+			console.log("Processing remote movement:", movementType, "for stickman:", stickmanId);
+
+			// Find the stickman to update
+			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
+			if (stickmanIndex === -1) {
+				console.log("Stickman not found for remote movement update:", stickmanId);
+				return;
+			}
+
+			// Don't process movements of currently selected stickman to avoid conflicts
+			if (stickmanIndex === selectedStickmanIndex && (isDragging || isDraggingWhole || isRotating)) {
+				console.log("Ignoring remote movement - stickman is currently being manipulated");
+				return;
+			}
+
+			// Update the stickman joints with received data
+			if (joints && joints.length === stickmen[stickmanIndex].joints.length) {
+				stickmen[stickmanIndex].joints = deepClone(joints);
+				updateMiddleJoint(stickmanIndex);
+				console.log("Updated remote stickman movement for:", stickmanId);
 			}
 		}
 
@@ -1816,6 +1888,16 @@ define([
 				ctx.arc(middleJoint.x, middleJoint.y, 4, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.stroke();
+			} else if (shouldShowJoints && !isOwnStickman) {
+				// For remote stickmen, only show the hip joint
+				const hipJoint = joints[2]; 
+				ctx.fillStyle = '#00ff00'; 
+				ctx.strokeStyle = '#00cc00';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.arc(hipJoint.x, hipJoint.y, 4, 0, Math.PI * 2); // Same size as owned stickmen
+				ctx.fill();
+				ctx.stroke();
 			}
 		}
 
@@ -2094,14 +2176,34 @@ define([
 			if (result) {
 				const stickmanIndex = result.stickmanIndex;
 				const stickmanId = stickmen[stickmanIndex].id;
-
-				// Check ownership in shared mode before allowing interaction
+				
+				// Check ownership in shared mode
+				let isOwnStickman = true;
 				if (isShared && presence) {
 					const currentUser = presence.getUserInfo();
-					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
-						console.log("Cannot manipulate other user's stickman");
-						return; // Simply return without any action - joints become unclickable
-					}
+					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				}
+
+				// For non-owned stickmen, only allow dragging 
+				if (!isOwnStickman) {
+					const selectedJointIndex = stickmen[stickmanIndex].joints.indexOf(result.joint);
+					if (selectedJointIndex !== 2) 
+						return;
+
+					selectedJoint = result.joint;
+					selectedStickmanIndex = result.stickmanIndex;
+					
+					originalJoints = deepClone(stickmen[selectedStickmanIndex].joints);
+					
+					// Start whole stickman drag for remote stickmen
+					isDraggingWhole = true;
+					dragStartPos = {
+						x: mouseX,
+						y: mouseY
+					};
+					
+					console.log("Started dragging remote stickman");
+					return;
 				}
 
 				const previousSelectedIndex = selectedStickmanIndex;
@@ -2176,13 +2278,26 @@ define([
 					joint.y = originalJoints[index].y + deltaY;
 				});
 
-				// Broadcast real-time movement in shared mode
+				// Check if this is a remote stickman
+				const stickmanId = stickmen[selectedStickmanIndex].id;
+				let isOwnStickman = true;
 				if (isShared && presence) {
-					broadcastStickmanMovement(selectedStickmanIndex, 'drag_whole');
+					const currentUser = presence.getUserInfo();
+					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
 				}
 
-				saveCurrentFrame();
-				updateTimeline();
+				if (isOwnStickman) {
+					if (isShared && presence) {
+						broadcastStickmanMovement(selectedStickmanIndex, 'drag_whole');
+					}
+					saveCurrentFrame();
+					updateTimeline();
+				} else {
+					// For remote stickmen, broadcast the movement as remote movement
+					if (isShared && presence) {
+						broadcastRemoteStickmanMovement(selectedStickmanIndex, 'drag_whole');
+					}
+				}
 			} else if (isRotating && selectedJoint && selectedStickmanIndex >= 0 && rotationPivot) {
 				// Hierarchical rotation
 				const currentAngle = getAngle(rotationPivot, { x: mouseX, y: mouseY });
@@ -2256,19 +2371,30 @@ define([
 		function handleMouseUp() {
 			const wasInteracting = isDragging || isDraggingWhole || isRotating;
 
+			// Check if remote stickman
+			let isRemoteStickman = false;
+			if (selectedStickmanIndex >= 0 && isShared && presence) {
+				const stickmanId = stickmen[selectedStickmanIndex].id;
+				const currentUser = presence.getUserInfo();
+				isRemoteStickman = !currentUser || !stickmanId.toString().startsWith(currentUser.networkId);
+			}
+
 			isDragging = false;
 			isDraggingWhole = false;
 			isRotating = false;
 			rotationPivot = null;
 
 			if (selectedStickmanIndex >= 0 && originalJoints.length > 0) {
-				// Always save the current frame
-				saveCurrentFrame();
-				updateTimeline();
+				// Only save frames and broadcast for own stickmen
+				if (!isRemoteStickman) {
+					// Always save the current frame
+					saveCurrentFrame();
+					updateTimeline();
 
-				// Send final position update in shared mode after interaction ends
-				if (wasInteracting && isShared && presence) {
-					broadcastStickmanFinalPosition(selectedStickmanIndex);
+					// Send final position update in shared mode after interaction ends
+					if (wasInteracting && isShared && presence) {
+						broadcastStickmanFinalPosition(selectedStickmanIndex);
+					}
 				}
 			}
 
@@ -2286,9 +2412,16 @@ define([
 		}
 
 		function findJointAtPosition(x, y) {
-			// Check all stickmen, starting from the last one (top layer)
 			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
 				const joints = stickmen[stickmanIndex].joints;
+				const stickmanId = stickmen[stickmanIndex].id;
+
+				// Check ownership
+				let isOwnStickman = true;
+				if (isShared && presence) {
+					const currentUser = presence.getUserInfo();
+					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				}
 
 				// Define hit radii for different joint types
 				const getHitRadius = (jointIndex) => {
@@ -2305,6 +2438,23 @@ define([
 							return 8;  // hands, feet, elbows, knees
 					}
 				};
+
+				// For remote stickmen, only check hip joint (index 2)
+				if (!isOwnStickman) {
+					const joint = joints[2]; // Hip joint
+					const dx = joint.x - x;
+					const dy = joint.y - y;
+					const distance = Math.sqrt(dx * dx + dy * dy);
+					const hitRadius = getHitRadius(2);
+
+					if (distance < hitRadius) {
+						return { 
+							joint: joint, 
+							stickmanIndex: stickmanIndex 
+						};
+					}
+					continue; // Skip other joints for remote stickmen
+				}
 
 				// Check joints in order of interaction priority
 				const priorityOrder = [2, 11, 1, 0, 7, 9, 3, 5, 8, 10, 4, 6];
