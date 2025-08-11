@@ -42,7 +42,5 @@
 	"FullScreenIntro": "Switch to full screen mode for a better experience.",
 	"Previous": "Previous",
 	"Next": "Next",
-	"ExportSuccess": "Export Success",
-	"AnimationSavedToJournal": "Animation has been successfully saved to your Journal!",
-	"Ok": "Ok"
+	"AnimationSavedToJournal": "Animation has been successfully saved to your Journal!"
 }

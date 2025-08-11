@@ -6,7 +6,8 @@ define([
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
 	"tutorial",
-	"l10n"
+	"l10n",
+	"humane"
 ], function (
 	activity,
 	env,
@@ -15,7 +16,8 @@ define([
 	speedpalette,
 	templatepalette,
 	tutorial,
-	l10n
+	l10n,
+	humane
 ) {
 	// Manipulate the DOM only when it is ready.
 	requirejs(['domReady!'], function (doc) {
@@ -2510,7 +2512,8 @@ define([
 					a.click();
 					URL.revokeObjectURL(url);
 				} else {
-					showSaveMessage(l10n.get("AnimationSavedToJournal") || "Animation has been successfully saved to your Journal!");
+					console.log("Video saved to journal successfully with ID:", objectId);
+					humane.log(l10n.get("AnimationSavedToJournal") || "Animation has been successfully saved to your Journal!");
 				}
 			}, dataURL);
 		}
@@ -2525,56 +2528,6 @@ define([
 				u8arr[n] = bstr.charCodeAt(n);
 			}
 			return new Blob([u8arr], { type: mime });
-		}
-
-		function showSaveMessage(message) {
-			const modalOverlay = document.createElement('div');
-			modalOverlay.className = 'modal-overlay';
-
-			const modal = document.createElement('div');
-			modal.className = 'modal-content';
-
-			const header = document.createElement('div');
-			header.className = 'modal-header';
-
-			const title = document.createElement('h3');
-			title.textContent = l10n.get("ExportSuccess") || "Export Success";
-			title.className = 'modal-title';
-
-			const body = document.createElement('div');
-			body.className = 'modal-body';
-
-			const messageElement = document.createElement('p');
-			messageElement.textContent = message;
-			messageElement.className = 'modal-message';
-
-			const buttonContainer = document.createElement('div');
-			buttonContainer.className = 'modal-button-container';
-			const okButton = document.createElement('button');
-			okButton.className = 'modal-button modal-button-confirm';
-			okButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("Ok") || "Ok"}
-			`;
-
-			okButton.onclick = () => {
-				document.body.removeChild(modalOverlay);
-			};
-
-			modalOverlay.onclick = (e) => {
-				if (e.target === modalOverlay) {
-					document.body.removeChild(modalOverlay);
-				}
-			};
-
-			header.appendChild(title);
-			body.appendChild(messageElement);
-			buttonContainer.appendChild(okButton);
-			body.appendChild(buttonContainer);
-			modal.appendChild(header);
-			modal.appendChild(body);
-			modalOverlay.appendChild(modal);
-
-			document.body.appendChild(modalOverlay);
 		}
 
 		// START APPLICATION
