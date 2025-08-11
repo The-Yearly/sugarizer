@@ -1629,6 +1629,20 @@ define([
 			const stickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
 			const selectedStickman = stickmen[stickmanIndex];
 			const stickmanId = selectedStickman.id;
+			
+			// Check ownership in shared mode
+			let isOwnStickman = true;
+			if (isShared && presence) {
+				const currentUser = presence.getUserInfo();
+				isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+			}
+			
+			// Only show frames if user owns the stickman
+			if (!isOwnStickman) {
+				// For non-owned stickmen, show empty timeline
+				return;
+			}
+			
 			const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 			const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 			
@@ -1642,6 +1656,14 @@ define([
 				const deleteBtn = createDeleteButton(frameIndex, stickmanId);
 
 				previewCanvas.addEventListener('click', () => {
+					if (isShared && presence) {
+						const currentUser = presence.getUserInfo();
+						if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+							console.log("Cannot switch frames of non-owned stickman");
+							return;
+						}
+					}
+					
 					currentFrameIndices[stickmanId] = frameIndex;
 
 					const newFrameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
@@ -1720,6 +1742,15 @@ define([
 			deleteBtn.innerHTML = '';
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
+				
+				if (isShared && presence) {
+					const currentUser = presence.getUserInfo();
+					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+						console.log("Cannot delete frame of non-owned stickman");
+						return;
+					}
+				}
+				
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				
 				if (totalFrames > 1) {
