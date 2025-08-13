@@ -414,6 +414,53 @@ define([
 		document.getElementById('stop-button').addEventListener('click', function () {
 			console.log("writing...");
 
+			if (currentenv && currentenv.user) {
+				const currentUserId = currentenv.user.networkId || currentenv.user.name || 'user';
+
+				// updated with current user ownership
+				const updatedBaseFrames = {};
+				const updatedDeltaFrames = {};
+				const updatedCurrentFrameIndices = {};
+				const updatedStickmanUserColors = {};
+
+				// update ownership
+				stickmen.forEach((stickman, index) => {
+					const oldId = stickman.id;
+					let newId;
+
+					if (typeof oldId === 'string' && oldId.includes('_')) {
+						const timestamp = oldId.split('_').slice(1).join('_') || Date.now();
+						newId = `${currentUserId}_${timestamp}`;
+					} else {
+						newId = `${currentUserId}_${Date.now()}_${index}`;
+					}
+
+					stickman.id = newId;
+
+					if (baseFrames[oldId]) {
+						updatedBaseFrames[newId] = baseFrames[oldId];
+					}
+					if (deltaFrames[oldId]) {
+						updatedDeltaFrames[newId] = deltaFrames[oldId];
+					}
+					if (currentFrameIndices[oldId] !== undefined) {
+						updatedCurrentFrameIndices[newId] = currentFrameIndices[oldId];
+					}
+					// Assign current user's color to all stickmen
+					if (currentenv.user.colorvalue) {
+						updatedStickmanUserColors[newId] = currentenv.user.colorvalue;
+					}
+				});
+
+				// Replace the original data structures
+				baseFrames = updatedBaseFrames;
+				deltaFrames = updatedDeltaFrames;
+				currentFrameIndices = updatedCurrentFrameIndices;
+				stickmanUserColors = updatedStickmanUserColors;
+
+				console.log("All stickmen ownership updated to current user before saving");
+			}
+
 			const saveData = {
 				baseFrames: baseFrames,
 				deltaFrames: deltaFrames,
