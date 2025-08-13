@@ -48,6 +48,12 @@ define([
 				intro: l10n.get("TemplatesIntro"),
 			},
 			{
+				element: "#importJournal-button",
+				position: "bottom",
+				title: l10n.get("ImportFromJournalTitle"),
+				intro: l10n.get("ImportFromJournalIntro"),
+			},
+			{
 				element: "#import-button",
 				position: "bottom",
 				title: l10n.get("ImportTitle"),

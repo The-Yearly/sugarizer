@@ -3,6 +3,7 @@ define([
 	"sugar-web/env",
 	"sugar-web/datastore",
 	"sugar-web/graphics/presencepalette",
+	"sugar-web/graphics/journalchooser",
 	"activity/palettes/speedpalette",
 	"activity/palettes/templatepalette",
 	"tutorial",
@@ -13,6 +14,7 @@ define([
 	env,
 	datastore,
 	presencepalette,
+	journalchooser,
 	speedpalette,
 	templatepalette,
 	tutorial,
@@ -392,6 +394,7 @@ define([
 				{ id: 'minus-button', key: 'RemoveStickman' },
 				{ id: 'addStickman-button', key: 'AddStickman' },
 				{ id: 'template-button', key: 'Templates' },
+				{ id: 'importJournal-button', key: 'ImportFromJournal' },
 				{ id: 'import-button', key: 'Import' },
 				{ id: 'export-button', key: 'Export' },
 				{ id: 'stop-button', key: 'Stop' },
@@ -510,6 +513,7 @@ define([
 			document.getElementById('export-button').addEventListener('click', exportAnimation);
 			document.getElementById('addStickman-button').addEventListener('click', addNewStickman);
 			document.getElementById('minus-button').addEventListener('click', removeSelectedStickman);
+			document.getElementById('importJournal-button').addEventListener('click', importFromJournal);
 
 			// Initialize datastore
 			setupDatastore();
@@ -2756,6 +2760,215 @@ define([
 				u8arr[n] = bstr.charCodeAt(n);
 			}
 			return new Blob([u8arr], { type: mime });
+		}
+
+		// JOURNAL IMPORT FUNCTIONALITY
+
+		function importFromJournal() {
+			journalchooser.show(function (entry) {
+				// No selection
+				if (!entry) {
+					return;
+				}
+
+				// Get object content
+				var dataentry = new datastore.DatastoreObject(entry.objectId);
+				dataentry.loadAsText(function (err, metadata, jsonData) {
+					if (err) {
+						console.log("Error loading journal entry:", err);
+						return;
+					}
+
+					if (!jsonData) {
+						console.log("No data found in journal entry");
+						return;
+					}
+
+					try {
+						const savedData = JSON.parse(jsonData);
+
+						// Check if savedData is valid
+						if (!savedData || typeof savedData !== 'object') {
+							console.log("Invalid data format - not an object");
+							return;
+						}
+
+						// Validate that this is stickman data
+						if (!savedData.baseFrames || !savedData.deltaFrames || !savedData.currentFrameIndices) {
+							console.log("Invalid stickman data format - missing required properties");
+							console.log("Available properties:", Object.keys(savedData));
+							return;
+						}
+
+						// Import the stickman data
+						const importedStickmen = [];
+						const importedBaseFrames = {};
+						const importedDeltaFrames = {};
+						const importedCurrentFrameIndices = {};
+						const importedStickmanUserColors = {};
+
+						// Process each stickman from the imported data
+						Object.keys(savedData.baseFrames).forEach(stickmanIdStr => {
+							try {
+								const stickmanId = stickmanIdStr;
+								const frameIndex = savedData.currentFrameIndices[stickmanId] || 0;
+								
+								// Reconstruct the stickman from delta system
+								const baseFrame = savedData.baseFrames[stickmanId];
+								const deltaFramesList = savedData.deltaFrames[stickmanId] || [];
+								
+								if (baseFrame && Array.isArray(baseFrame)) {
+									// Create new ID for imported stickman to avoid conflicts
+									let newStickmanId;
+									if (currentenv && currentenv.user) {
+										newStickmanId = `${currentenv.user.networkId}_${Date.now()}_imported_${Object.keys(importedBaseFrames).length}`;
+									} else {
+										newStickmanId = nextStickmanId++;
+									}
+
+									// Copy the base frame and delta frames with new ID
+									importedBaseFrames[newStickmanId] = deepClone(baseFrame);
+									importedDeltaFrames[newStickmanId] = deepClone(deltaFramesList);
+									importedCurrentFrameIndices[newStickmanId] = 0;
+
+									// Assign current user's color to imported stickman
+									if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+										importedStickmanUserColors[newStickmanId] = currentenv.user.colorvalue;
+									}
+
+									// Reconstruct the current frame
+									const reconstructedFrame = reconstructFrame(newStickmanId, 0, importedBaseFrames, importedDeltaFrames);
+
+									if (reconstructedFrame && reconstructedFrame.joints && Array.isArray(reconstructedFrame.joints)) {
+
+										// Position the imported stickman at a safe location
+										const centerX = canvas.width / 2 + (importedStickmen.length * 150) - 300;
+										const centerY = canvas.height / 2;
+										
+										// Calculate offset to move stickman to new position
+										const currentCenter = {
+											x: (
+												Math.max(...reconstructedFrame.joints.map(p => p.x)) + Math.min(...reconstructedFrame.joints.map(p => p.x))
+											) / 2,
+											y: (
+												Math.max(...reconstructedFrame.joints.map(p => p.y)) + Math.min(...reconstructedFrame.joints.map(p => p.y))
+											) / 2
+										};
+										
+										const offsetX = centerX - currentCenter.x;
+										const offsetY = centerY - currentCenter.y;
+
+										// Apply offset to all joints
+										reconstructedFrame.joints.forEach(joint => {
+											if (joint && typeof joint.x === 'number' && typeof joint.y === 'number') {
+												joint.x += offsetX;
+												joint.y += offsetY;
+											}
+										});
+
+										// Update base frame with new position
+										importedBaseFrames[newStickmanId] = deepClone(reconstructedFrame.joints);
+
+										// Recalculate all delta frames with new base position
+										const newDeltas = [];
+										for (let i = 0; i < deltaFramesList.length; i++) {
+											const originalDelta = deltaFramesList[i];
+											if (originalDelta && Array.isArray(originalDelta)) {
+												// Apply the same offset to delta movements
+												const adjustedDelta = originalDelta.map(delta => ({
+													dx: delta.dx || 0,
+													dy: delta.dy || 0,
+													name: delta.name || 'unknown'
+												}));
+												newDeltas.push(adjustedDelta);
+											}
+										}
+										importedDeltaFrames[newStickmanId] = newDeltas;
+
+										importedStickmen.push(reconstructedFrame);
+									} else {
+										console.log("Could not reconstruct frame for stickman:", stickmanId);
+									}
+								} else {
+									console.log("Invalid base frame for stickman:", stickmanId, baseFrame);
+								}
+							} catch (stickmanError) {
+								console.log("Error processing individual stickman:", stickmanIdStr, stickmanError);
+							}
+						});
+
+						if (importedStickmen.length > 0) {
+							// Add imported stickmen to current animation
+							stickmen.push(...importedStickmen);
+							Object.assign(baseFrames, importedBaseFrames);
+							Object.assign(deltaFrames, importedDeltaFrames);
+							Object.assign(currentFrameIndices, importedCurrentFrameIndices);
+							Object.assign(stickmanUserColors, importedStickmanUserColors);
+
+							// Update middle joints for all imported stickmen
+							const startIndex = stickmen.length - importedStickmen.length;
+							for (let i = startIndex; i < stickmen.length; i++) {
+								updateMiddleJoint(i);
+							}
+
+							// Select the first imported stickman
+							selectedStickmanIndex = startIndex;
+
+							updateTimeline();
+							updateRemoveButtonState();
+							render();
+
+							humane.log((l10n.get("StickmanImported") || "Stickman imported successfully!"));
+
+							console.log(`Imported ${importedStickmen.length} stickmen from journal`);
+						} else {
+							console.log("No valid stickmen found in the selected entry");
+						}
+
+					} catch (parseError) {
+						console.log("Error parsing stickman data:", parseError);
+						console.log("Raw data received:", jsonData ? jsonData.substring(0, 200) + "..." : "null");
+					}
+				});
+			}, { activity: 'org.sugarlabs.Stickman' }); // Filter to show only Stickman entries
+		}
+
+		// function for reconstructing frames with custom base/delta frames
+		function reconstructFrame(stickmanId, frameIndex, customBaseFrames = null, customDeltaFrames = null) {
+			const baseFramesSource = customBaseFrames || baseFrames;
+			const deltaFramesSource = customDeltaFrames || deltaFrames;
+
+			if (!baseFramesSource[stickmanId] || frameIndex < 0) {
+				return null;
+			}
+			
+			if (frameIndex === 0) {
+				// First frame is always the base 
+				return {
+					id: stickmanId,
+					joints: deepClone(baseFramesSource[stickmanId])
+				};
+			}
+			
+			if (!deltaFramesSource[stickmanId] || frameIndex - 1 >= deltaFramesSource[stickmanId].length) {
+				return null;
+			}
+			
+			// Start with base frame and apply deltas incrementally
+			let currentJoints = deepClone(baseFramesSource[stickmanId]);
+			
+			for (let i = 0; i < frameIndex; i++) {
+				if (deltaFramesSource[stickmanId][i]) {
+					currentJoints = applyDeltas(currentJoints, deltaFramesSource[stickmanId][i]);
+					// Enforce joint distance constraints after each delta application
+					enforceJointDistances(currentJoints);
+				}
+			}
+			
+			return {
+				id: stickmanId,
+				joints: currentJoints
+			};
 		}
 
 		// START APPLICATION

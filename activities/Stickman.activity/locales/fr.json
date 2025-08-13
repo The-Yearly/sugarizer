@@ -5,6 +5,7 @@
 	"RemoveStickman": "Supprimer Stickman",
 	"AddStickman": "Ajouter Stickman",
 	"Templates": "Modèles",
+	"ImportFromJournal": "Importer du Journal",
 	"Import": "Importer",
 	"Export": "Exporter",
 	"Stop": "Arrêter",
@@ -30,6 +31,8 @@
 	"AddStickmanIntro": "Cliquez ici pour ajouter un nouveau stickman à votre animation.",
 	"TemplatesTitle": "Modèles",
 	"TemplatesIntro": "Cliquez ici pour choisir un modèle pour votre stickman.",
+	"ImportFromJournalTitle": "Importer du Journal",
+	"ImportFromJournalIntro": "Cliquez ici pour importer des stickmen sauvegardés depuis votre Journal.",
 	"ImportTitle": "Importer",
 	"ImportIntro": "Cliquez ici pour importer un modèle de stickman.",
 	"ExportTitle": "Exporter",
@@ -42,5 +45,6 @@
 	"FullScreenIntro": "Passez en mode plein écran pour une meilleure expérience.",
 	"Previous": "Préc",
 	"Next": "Suiv",
-	"AnimationSavedToJournal": "L'animation a été sauvegardée avec succès dans votre Journal!"
+	"AnimationSavedToJournal": "L'animation a été sauvegardée avec succès dans votre Journal!",
+	"StickmanImported": "Stickman importé avec succès!"
 }
