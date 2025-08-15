@@ -2245,11 +2245,47 @@ define([
 					}
 				}
 
-				confirmationModal(stickmanId, stickmanToRemove);
-				return;
-			}
+				// Only show confirmation if there's more than one stickman AND the stickman has more than one frame
+				const totalFrames = baseFrames[stickmanId] ? 1 + (deltaFrames[stickmanId] ? deltaFrames[stickmanId].length : 0) : 0;
+				const shouldShowConfirmation = stickmen.length > 1 && totalFrames > 1;
 
-			if (isRemovalMode) {
+				if (shouldShowConfirmation) {
+					confirmationModal(stickmanId, stickmanToRemove);
+				} else {
+					// Directly remove without confirmation
+					if (stickmen.length > 1) {
+						// Broadcast removal in shared mode before removing locally
+						if (isShared && presence) {
+							broadcastStickmanRemoval(stickmanId);
+						}
+
+						stickmen.splice(stickmanToRemove, 1);
+
+						// Remove stickman frames
+						delete baseFrames[stickmanId];
+						delete deltaFrames[stickmanId];
+						delete currentFrameIndices[stickmanId];
+						delete stickmanUserColors[stickmanId];
+
+						// Adjust selected stickman index if needed
+						if (selectedStickmanIndex === stickmanToRemove) {
+							selectedJoint = null;
+							selectedStickmanIndex = stickmen.length > 0 ? 0 : -1;
+						} else if (selectedStickmanIndex > stickmanToRemove) {
+							selectedStickmanIndex--;
+						}
+
+						updateTimeline();
+						updateRemoveButtonState();
+
+						// If only one stickman remains, automatically exit removal mode
+						if (stickmen.length <= 1) {
+							exitRemovalMode();
+						}
+					}
+				}
+				return;
+			} if (isRemovalMode) {
 				// Stay in removal mode when clicking on canvas - don't exit
 				return;
 			}
