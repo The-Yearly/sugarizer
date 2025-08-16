@@ -21,6 +21,9 @@ define([
 	l10n,
 	humane
 ) {
+	const tf = window.tf;
+	const posenet = window.posenet;
+
 	// Manipulate the DOM only when it is ready.
 	requirejs(['domReady!'], function (doc) {
 
@@ -50,6 +53,16 @@ define([
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false; 
+
+		// PoseNet configuration 
+		let posenetModel = null; 
+		const posenetConfig = {
+			architecture: 'MobileNetV1',
+			outputStride: 16,
+			inputResolution: 257,
+			multiplier: 0.75,
+			quantBytes: 4
+		}; 
 
 		let lastMovementBroadcast = 0;
 		const MOVEMENT_BROADCAST_THROTTLE = 50;
@@ -514,6 +527,7 @@ define([
 			document.getElementById('addStickman-button').addEventListener('click', addNewStickman);
 			document.getElementById('minus-button').addEventListener('click', removeSelectedStickman);
 			document.getElementById('importJournal-button').addEventListener('click', importFromJournal);
+			document.getElementById('import-button').addEventListener('click', importVideoAnimation);
 
 			// Initialize datastore
 			setupDatastore();
@@ -2967,6 +2981,959 @@ define([
 					}
 				});
 			}, { activity: 'org.sugarlabs.Stickman' }); // Filter to show only Stickman entries
+		}
+
+		// VIDEO IMPORT FUNCTIONALITY WITH POSENET
+
+		// Load PoseNet model
+		async function loadPoseNet() {
+			if (!posenetModel) {
+				try {
+					posenetModel = await posenet.load(posenetConfig);
+				} catch (error) {
+					console.error("Error loading PoseNet model:", error);
+					throw error;
+				}
+			}
+			return posenetModel;
+		}
+
+		// Convert PoseNet keypoints to stickman joint format 
+		function convertPoseToStickman(pose, centerX, centerY) {
+			const keypoints = pose.keypoints;
+			
+			function getKeypoint(name) {
+				return keypoints.find(kp => kp.part === name);
+			}
+
+			// Calculate center of hips for reference
+			const leftHip = getKeypoint('leftHip');
+			const rightHip = getKeypoint('rightHip');
+			const nose = getKeypoint('nose');
+			const leftShoulder = getKeypoint('leftShoulder');
+			const rightShoulder = getKeypoint('rightShoulder');
+
+			// If key points are missing, return null
+			if (!leftHip || !rightHip || !nose) {
+				return null;
+			}
+
+			const hipCenter = {
+				x: (leftHip.position.x + rightHip.position.x) / 2,
+				y: (leftHip.position.y + rightHip.position.y) / 2
+			};
+
+			const shoulderCenter = leftShoulder && rightShoulder ? {
+				x: (leftShoulder.position.x + rightShoulder.position.x) / 2,
+				y: (leftShoulder.position.y + rightShoulder.position.y) / 2
+			} : null;
+
+			// Calculate detected pose dimensions for scaling
+			let detectedHeight = 0;
+			if (shoulderCenter) {
+				detectedHeight = Math.abs(hipCenter.y - nose.position.y);
+			} else {
+				detectedHeight = Math.abs(hipCenter.y - nose.position.y);
+			}
+
+			// stickman dimensions
+			const STANDARD_HEIGHT = 160; 		// Total height from head to feet
+			const STANDARD_HEAD_TO_HIP = 80; 	// From head to hip center
+			
+			// Calculate scale to maintain consistent stickman size
+			const scale = detectedHeight > 0 ? STANDARD_HEAD_TO_HIP / detectedHeight : 1;
+
+			const joints = [];
+
+			// 0 - head (use nose position)
+			joints[0] = {
+				x: centerX + (nose.position.x - hipCenter.x) * scale,
+				y: centerY + (nose.position.y - hipCenter.y) * scale,
+				name: 'head'
+			};
+
+			// 1 - body/neck (between head and shoulders)
+			if (shoulderCenter) {
+				joints[1] = {
+					x: centerX + (shoulderCenter.x - hipCenter.x) * scale,
+					y: centerY + (shoulderCenter.y - hipCenter.y) * scale,
+					name: 'body'
+				};
+			} else {
+				// Fallback: position between head and hips (30 pixels up from hip center)
+				joints[1] = {
+					x: centerX,
+					y: centerY - 30,
+					name: 'body'
+				};
+			}
+
+			// 2 - hips (center of hips) - this is our reference point
+			joints[2] = {
+				x: centerX,
+				y: centerY,
+				name: 'hips'
+			};
+
+			// Now apply standard joint distances and enforce constraints
+			const JOINT_DISTANCES = {
+				headToBody: 20,
+				bodyToMiddle: 30,
+				middleToHips: 30,
+				hipsToKnee: 40,
+				kneeToFoot: 40,
+				bodyToElbow: 40,
+				elbowToHand: 30
+			};
+
+			// Adjust head position to maintain standard distance from body
+			const headToBodyDist = Math.sqrt(
+				Math.pow(joints[0].x - joints[1].x, 2) + 
+				Math.pow(joints[0].y - joints[1].y, 2)
+			);
+			if (headToBodyDist > 0) {
+				const headRatio = JOINT_DISTANCES.headToBody / headToBodyDist;
+				joints[0].x = joints[1].x + (joints[0].x - joints[1].x) * headRatio;
+				joints[0].y = joints[1].y + (joints[0].y - joints[1].y) * headRatio;
+			}
+
+			// Left leg with standard distances
+			const leftKnee = getKeypoint('leftKnee');
+			const leftAnkle = getKeypoint('leftAnkle');
+
+			// 3 - left knee
+			if (leftKnee && leftKnee.score > 0.3) {
+				const detectedKneeX = centerX + (leftKnee.position.x - hipCenter.x) * scale;
+				const detectedKneeY = centerY + (leftKnee.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from hips
+				const kneeDirection = {
+					x: detectedKneeX - joints[2].x,
+					y: detectedKneeY - joints[2].y
+				};
+				const kneeDist = Math.sqrt(kneeDirection.x * kneeDirection.x + kneeDirection.y * kneeDirection.y);
+				if (kneeDist > 0) {
+					const kneeRatio = JOINT_DISTANCES.hipsToKnee / kneeDist;
+					joints[3] = {
+						x: joints[2].x + kneeDirection.x * kneeRatio,
+						y: joints[2].y + kneeDirection.y * kneeRatio,
+						name: 'leftKnee'
+					};
+				} else {
+					joints[3] = {
+						x: centerX - 15,
+						y: centerY + JOINT_DISTANCES.hipsToKnee,
+						name: 'leftKnee'
+					};
+				}
+			} else {
+				// Standard position
+				joints[3] = {
+					x: centerX - 15,
+					y: centerY + JOINT_DISTANCES.hipsToKnee,
+					name: 'leftKnee'
+				};
+			}
+
+			// 4 - left foot
+			if (leftAnkle && leftAnkle.score > 0.3) {
+				const detectedFootX = centerX + (leftAnkle.position.x - hipCenter.x) * scale;
+				const detectedFootY = centerY + (leftAnkle.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from knee
+				const footDirection = {
+					x: detectedFootX - joints[3].x,
+					y: detectedFootY - joints[3].y
+				};
+				const footDist = Math.sqrt(footDirection.x * footDirection.x + footDirection.y * footDirection.y);
+				if (footDist > 0) {
+					const footRatio = JOINT_DISTANCES.kneeToFoot / footDist;
+					joints[4] = {
+						x: joints[3].x + footDirection.x * footRatio,
+						y: joints[3].y + footDirection.y * footRatio,
+						name: 'leftFoot'
+					};
+				} else {
+					joints[4] = {
+						x: joints[3].x - 5,
+						y: joints[3].y + JOINT_DISTANCES.kneeToFoot,
+						name: 'leftFoot'
+					};
+				}
+			} else {
+				// Standard position relative to knee
+				joints[4] = {
+					x: joints[3].x - 5,
+					y: joints[3].y + JOINT_DISTANCES.kneeToFoot,
+					name: 'leftFoot'
+				};
+			}
+
+			// Right leg with standard distances
+			const rightKnee = getKeypoint('rightKnee');
+			const rightAnkle = getKeypoint('rightAnkle');
+
+			// 5 - right knee
+			if (rightKnee && rightKnee.score > 0.3) {
+				const detectedKneeX = centerX + (rightKnee.position.x - hipCenter.x) * scale;
+				const detectedKneeY = centerY + (rightKnee.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from hips
+				const kneeDirection = {
+					x: detectedKneeX - joints[2].x,
+					y: detectedKneeY - joints[2].y
+				};
+				const kneeDist = Math.sqrt(kneeDirection.x * kneeDirection.x + kneeDirection.y * kneeDirection.y);
+				if (kneeDist > 0) {
+					const kneeRatio = JOINT_DISTANCES.hipsToKnee / kneeDist;
+					joints[5] = {
+						x: joints[2].x + kneeDirection.x * kneeRatio,
+						y: joints[2].y + kneeDirection.y * kneeRatio,
+						name: 'rightKnee'
+					};
+				} else {
+					joints[5] = {
+						x: centerX + 15,
+						y: centerY + JOINT_DISTANCES.hipsToKnee,
+						name: 'rightKnee'
+					};
+				}
+			} else {
+				// Standard position
+				joints[5] = {
+					x: centerX + 15,
+					y: centerY + JOINT_DISTANCES.hipsToKnee,
+					name: 'rightKnee'
+				};
+			}
+
+			// 6 - right foot
+			if (rightAnkle && rightAnkle.score > 0.3) {
+				const detectedFootX = centerX + (rightAnkle.position.x - hipCenter.x) * scale;
+				const detectedFootY = centerY + (rightAnkle.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from knee
+				const footDirection = {
+					x: detectedFootX - joints[5].x,
+					y: detectedFootY - joints[5].y
+				};
+				const footDist = Math.sqrt(footDirection.x * footDirection.x + footDirection.y * footDirection.y);
+				if (footDist > 0) {
+					const footRatio = JOINT_DISTANCES.kneeToFoot / footDist;
+					joints[6] = {
+						x: joints[5].x + footDirection.x * footRatio,
+						y: joints[5].y + footDirection.y * footRatio,
+						name: 'rightFoot'
+					};
+				} else {
+					joints[6] = {
+						x: joints[5].x + 5,
+						y: joints[5].y + JOINT_DISTANCES.kneeToFoot,
+						name: 'rightFoot'
+					};
+				}
+			} else {
+				// Standard position relative to knee
+				joints[6] = {
+					x: joints[5].x + 5,
+					y: joints[5].y + JOINT_DISTANCES.kneeToFoot,
+					name: 'rightFoot'
+				};
+			}
+
+			// Arms with standard joint distances
+			const leftElbow = getKeypoint('leftElbow');
+			const leftWrist = getKeypoint('leftWrist');
+			const rightElbow = getKeypoint('rightElbow');
+			const rightWrist = getKeypoint('rightWrist');
+
+			// 7 - left elbow
+			if (leftElbow && leftElbow.score > 0.3) {
+				const detectedElbowX = centerX + (leftElbow.position.x - hipCenter.x) * scale;
+				const detectedElbowY = centerY + (leftElbow.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from body
+				const elbowDirection = {
+					x: detectedElbowX - joints[1].x,
+					y: detectedElbowY - joints[1].y
+				};
+				const elbowDist = Math.sqrt(elbowDirection.x * elbowDirection.x + elbowDirection.y * elbowDirection.y);
+				if (elbowDist > 0) {
+					const elbowRatio = JOINT_DISTANCES.bodyToElbow / elbowDist;
+					joints[7] = {
+						x: joints[1].x + elbowDirection.x * elbowRatio,
+						y: joints[1].y + elbowDirection.y * elbowRatio,
+						name: 'leftElbow'
+					};
+				} else {
+					joints[7] = {
+						x: joints[1].x - JOINT_DISTANCES.bodyToElbow,
+						y: joints[1].y + 10,
+						name: 'leftElbow'
+					};
+				}
+			} else {
+				// Standard position
+				joints[7] = {
+					x: joints[1].x - JOINT_DISTANCES.bodyToElbow,
+					y: joints[1].y + 10,
+					name: 'leftElbow'
+				};
+			}
+
+			// 8 - left hand
+			if (leftWrist && leftWrist.score > 0.3) {
+				const detectedHandX = centerX + (leftWrist.position.x - hipCenter.x) * scale;
+				const detectedHandY = centerY + (leftWrist.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from elbow
+				const handDirection = {
+					x: detectedHandX - joints[7].x,
+					y: detectedHandY - joints[7].y
+				};
+				const handDist = Math.sqrt(handDirection.x * handDirection.x + handDirection.y * handDirection.y);
+				if (handDist > 0) {
+					const handRatio = JOINT_DISTANCES.elbowToHand / handDist;
+					joints[8] = {
+						x: joints[7].x + handDirection.x * handRatio,
+						y: joints[7].y + handDirection.y * handRatio,
+						name: 'leftHand'
+					};
+				} else {
+					joints[8] = {
+						x: joints[7].x - 10,
+						y: joints[7].y + JOINT_DISTANCES.elbowToHand,
+						name: 'leftHand'
+					};
+				}
+			} else {
+				// Standard position relative to elbow
+				joints[8] = {
+					x: joints[7].x - 10,
+					y: joints[7].y + JOINT_DISTANCES.elbowToHand,
+					name: 'leftHand'
+				};
+			}
+
+			// 9 - right elbow
+			if (rightElbow && rightElbow.score > 0.3) {
+				const detectedElbowX = centerX + (rightElbow.position.x - hipCenter.x) * scale;
+				const detectedElbowY = centerY + (rightElbow.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from body
+				const elbowDirection = {
+					x: detectedElbowX - joints[1].x,
+					y: detectedElbowY - joints[1].y
+				};
+				const elbowDist = Math.sqrt(elbowDirection.x * elbowDirection.x + elbowDirection.y * elbowDirection.y);
+				if (elbowDist > 0) {
+					const elbowRatio = JOINT_DISTANCES.bodyToElbow / elbowDist;
+					joints[9] = {
+						x: joints[1].x + elbowDirection.x * elbowRatio,
+						y: joints[1].y + elbowDirection.y * elbowRatio,
+						name: 'rightElbow'
+					};
+				} else {
+					joints[9] = {
+						x: joints[1].x + JOINT_DISTANCES.bodyToElbow,
+						y: joints[1].y + 10,
+						name: 'rightElbow'
+					};
+				}
+			} else {
+				// Standard position
+				joints[9] = {
+					x: joints[1].x + JOINT_DISTANCES.bodyToElbow,
+					y: joints[1].y + 10,
+					name: 'rightElbow'
+				};
+			}
+
+			// 10 - right hand
+			if (rightWrist && rightWrist.score > 0.3) {
+				const detectedHandX = centerX + (rightWrist.position.x - hipCenter.x) * scale;
+				const detectedHandY = centerY + (rightWrist.position.y - hipCenter.y) * scale;
+				
+				// Maintain standard distance from elbow
+				const handDirection = {
+					x: detectedHandX - joints[9].x,
+					y: detectedHandY - joints[9].y
+				};
+				const handDist = Math.sqrt(handDirection.x * handDirection.x + handDirection.y * handDirection.y);
+				if (handDist > 0) {
+					const handRatio = JOINT_DISTANCES.elbowToHand / handDist;
+					joints[10] = {
+						x: joints[9].x + handDirection.x * handRatio,
+						y: joints[9].y + handDirection.y * handRatio,
+						name: 'rightHand'
+					};
+				} else {
+					joints[10] = {
+						x: joints[9].x + 10,
+						y: joints[9].y + JOINT_DISTANCES.elbowToHand,
+						name: 'rightHand'
+					};
+				}
+			} else {
+				// Standard position relative to elbow
+				joints[10] = {
+					x: joints[9].x + 10,
+					y: joints[9].y + JOINT_DISTANCES.elbowToHand,
+					name: 'rightHand'
+				};
+			}
+
+			// 11 - middle (torso center between body and hips)
+			joints[11] = {
+				x: (joints[1].x + joints[2].x) / 2,
+				y: (joints[1].y + joints[2].y) / 2,
+				name: 'middle'
+			};
+
+			return joints;
+		}
+
+		// Show spinner modal during video processing
+		function showSpinnerModal() {
+			const modal = document.createElement('div');
+			modal.id = 'video-processing-modal';
+			modal.style.cssText = `
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.7);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				z-index: 10000;
+			`;
+
+			const content = document.createElement('div');
+			content.style.cssText = `
+				background: white;
+				padding: 30px;
+				border-radius: 10px;
+				text-align: center;
+				box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+				max-width: 300px;
+			`;
+
+			const spinner = document.createElement('img');
+			spinner.src = 'icons/spinner-light.gif';
+			spinner.style.cssText = `
+				width: 64px;
+				height: 64px;
+				margin-bottom: 20px;
+			`;
+
+			const title = document.createElement('h3');
+			title.textContent = l10n.get("ProcessingVideo") || "Processing Video";
+			title.style.cssText = `
+				margin: 0 0 10px 0;
+				color: #333;
+				font-size: 18px;
+			`;
+
+			const message = document.createElement('p');
+			message.textContent = l10n.get("PleaseWait") || "Please wait while we analyze your video...";
+			message.style.cssText = `
+				margin: 0;
+				color: #666;
+				font-size: 14px;
+			`;
+
+			content.appendChild(spinner);
+			content.appendChild(title);
+			content.appendChild(message);
+			modal.appendChild(content);
+			document.body.appendChild(modal);
+
+			return modal;
+		}
+
+		// Hide spinner modal
+		function hideSpinnerModal(modal) {
+			if (modal && modal.parentNode) {
+				modal.parentNode.removeChild(modal);
+			}
+		}
+
+		// video import
+		async function importVideoAnimation() {
+			try {
+				journalchooser.show(function (entry) {
+					// No selection
+					if (!entry) {
+						return;
+					}
+
+					// Get object content
+					var dataentry = new datastore.DatastoreObject(entry.objectId);
+					dataentry.loadAsText(function (err, metadata, data) {
+						if (err) {
+							console.log("Error loading journal entry:", err);
+							humane.log(l10n.get("VideoLoadError") || "Error loading video from journal");
+							return;
+						}
+
+						const mimeType = metadata && (metadata.mime_type || metadata.mimetype);
+						if (mimeType && mimeType.startsWith('video/')) {
+							if (typeof dataentry.load === 'function') {
+								// For video files, we need to load as binary data
+								dataentry.load(function(err, metadata, binaryData) {
+									if (err) {
+										console.log("Error loading video data:", err);
+										humane.log(l10n.get("VideoLoadError") || "Error loading video data");
+										return;
+									}
+
+									try {
+										// Convert binary data to blob
+										const blob = new Blob([binaryData], { type: mimeType });
+										processVideoFile(blob);
+									} catch (error) {
+										console.error('Error processing video from journal:', error);
+										humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+									}
+								});
+							} else if (typeof dataentry.loadAsDataURL === 'function') {
+								dataentry.loadAsDataURL(function(err, metadata, dataURL) {
+									if (err) {
+										console.log("Error loading video data URL:", err);
+										humane.log(l10n.get("VideoLoadError") || "Error loading video data");
+										return;
+									}
+
+									try {
+										// Convert data URL to blob
+										fetch(dataURL)
+											.then(res => res.blob())
+											.then(blob => {
+												processVideoFile(blob);
+											})
+											.catch(error => {
+												console.error('Error converting data URL to blob:', error);
+												humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+											});
+									} catch (error) {
+										console.error('Error processing video from journal:', error);
+										humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+									}
+								});
+							} else if (data && data.length > 0) {
+								try {
+									// Try to treat the text data as base64 or data URL
+									if (data.startsWith('data:')) {
+										// It's already a data URL
+										fetch(data)
+											.then(res => res.blob())
+											.then(blob => {
+												processVideoFile(blob);
+											})
+											.catch(error => {
+												console.error('Error converting text data URL to blob:', error);
+												humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+											});
+									} else {
+										// Try base64 decode
+										const binaryString = atob(data);
+										const bytes = new Uint8Array(binaryString.length);
+										for (let i = 0; i < binaryString.length; i++) {
+											bytes[i] = binaryString.charCodeAt(i);
+										}
+										const blob = new Blob([bytes], { type: mimeType });
+										processVideoFile(blob);
+									}
+								} catch (error) {
+									console.error('Error processing text data as video:', error);
+									humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+								}
+							} else {
+								humane.log(l10n.get("VideoLoadError") || "Cannot load video data from this entry");
+							}
+						} else {
+							humane.log(l10n.get("NotVideoFile") || "Selected file is not a video");
+						}
+					});
+				}, {
+					mimetype: '%video/'
+				});
+
+			} catch (error) {
+				console.error('Error importing video from journal:', error);
+				humane.log(l10n.get("VideoImportError") || "Error importing video from journal");
+			}
+		}
+
+		// Process the selected video file
+		async function processVideoFile(file) {
+			// Show spinner modal
+			const spinnerModal = showSpinnerModal();
+
+			try {
+				// Load PoseNet model if not already loaded
+				await loadPoseNet();
+
+				// Create video element
+				const video = document.createElement('video');
+				video.src = URL.createObjectURL(file);
+				video.muted = true;
+				video.style.display = 'none';
+				document.body.appendChild(video);
+
+				return new Promise((resolve, reject) => {
+					video.addEventListener('loadedmetadata', async () => {
+						try {
+							const frames = await extractFramesFromVideo(video);
+							document.body.removeChild(video);
+							URL.revokeObjectURL(video.src);
+
+							hideSpinnerModal(spinnerModal);
+
+							if (frames.length > 0) {
+								// Show preview modal only after processing is complete
+								await showVideoPreview(frames, file.name);
+							} else {
+								humane.log(l10n.get("NoFramesDetected") || "No pose detected in video");
+							}
+							resolve();
+						} catch (error) {
+							document.body.removeChild(video);
+							URL.revokeObjectURL(video.src);
+							hideSpinnerModal(spinnerModal);
+							reject(error);
+						}
+					});
+
+					video.addEventListener('error', () => {
+						document.body.removeChild(video);
+						URL.revokeObjectURL(video.src);
+						hideSpinnerModal(spinnerModal);
+						reject(new Error('Failed to load video'));
+					});
+				});
+			} catch (error) {
+				hideSpinnerModal(spinnerModal);
+				throw error;
+			}
+		}
+
+		// Extract frames from video and convert to stickman poses
+		async function extractFramesFromVideo(video) {
+			const frames = [];
+			const canvas = document.createElement('canvas');
+			const ctx = canvas.getContext('2d');
+			
+			// Set canvas size to match video
+			canvas.width = video.videoWidth;
+			canvas.height = video.videoHeight;
+
+			const duration = video.duration;
+			const frameRate = 10; // Process 10 frames per second
+			const frameInterval = 1 / frameRate;
+
+			// Scale down poses to fit better
+			const targetScale = 0.3; 
+			// Center position for stickman
+			const centerX = 200; 
+			const centerY = 200;
+
+			video.currentTime = 0;
+
+			for (let time = 0; time < duration; time += frameInterval) {
+				try {
+					video.currentTime = time;
+					
+					// Wait for video to seek to the correct time
+					await new Promise(resolve => {
+						const checkTime = () => {
+							if (Math.abs(video.currentTime - time) < 0.1) {
+								resolve();
+							} else {
+								requestAnimationFrame(checkTime);
+							}
+						};
+						checkTime();
+					});
+
+					// Draw current frame to canvas
+					ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+					// Detect pose using PoseNet
+					const poses = await posenetModel.estimateMultiplePoses(canvas, {
+						flipHorizontal: false,
+						maxDetections: 1,
+						scoreThreshold: 0.5,
+						nmsRadius: 20
+					});
+
+					if (poses.length > 0 && poses[0].score > 0.3) {
+						const stickmanJoints = convertPoseToStickman(poses[0], centerX, centerY, targetScale);
+						if (stickmanJoints) {
+							frames.push(stickmanJoints);
+						}
+					}
+
+				} catch (error) {
+					console.warn('Error processing frame at time', time, error);
+					continue;
+				}
+			}
+
+			return frames;
+		}
+
+		// Show preview modal before adding animation to canvas
+		async function showVideoPreview(frames, filename) {
+			const modalOverlay = document.createElement('div');
+			modalOverlay.className = 'modal-overlay';
+
+			const modal = document.createElement('div');
+			modal.className = 'modal-content';
+
+			const header = document.createElement('div');
+			header.className = 'modal-header';
+
+			const title = document.createElement('h3');
+			title.textContent = l10n.get("VideoPreview") || "Video Preview";
+			title.className = 'modal-title';
+			title.style.cssText = `
+				text-align: center;
+			`;			
+			const body = document.createElement('div');
+			body.className = 'modal-body';
+
+			const previewCanvas = document.createElement('canvas');
+			previewCanvas.id = 'preview-canvas';
+			previewCanvas.width = 320;
+			previewCanvas.height = 240;
+			previewCanvas.style.cssText = `
+				border: 1px solid #ddd;
+				margin-bottom: 15px;
+				display: block;
+				margin: 0 auto 15px auto;
+				max-width: 100%;
+			`;
+
+			// Frame counter container
+			const frameCounterContainer = document.createElement('div');
+			frameCounterContainer.style.cssText = `
+				text-align: center;
+				margin-bottom: 10px;
+			`;
+
+			const frameCounter = document.createElement('span');
+			frameCounter.style.cssText = `
+				font-size: 14px;
+				color: #333;
+				font-weight: bold;
+			`;
+			frameCounter.innerHTML = `Frame: <span id="frame-number">1</span> / ${frames.length}`;frameCounterContainer.appendChild(frameCounter);
+
+			// Controls container
+			const controlsContainer = document.createElement('div');
+			controlsContainer.style.cssText = 'text-align: center; margin-bottom: 15px;';
+
+			const playBtn = document.createElement('button');
+			playBtn.innerHTML = `
+				<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
+				${l10n.get("Play") || "Play"}
+			`;
+			playBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; display: inline-flex; align-items: center; background: #808080; color: white; border: none; border-radius: 4px; cursor: pointer;';
+
+			controlsContainer.appendChild(playBtn);
+
+			// Button container (same as confirmation modal)
+			const buttonContainer = document.createElement('div');
+			buttonContainer.className = 'modal-button-container';
+
+			// Cancel button (same as confirmation modal)
+			const cancelButton = document.createElement('button');
+			cancelButton.className = 'modal-button';
+			cancelButton.innerHTML = `
+				<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("Cancel") || "Cancel"}
+			`;
+
+			// Add button (same style as confirm button)
+			const addButton = document.createElement('button');
+			addButton.className = 'modal-button modal-button-confirm';
+			addButton.innerHTML = `
+				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("AddToCanvas") || "Add to Canvas"}
+			`;
+
+			// Assemble modal structure
+			header.appendChild(title);
+			
+			body.appendChild(previewCanvas);
+			body.appendChild(frameCounterContainer);
+			body.appendChild(controlsContainer);
+
+			buttonContainer.appendChild(cancelButton);
+			buttonContainer.appendChild(addButton);
+
+			modal.appendChild(header);
+			modal.appendChild(body);
+			modal.appendChild(buttonContainer);
+			modalOverlay.appendChild(modal);
+			document.body.appendChild(modalOverlay);
+
+			// Set up preview animation using existing canvas element
+			const previewCtx = previewCanvas.getContext('2d');
+			const frameDisplay = document.getElementById('frame-number');
+			
+			let currentFrame = 0;
+			let isPlaying = false;
+			let animationId = null;
+
+			// Draw frame function
+			function drawPreviewFrame(frameIndex) {
+				previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+				
+				if (frameIndex < frames.length) {
+					const joints = frames[frameIndex];
+					
+					// Draw stickman at actual size (no arbitrary scaling)
+					// Center the stickman in the preview canvas
+					const offsetX = previewCanvas.width / 2;
+					const offsetY = previewCanvas.height / 2;
+					
+					const centeredJoints = joints.map(joint => ({
+						x: joint.x - 200 + offsetX, // Remove original centering (200) and recenter
+						y: joint.y - 200 + offsetY, // Remove original centering (200) and recenter
+						name: joint.name
+					}));
+
+					// Draw stickman preview at actual size
+					drawStickmanPreview(previewCtx, centeredJoints);
+				}
+				
+				if (frameDisplay) {
+					frameDisplay.textContent = frameIndex + 1;
+				}
+			}
+
+			// Animation loop
+			function animate() {
+				if (!isPlaying) return;
+				
+				drawPreviewFrame(currentFrame);
+				currentFrame = (currentFrame + 1) % frames.length;
+				
+				animationId = setTimeout(() => {
+					requestAnimationFrame(animate);
+				}, 100); // 10 FPS preview
+			}
+
+			// Initial frame
+			drawPreviewFrame(0);
+
+			// Event listeners
+			playBtn.addEventListener('click', () => {
+				isPlaying = !isPlaying;
+				if (isPlaying) {
+					animate();
+					playBtn.innerHTML = `
+						<img src="icons/pause.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
+						${l10n.get("Pause") || "Pause"}
+					`;
+				} else {
+					if (animationId) clearTimeout(animationId);
+					playBtn.innerHTML = `
+						<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
+						${l10n.get("Play") || "Play"}
+					`;
+				}
+			});
+
+			cancelButton.addEventListener('click', () => {
+				if (animationId) clearTimeout(animationId);
+				document.body.removeChild(modalOverlay);
+			});
+
+			addButton.addEventListener('click', () => {
+				if (animationId) clearTimeout(animationId);
+				document.body.removeChild(modalOverlay);
+				addVideoAnimationToCanvas(frames);
+			});
+
+			modalOverlay.addEventListener('click', (e) => {
+				if (e.target === modalOverlay) {
+					if (animationId) clearTimeout(animationId);
+					document.body.removeChild(modalOverlay);
+				}
+			});
+		}
+
+		// Add the video animation frames to canvas as a new stickman
+		function addVideoAnimationToCanvas(frames) {
+			if (frames.length === 0) return;
+
+			// Create new stickman ID
+			let newStickmanId;
+			if (currentenv && currentenv.user) {
+				newStickmanId = `${currentenv.user.networkId}_${Date.now()}`;
+			} else {
+				newStickmanId = nextStickmanId++;
+			}
+
+			// Ensure all frames have proper joint distances
+			frames.forEach(frame => enforceJointDistances(frame));
+
+			// Create new stickman with first frame
+			const newStickman = {
+				id: newStickmanId,
+				joints: deepClone(frames[0])
+			};
+
+			stickmen.push(newStickman);
+
+			// Set up base frame and deltas
+			baseFrames[newStickmanId] = deepClone(frames[0]);
+			deltaFrames[newStickmanId] = [];
+			currentFrameIndices[newStickmanId] = 0;
+
+			// Calculate deltas for subsequent frames
+			for (let i = 1; i < frames.length; i++) {
+				const delta = calculateDeltas(frames[i], frames[i - 1]);
+				if (delta) {
+					deltaFrames[newStickmanId].push(delta);
+				}
+			}
+
+			// Associate with current user's color
+			if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+				stickmanUserColors[newStickmanId] = currentenv.user.colorvalue;
+			}
+
+			// Select the new stickman
+			selectedStickmanIndex = stickmen.length - 1;
+			neckManuallyMoved = false;
+
+			// Broadcast in shared mode
+			if (isShared && presence) {
+				presence.sendMessage(presence.getSharedInfo().id, {
+					user: presence.getUserInfo(),
+					action: 'new_stickman',
+					content: {
+						stickman: {
+							id: newStickmanId,
+							joints: newStickman.joints,
+							baseFrame: baseFrames[newStickmanId],
+							deltaFrames: deltaFrames[newStickmanId],
+							currentFrameIndex: currentFrameIndices[newStickmanId]
+						},
+						color: stickmanUserColors[newStickmanId]
+					}
+				});
+			}
+
+			updateTimeline();
+			updateRemoveButtonState();
+			render();
+
+			humane.log(`${l10n.get("VideoAnimationImported") || "Video animation imported successfully!"} (${frames.length} ${l10n.get("Frames") || "frames"})`);
 		}
 
 		// function for reconstructing frames with custom base/delta frames

@@ -33,7 +33,7 @@ define(['sugar-web/graphics/palette'], function (palette) {
 			if (sliderValue <= 50) {
 				return 0.25 + (sliderValue / 50) * 0.75; // 0.25x to 1x
 			} else {
-				return 1 + ((sliderValue - 50) / 50); // 1x to 2x
+				return 1 + ((sliderValue - 50) / 50) * 3; // 1x to 4x
 			}
 		}
 	};
