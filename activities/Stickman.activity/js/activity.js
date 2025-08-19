@@ -2690,10 +2690,107 @@ define([
 
 		// EXPORT FUNCTIONALITY
 
+		// Calculate bounding box for a single stickman
+		function calculateStickmanBounds(joints) {
+			if (!joints || joints.length === 0) return null;
+			
+			const xs = joints.map(joint => joint.x);
+			const ys = joints.map(joint => joint.y);
+			
+			return {
+				minX: Math.min(...xs),
+				maxX: Math.max(...xs),
+				minY: Math.min(...ys),
+				maxY: Math.max(...ys)
+			};
+		}
+
+		// Calculate global bounds across all stickmen and all frames
+		function calculateGlobalBounds() {
+			let globalMinX = Infinity;
+			let globalMaxX = -Infinity;
+			let globalMinY = Infinity;
+			let globalMaxY = -Infinity;
+			
+			// Iterate through all stickmen and all their frames
+			Object.keys(baseFrames).forEach(stickmanId => {
+				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
+				
+				for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+					const frameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
+					if (frameData && frameData.joints) {
+						const bounds = calculateStickmanBounds(frameData.joints);
+						if (bounds) {
+							globalMinX = Math.min(globalMinX, bounds.minX);
+							globalMaxX = Math.max(globalMaxX, bounds.maxX);
+							globalMinY = Math.min(globalMinY, bounds.minY);
+							globalMaxY = Math.max(globalMaxY, bounds.maxY);
+						}
+					}
+				}
+			});
+			
+			// Return null if no valid bounds found
+			if (globalMinX === Infinity) 
+				return null;
+			
+			return {
+				minX: globalMinX,
+				maxX: globalMaxX,
+				minY: globalMinY,
+				maxY: globalMaxY,
+				width: globalMaxX - globalMinX,
+				height: globalMaxY - globalMinY
+			};
+		}
+
+		// Calculate optimal export bounds with fixed size and margin
+		function calculateOptimalExportBounds(margin = 50) {
+			const globalBounds = calculateGlobalBounds();
+			if (!globalBounds) {
+				// Fallback to canvas center if no stickmen
+				return {
+					x: canvas.width / 4,
+					y: canvas.height / 4,
+					width: canvas.width / 2,
+					height: canvas.height / 2
+				};
+			}
+			
+			// Add margin around the content
+			const boundedWidth = globalBounds.width + (margin * 2);
+			const boundedHeight = globalBounds.height + (margin * 2);
+			
+			// Ensure minimum size for visibility
+			const minSize = 200;
+			const finalWidth = Math.max(boundedWidth, minSize);
+			const finalHeight = Math.max(boundedHeight, minSize);
+			
+			// Calculate centered position
+			const centerX = (globalBounds.minX + globalBounds.maxX) / 2;
+			const centerY = (globalBounds.minY + globalBounds.maxY) / 2;
+			
+			const exportBounds = {
+				x: centerX - finalWidth / 2,
+				y: centerY - finalHeight / 2,
+				width: finalWidth,
+				height: finalHeight
+			};
+			
+			// Ensure bounds don't go outside canvas
+			exportBounds.x = Math.max(0, Math.min(exportBounds.x, canvas.width - exportBounds.width));
+			exportBounds.y = Math.max(0, Math.min(exportBounds.y, canvas.height - exportBounds.height));
+			
+			return exportBounds;
+		}
+
 		function exportAnimation() {
+			// Calculate optimal bounding box for export
+			const exportBounds = calculateOptimalExportBounds(50); // 50px margin
+			
 			const recordCanvas = document.createElement('canvas');
-			recordCanvas.width = canvas.width;
-			recordCanvas.height = canvas.height;
+			recordCanvas.width = exportBounds.width;
+			recordCanvas.height = exportBounds.height;
 			const recordCtx = recordCanvas.getContext('2d');
 
 			const stream = recordCanvas.captureStream(15);
@@ -2740,8 +2837,15 @@ define([
 					return;
 				}
 
+				// Clear with white background
 				recordCtx.fillStyle = '#ffffff';
 				recordCtx.fillRect(0, 0, recordCanvas.width, recordCanvas.height);
+
+				// Save context and set up clipping/translation for the bounding box
+				recordCtx.save();
+				
+				// Translate to crop the content to our bounding box
+				recordCtx.translate(-exportBounds.x, -exportBounds.y);
 
 				// Update each stickman to its current frame for this export frame
 				animationStickmen.forEach((stickman, index) => {
@@ -2767,13 +2871,17 @@ define([
 						recordCtx.lineWidth = 8;
 						
 						// Get user color for shared mode
-						const userColor = (currentenv && currentenv.user && currentenv.user.colorvalue) 
-							? currentenv.user.colorvalue 
-							: null;
+						const userColor = stickmanUserColors[stickmanId] || 
+							((currentenv && currentenv.user && currentenv.user.colorvalue) 
+								? currentenv.user.colorvalue 
+								: null);
 						
 						drawStickmanSkeleton(recordCtx, animationStickmen[index].joints, userColor);
 					}
 				});
+
+				// Restore context
+				recordCtx.restore();
 
 				currentExportFrame++;
 				setTimeout(() => requestAnimationFrame(renderFrame), 150);
