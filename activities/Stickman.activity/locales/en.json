@@ -13,6 +13,8 @@
 	"Tutorial": "Tutorial",
 	"AddFrame": "Add Frame",
 	"ConfirmRemoval": "Are you sure you want to remove the Stickman?",
+	"Warning": "Warning",
+	"Remove": "Remove",
 	"No": "No",
 	"Yes": "Yes",
 	"CannotRemoveLastStickman": "Cannot remove the last stickman",

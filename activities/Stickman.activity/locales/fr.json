@@ -13,6 +13,8 @@
 	"Tutorial": "Tutoriel",
 	"AddFrame": "Ajouter Image",
 	"ConfirmRemoval": "Êtes-vous sûr de vouloir supprimer le Stickman?",
+	"Warning": "Avertissement",
+	"Remove": "Supprimer",
 	"No": "Non",
 	"Yes": "Oui",
 	"CannotRemoveLastStickman": "Impossible de supprimer le dernier stickman",

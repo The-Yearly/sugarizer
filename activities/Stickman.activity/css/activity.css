@@ -313,7 +313,7 @@ body {
 
 /* Modal Header */
 .modal-header {
-	background-color: #808080;
+	background-color: #282828;
 	color: #ffffff;
 	text-shadow: none;
 	padding: 8px 10px;
@@ -332,13 +332,15 @@ body {
 
 /* Modal Body */
 .modal-body {
+	background-color: #080808;
+	color: #ffffff;
 	padding: 20px;
 	text-align: center;
 }
 
 .modal-message {
 	margin: 0 0 20px 0;
-	color: #000000;
+	color: #ffffff;
 	line-height: 1.42857143;
 	font-size: 14px;
 }
@@ -392,6 +394,10 @@ body {
 
 .modal-button-icon-ok {
 	background-image: url('../icons/dialog-ok.svg');
+}
+
+.modal-button-icon-minus {
+	background-image: url('../icons/minus.svg');
 }
 
 /* UI styling for introJs-tutorial */

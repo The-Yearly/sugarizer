@@ -1262,9 +1262,25 @@ define([
 			const header = document.createElement('div');
 			header.className = 'modal-header';
 
+			const headerContent = document.createElement('div');
+			headerContent.style.display = 'flex';
+			headerContent.style.alignItems = 'center';
+			headerContent.style.gap = '8px';
+
+			const warningIcon = document.createElement('div');
+			warningIcon.style.backgroundImage = "url('./icons/emblem-warning.svg')";
+			warningIcon.style.backgroundSize = '40px 40px';
+			warningIcon.style.backgroundRepeat = 'no-repeat';
+			warningIcon.style.backgroundPosition = 'center';
+			warningIcon.style.width = '40px';
+			warningIcon.style.height = '40px';
+
 			const title = document.createElement('h3');
-			title.textContent = l10n.get("RemoveStickman");
+			title.textContent = l10n.get("Warning") || "Warning";
 			title.className = 'modal-title';
+
+			headerContent.appendChild(warningIcon);
+			headerContent.appendChild(title);
 
 			const body = document.createElement('div');
 			body.className = 'modal-body';
@@ -1281,14 +1297,14 @@ define([
 			const cancelButton = document.createElement('button');
 			cancelButton.className = 'modal-button';
 			cancelButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("No")}
+				<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("Cancel") || "Cancel"}
 			`;
 
 			// confirm button
 			const confirmButton = document.createElement('button');
 			confirmButton.className = 'modal-button modal-button-confirm';
 			confirmButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("Yes")}
+				<span class="modal-button-icon modal-button-icon-minus"></span>${l10n.get("Remove") || "Remove"}
 			`;
 
 			cancelButton.onclick = () => {
@@ -1343,7 +1359,7 @@ define([
 			};
 
 			// Assemble modal
-			header.appendChild(title);
+			header.appendChild(headerContent);
 			body.appendChild(message);
 			buttonContainer.appendChild(cancelButton);
 			buttonContainer.appendChild(confirmButton);
