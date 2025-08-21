@@ -67,6 +67,10 @@ define([
 		let lastMovementBroadcast = 0;
 		const MOVEMENT_BROADCAST_THROTTLE = 50;
 
+		// Add these variables for remote stickman management
+		let remoteStickmanPositions = {}; // Store local positions for remote stickmen
+		let isDraggingRemote = false;
+
 		// PRESENCE VARIABLES
 		let presence = null;
 		let isHost = false;
@@ -76,6 +80,16 @@ define([
 		
 		function deepClone(obj) {
 			return JSON.parse(JSON.stringify(obj));
+		} 
+
+		// Check if a stickman is owned by the current user
+		function isStickmanOwned(stickmanId) {
+			if (!isShared || !presence || !currentenv || !currentenv.user) {
+				return true; // Not in shared mode or no user info, assume owned
+			}
+			
+			const currentUser = presence.getUserInfo();
+			return currentUser && stickmanId.toString().startsWith(currentUser.networkId);
 		} 
 
 		// Joint hierarchy - defines parent-child relationships for rotation
@@ -628,6 +642,35 @@ define([
 			});
 		}
 
+		// function to reset remote positions when receiving updates
+		function resetRemoteStickmanPosition(stickmanId) {
+			if (remoteStickmanPositions[stickmanId]) {
+				// Store the current local offset before resetting
+				const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
+				const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
+				
+				// Update the original joints to the new network data (without the offset)
+				const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
+				if (stickmanIndex !== -1) {
+					// The current joints already have the network update, so we store them as the new original
+					const currentJointsWithoutOffset = stickmen[stickmanIndex].joints.map(joint => ({
+						x: joint.x - offsetX,
+						y: joint.y - offsetY,
+						name: joint.name
+					}));
+					
+					// Update the original joints to the new network position
+					remoteStickmanPositions[stickmanId].originalJoints = deepClone(currentJointsWithoutOffset);
+					
+					// Reapply the local offset to maintain the user's positioning
+					stickmen[stickmanIndex].joints.forEach((joint, index) => {
+						joint.x = currentJointsWithoutOffset[index].x + offsetX;
+						joint.y = currentJointsWithoutOffset[index].y + offsetY;
+					});
+				}
+			}
+		}
+
 		// NETWORK CALLBACKS
 
 		var onNetworkDataReceived = function (msg) {
@@ -655,8 +698,9 @@ define([
 				render();
 			}
 
-			if (msg.action === 'stickman_update') {
+			if (msg.action === 'stickman_update' || msg.action === 'stickman_final_position') {
 				console.log("Receiving stickman update for", msg.content.stickmanId);
+				const stickmanId = msg.content.stickmanId;
 				updateStickmanFromNetwork(msg.content);
 				render();
 			}
@@ -670,12 +714,6 @@ define([
 			if (msg.action === 'remote_stickman_movement') {
 				console.log("Receiving remote stickman movement for", msg.content.stickmanId);
 				processRemoteStickmanMovement(msg.content);
-				render();
-			}
-
-			if (msg.action === 'stickman_final_position') {
-				console.log("Receiving final position for", msg.content.stickmanId);
-				updateStickmanFromNetwork(msg.content);
 				render();
 			}
 
@@ -833,8 +871,7 @@ define([
 				const stickmanId = stickman.id;
 
 				// Only broadcast movements of own stickmen
-				const currentUser = presence.getUserInfo();
-				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+				if (!isStickmanOwned(stickmanId)) {
 					return;
 				}
 
@@ -865,8 +902,25 @@ define([
 			if (existingIndex !== -1) {
 				console.log("Stickman already exists, updating:", newId);
 
+				// Apply remote offset if it exists for this stickman
+				let jointsToUse = deepClone(stickmanData.joints);
+				if (remoteStickmanPositions[newId]) {
+					const offsetX = remoteStickmanPositions[newId].offsetX || 0;
+					const offsetY = remoteStickmanPositions[newId].offsetY || 0;
+					
+					// Update original joints to the new network data
+					remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
+					
+					// Apply offset for display
+					jointsToUse = jointsToUse.map(joint => ({
+						x: joint.x + offsetX,
+						y: joint.y + offsetY,
+						name: joint.name
+					}));
+				}
+
 				// Update existing stickman instead of ignoring
-				stickmen[existingIndex].joints = deepClone(stickmanData.joints);
+				stickmen[existingIndex].joints = jointsToUse;
 				baseFrames[newId] = deepClone(stickmanData.baseFrame || stickmanData.joints);
 				deltaFrames[newId] = deepClone(stickmanData.deltaFrames || []);
 				currentFrameIndices[newId] = stickmanData.currentFrameIndex || 0;
@@ -879,9 +933,27 @@ define([
 			}
 
 			console.log("Adding new stickman with data:", stickmanData);
+			
+			// Apply remote offset if it exists for this stickman
+			let jointsToUse = deepClone(stickmanData.joints);
+			if (remoteStickmanPositions[newId]) {
+				const offsetX = remoteStickmanPositions[newId].offsetX || 0;
+				const offsetY = remoteStickmanPositions[newId].offsetY || 0;
+				
+				// Update original joints to the new network data
+				remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
+				
+				// Apply offset for display
+				jointsToUse = jointsToUse.map(joint => ({
+					x: joint.x + offsetX,
+					y: joint.y + offsetY,
+					name: joint.name
+				}));
+			}
+			
 			const newStickman = {
 				id: newId,
-				joints: deepClone(stickmanData.joints)
+				joints: jointsToUse
 			};
 
 			stickmen.push(newStickman);
@@ -964,10 +1036,11 @@ define([
 				const stickmanId = stickman.id;
 
 				// Only broadcast final positions of own stickmen
-				const currentUser = presence.getUserInfo();
-				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+				if (!isStickmanOwned(stickmanId)) {
 					return;
 				}
+
+				const currentUser = presence.getUserInfo();
 
 				const message = {
 					user: currentUser,
@@ -1002,6 +1075,22 @@ define([
 				// Reconstruct current frame
 				const frame = reconstructFrameFromDeltas(stickmanId, data.currentFrameIndex);
 				if (frame) {
+					// Apply remote offset if it exists for this stickman
+					if (remoteStickmanPositions[stickmanId]) {
+						const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
+						const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
+						
+						// Update original joints to the new network data
+						remoteStickmanPositions[stickmanId].originalJoints = deepClone(frame.joints);
+						
+						// Apply offset for display
+						frame.joints = frame.joints.map(joint => ({
+							x: joint.x + offsetX,
+							y: joint.y + offsetY,
+							name: joint.name
+						}));
+					}
+					
 					stickmen[stickmanIndex] = frame;
 					updateMiddleJoint(stickmanIndex);
 					updateTimeline();
@@ -1019,11 +1108,11 @@ define([
 
 			try {
 				// Only broadcast removal of own stickmen
-				const currentUser = presence.getUserInfo();
-				if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
-					console.log("Cannot broadcast removal of non-owned stickman");
+				if (!isStickmanOwned(stickmanId)) {
 					return;
 				}
+
+				const currentUser = presence.getUserInfo();
 
 				const message = {
 					user: currentUser,
@@ -1044,6 +1133,11 @@ define([
 		function processStickmanRemoval(removalData) {
 			const { stickmanId, timestamp } = removalData;
 			console.log("Processing stickman removal:", stickmanId);
+
+			// Clean up local position data
+			if (remoteStickmanPositions[stickmanId]) {
+				delete remoteStickmanPositions[stickmanId];
+			}
 
 			// Find and remove the stickman
 			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
@@ -1095,7 +1189,7 @@ define([
 				const currentUser = presence.getUserInfo();
 				if (currentUser) {
 					ownedStickmenCount = stickmen.filter(stickman =>
-						stickman.id.toString().startsWith(currentUser.networkId)
+						isStickmanOwned(stickman.id)
 					).length;
 				}
 			}
@@ -1543,8 +1637,7 @@ define([
 				if (!isShared || !presence) return true;
 
 				const stickmanId = stickmen[index].id;
-				const currentUser = presence.getUserInfo();
-				return currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				return isStickmanOwned(stickmanId);
 			});
 
 			if (allowedIndices.length === 0) {
@@ -1714,8 +1807,7 @@ define([
 			// Check ownership in shared mode
 			let isOwnStickman = true;
 			if (isShared && presence) {
-				const currentUser = presence.getUserInfo();
-				isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				isOwnStickman = isStickmanOwned(stickmanId);
 			}
 			
 			// Only show frames if user owns the stickman
@@ -1738,8 +1830,7 @@ define([
 
 				previewCanvas.addEventListener('click', () => {
 					if (isShared && presence) {
-						const currentUser = presence.getUserInfo();
-						if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+						if (!isStickmanOwned(stickmanId)) {
 							console.log("Cannot switch frames of non-owned stickman");
 							return;
 						}
@@ -1825,8 +1916,7 @@ define([
 				e.stopPropagation();
 				
 				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+					if (!isStickmanOwned(stickmanId)) {
 						console.log("Cannot delete frame of non-owned stickman");
 						return;
 					}
@@ -1925,6 +2015,47 @@ define([
 		}
 
 		function drawStickman(joints, stickmanIndex) {
+			const stickmanId = stickmen[stickmanIndex].id;
+			const isOwnStickman = isStickmanOwned(stickmanId);
+			
+			// Apply remote offset if this is a remote stickman
+			let displayJoints = joints;
+			if (!isOwnStickman && remoteStickmanPositions[stickmanId]) {
+				const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
+				const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
+				
+				displayJoints = joints.map(joint => ({
+					x: joint.x + offsetX,
+					y: joint.y + offsetY,
+					name: joint.name
+				}));
+			}
+			
+			// Draw with different style for remote stickmen
+			if (!isOwnStickman) {
+				// Get user color for remote stickman
+				let userColor = null;
+				if (stickmanUserColors[stickmanId]) {
+					userColor = stickmanUserColors[stickmanId];
+				}
+				
+				// Draw solid black skeleton for remote stickmen
+				drawStickmanSkeleton(ctx, displayJoints, userColor, isOwnStickman);
+				
+				// Only show hip joint for dragging
+				const hipJoint = displayJoints[2];
+				ctx.fillStyle = '#00ff00';
+				ctx.strokeStyle = '#00cc00';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.arc(hipJoint.x, hipJoint.y, 5, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
+				
+				return; // Skip normal drawing for remote stickmen
+			}
+			
+			// Original drawing code for owned stickmen
 			// skeleton first
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 3;
@@ -1933,16 +2064,9 @@ define([
 
 			// Get user color and ownership info
 			let userColor = null;
-			let isOwnStickman = true; // Default to true for non-shared mode
 
 			if (stickmanIndex < stickmen.length) {
 				const stickmanId = stickmen[stickmanIndex].id;
-
-				// Check ownership in shared mode
-				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
-				}
 
 				// Only get color for OTHER users' stickmen
 				if (!isOwnStickman && stickmanUserColors[stickmanId]) {
@@ -1950,7 +2074,7 @@ define([
 				}
 			}
 
-			drawStickmanSkeleton(ctx, joints, userColor,isOwnStickman);
+			drawStickmanSkeleton(ctx, displayJoints, userColor, isOwnStickman);
 
 			// Show joints for selected stickman, or first stickman if none selected
 			const shouldShowJoints = (selectedStickmanIndex >= 0)
@@ -1961,7 +2085,7 @@ define([
 			const canShowJoints = !isShared || isOwnStickman;
 
 			if (shouldShowJoints && canShowJoints) {
-				joints.forEach((joint, index) => {
+				displayJoints.forEach((joint, index) => {
 					if (index === 11)
 						return; // Skip middle joint in regular drawing
 
@@ -1992,7 +2116,7 @@ define([
 				});
 
 				// Draw middle joint only for owned stickmen
-				const middleJoint = joints[11];
+				const middleJoint = displayJoints[11];
 				ctx.fillStyle = '#ff8800';
 				ctx.strokeStyle = '#cc6600';
 				ctx.lineWidth = 1.5;
@@ -2002,7 +2126,7 @@ define([
 				ctx.stroke();
 			} else if (shouldShowJoints && !isOwnStickman) {
 				// For remote stickmen, only show the hip joint
-				const hipJoint = joints[2]; 
+				const hipJoint = displayJoints[2]; 
 				ctx.fillStyle = '#00ff00'; 
 				ctx.strokeStyle = '#00cc00';
 				ctx.lineWidth = 1.5;
@@ -2268,8 +2392,7 @@ define([
 
 				// Check ownership in shared mode
 				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					if (!currentUser || !stickmanId.toString().startsWith(currentUser.networkId)) {
+					if (!isStickmanOwned(stickmanId)) {
 						console.log("Cannot remove other user's stickman");
 						return; // Simply return without any action
 					}
@@ -2325,32 +2448,42 @@ define([
 				const stickmanIndex = result.stickmanIndex;
 				const stickmanId = stickmen[stickmanIndex].id;
 				
-				// Check ownership in shared mode
-				let isOwnStickman = true;
-				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
-				}
+				// Check ownership
+				const isOwnStickman = isStickmanOwned(stickmanId);
 
-				// For non-owned stickmen, only allow dragging 
+				// For remote stickmen, only allow dragging via hip joint
 				if (!isOwnStickman) {
 					const selectedJointIndex = stickmen[stickmanIndex].joints.indexOf(result.joint);
-					if (selectedJointIndex !== 2) 
+					
+					// Only allow dragging remote stickmen by the hip joint
+					if (selectedJointIndex !== 2) {
+						console.log("Can only drag remote stickmen by the hip joint");
 						return;
+					}
 
 					selectedJoint = result.joint;
 					selectedStickmanIndex = result.stickmanIndex;
 					
-					originalJoints = deepClone(stickmen[selectedStickmanIndex].joints);
+					// Store original positions for local dragging only
+					if (!remoteStickmanPositions[stickmanId]) {
+						remoteStickmanPositions[stickmanId] = {
+							offsetX: 0,
+							offsetY: 0,
+							originalJoints: deepClone(stickmen[stickmanIndex].joints)
+						};
+					} else {
+						// Update original joints to current position
+						remoteStickmanPositions[stickmanId].originalJoints = deepClone(stickmen[stickmanIndex].joints);
+					}
 					
-					// Start whole stickman drag for remote stickmen
+					// Start remote stickman drag
+					isDraggingRemote = true;
 					isDraggingWhole = true;
 					dragStartPos = {
 						x: mouseX,
 						y: mouseY
 					};
 					
-					console.log("Started dragging remote stickman");
 					return;
 				}
 
@@ -2416,7 +2549,29 @@ define([
 		function handleMouseMove(e) {
 			const { mouseX, mouseY } = getCanvasCoordinates(e);
 
-			if (isDraggingWhole && selectedStickmanIndex >= 0) {
+			if (isDraggingRemote && selectedStickmanIndex >= 0) {
+				// Drag remote stickman locally only
+				const stickmanId = stickmen[selectedStickmanIndex].id;
+				const remoteData = remoteStickmanPositions[stickmanId];
+				
+				if (!remoteData) return;
+				
+				const deltaX = mouseX - dragStartPos.x;
+				const deltaY = mouseY - dragStartPos.y;
+				
+				// Update local offset
+				remoteStickmanPositions[stickmanId].offsetX = deltaX;
+				remoteStickmanPositions[stickmanId].offsetY = deltaY;
+				
+				// Apply offset to display position only (not original data)
+				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
+					joint.x = remoteData.originalJoints[index].x + deltaX;
+					joint.y = remoteData.originalJoints[index].y + deltaY;
+				});
+				
+				// No broadcast for remote stickman movement - local only
+				render();
+			} else if (isDraggingWhole && selectedStickmanIndex >= 0) {
 				// Drag entire stickman using hip as anchor
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
@@ -2428,11 +2583,7 @@ define([
 
 				// Check if this is a remote stickman
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				let isOwnStickman = true;
-				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
-				}
+				const isOwnStickman = isStickmanOwned(stickmanId);
 
 				if (isOwnStickman) {
 					if (isShared && presence) {
@@ -2517,20 +2668,26 @@ define([
 		}
 
 		function handleMouseUp() {
-			const wasInteracting = isDragging || isDraggingWhole || isRotating;
+			const wasInteracting = isDragging || isDraggingWhole || isRotating || isDraggingRemote;
+
+			if (isDraggingRemote && selectedStickmanIndex >= 0) {
+				// For remote stickmen, keep the local offset but don't save to frames
+				const stickmanId = stickmen[selectedStickmanIndex].id;
+				console.log("Finished dragging remote stickman locally - position not saved");
+			}
+
+			isDragging = false;
+			isDraggingWhole = false;
+			isDraggingRemote = false;
+			isRotating = false;
+			rotationPivot = null;
 
 			// Check if remote stickman
 			let isRemoteStickman = false;
 			if (selectedStickmanIndex >= 0 && isShared && presence) {
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				const currentUser = presence.getUserInfo();
-				isRemoteStickman = !currentUser || !stickmanId.toString().startsWith(currentUser.networkId);
+				isRemoteStickman = !isStickmanOwned(stickmanId);
 			}
-
-			isDragging = false;
-			isDraggingWhole = false;
-			isRotating = false;
-			rotationPivot = null;
 
 			if (selectedStickmanIndex >= 0 && originalJoints.length > 0) {
 				// Only save frames and broadcast for own stickmen
@@ -2563,12 +2720,36 @@ define([
 			for (let stickmanIndex = stickmen.length - 1; stickmanIndex >= 0; stickmanIndex--) {
 				const joints = stickmen[stickmanIndex].joints;
 				const stickmanId = stickmen[stickmanIndex].id;
+				const isOwnStickman = isStickmanOwned(stickmanId);
 
-				// Check ownership
-				let isOwnStickman = true;
-				if (isShared && presence) {
-					const currentUser = presence.getUserInfo();
-					isOwnStickman = currentUser && stickmanId.toString().startsWith(currentUser.networkId);
+				// Apply remote offset for hit detection if it exists
+				let hitTestJoints = joints;
+				if (!isOwnStickman && remoteStickmanPositions[stickmanId]) {
+					const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
+					const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
+					
+					hitTestJoints = joints.map(joint => ({
+						x: joint.x + offsetX,
+						y: joint.y + offsetY,
+						name: joint.name
+					}));
+				}
+
+				// For remote stickmen, only check hip joint with larger hit area
+				if (!isOwnStickman) {
+					const hipJoint = hitTestJoints[2];
+					const dx = hipJoint.x - x;
+					const dy = hipJoint.y - y;
+					const distance = Math.sqrt(dx * dx + dy * dy);
+					
+					// Larger hit area for remote stickman hip
+					if (distance < 15) {
+						return { 
+							joint: joints[2], // Return original joint, not offset one
+							stickmanIndex: stickmanIndex 
+						};
+					}
+					continue;
 				}
 
 				// Define hit radii for different joint types
@@ -2587,30 +2768,15 @@ define([
 					}
 				};
 
-				// For remote stickmen, only check hip joint (index 2)
-				if (!isOwnStickman) {
-					const joint = joints[2]; // Hip joint
-					const dx = joint.x - x;
-					const dy = joint.y - y;
-					const distance = Math.sqrt(dx * dx + dy * dy);
-					const hitRadius = getHitRadius(2);
-
-					if (distance < hitRadius) {
-						return { 
-							joint: joint, 
-							stickmanIndex: stickmanIndex 
-						};
-					}
-					continue; // Skip other joints for remote stickmen
-				}
-
 				// Check joints in order of interaction priority
 				const priorityOrder = [2, 11, 1, 0, 7, 9, 3, 5, 8, 10, 4, 6];
 				
 				for (const jointIndex of priorityOrder) {
-					if (jointIndex >= joints.length) continue;
-					
-					const joint = joints[jointIndex];
+					if (jointIndex >= hitTestJoints.length){ 
+						continue;
+					}
+
+					const joint = hitTestJoints[jointIndex];
 					const dx = joint.x - x;
 					const dy = joint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
@@ -2618,7 +2784,7 @@ define([
 
 					if (distance < hitRadius) {
 						return { 
-							joint: joint, 
+							joint: joints[jointIndex], // Return original joint, not offset one
 							stickmanIndex: stickmanIndex 
 						};
 					}
@@ -2642,44 +2808,48 @@ define([
 				return;
 			}
 
-			// Draw onion skin of previous frame - only for selected stickman
-			// do not show during playback
+			// Draw onion skin of previous frame - only for selected stickman that is owned
+			// do not show during playback or for remote stickmen
 			if (!isPlaying && selectedStickmanIndex >= 0) {
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-				const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 				
-				// Only show onion skin if there's a previous frame
-				if (totalFrames > 1 && currentFrameIndex > 0) {
-					const prevFrameIndex = currentFrameIndex - 1;
-					const prevFrame = reconstructFrameFromDeltas(stickmanId, prevFrameIndex);
+				// Only show onion skin for owned stickmen
+				if (isStickmanOwned(stickmanId)) {
+					const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
+					const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
 					
-					if (prevFrame) {
-						ctx.save();
-						ctx.globalAlpha = 0.3;
-						ctx.strokeStyle = '#0066cc';
-						ctx.lineWidth = 2;
-						ctx.lineCap = 'round';
-						ctx.lineJoin = 'round';
+					// Only show onion skin if there's a previous frame
+					if (totalFrames > 1 && currentFrameIndex > 0) {
+						const prevFrameIndex = currentFrameIndex - 1;
+						const prevFrame = reconstructFrameFromDeltas(stickmanId, prevFrameIndex);
+						
+						if (prevFrame) {
+							ctx.save();
+							ctx.globalAlpha = 0.3;
+							ctx.strokeStyle = '#0066cc';
+							ctx.lineWidth = 2;
+							ctx.lineCap = 'round';
+							ctx.lineJoin = 'round';
 
-						drawStickmanSkeleton(ctx, prevFrame.joints);
+							drawStickmanSkeleton(ctx, prevFrame.joints);
 
-						ctx.fillStyle = '#0066cc';
-						prevFrame.joints.forEach((joint, index) => {
-							// Skip middle joint
-							if (index === 11) 
-								return;
+							ctx.fillStyle = '#0066cc';
+							prevFrame.joints.forEach((joint, index) => {
+								// Skip middle joint
+								if (index === 11) 
+									return;
 
-							ctx.beginPath();
-							if (index === 0) {
-								ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
-							} else {
-								ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
-							}
-							ctx.fill();
-						});
+								ctx.beginPath();
+								if (index === 0) {
+									ctx.arc(joint.x, joint.y, 4, 0, Math.PI * 2);
+								} else {
+									ctx.arc(joint.x, joint.y, 2, 0, Math.PI * 2);
+								}
+								ctx.fill();
+							});
 
-						ctx.restore();
+							ctx.restore();
+						}
 					}
 				}
 			}
