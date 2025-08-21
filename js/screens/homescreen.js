@@ -559,11 +559,17 @@ const HomeScreen = {
 
 				this.restrictedModeInfo.start = newStart;
 				this.restrictedModeInfo.activities = activities.slice(this.restrictedModeInfo.start, this.restrictedModeInfo.start + this.restrictedModeInfo.count)
+				this.$nextTick(() => {
+					this.computePopup();
+				});
 				return;
 
 			}
 			this.restrictedModeInfo.start = newStart;
 			this.restrictedModeInfo.activities = activities.slice(this.restrictedModeInfo.start, this.restrictedModeInfo.start + this.restrictedModeInfo.count - 2)
+			this.$nextTick(() => {
+				this.computePopup();
+			});
 		},
 
 		showPreviousRestrictedList() {
@@ -576,10 +582,16 @@ const HomeScreen = {
 				this.restrictedModeInfo.start = newStart;
 				this.restrictedModeInfo.positions = this.activityPositions.slice(this.restrictedModeInfo.count + 1);
 				this.restrictedModeInfo.activities = activities.slice(this.restrictedModeInfo.start, this.restrictedModeInfo.start + this.restrictedModeInfo.count - 1);
+				this.$nextTick(() => {
+					this.computePopup();
+				});
 				return;
 			}
 			this.restrictedModeInfo.start = newStart;
 			this.restrictedModeInfo.activities = activities.slice(this.restrictedModeInfo.start, this.restrictedModeInfo.start + this.restrictedModeInfo.count - 2);
+			this.$nextTick(() => {
+				this.computePopup();
+			});
 		},
 
 		quitApp() {
