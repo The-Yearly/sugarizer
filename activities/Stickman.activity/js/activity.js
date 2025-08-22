@@ -3054,7 +3054,9 @@ define([
 				recordCtx.restore();
 
 				currentExportFrame++;
-				setTimeout(() => requestAnimationFrame(renderFrame), 150);
+				// Use current speed setting for export timing (same as animation playback)
+				const exportDelay = 1000 / (currentSpeed * 2);
+				setTimeout(() => requestAnimationFrame(renderFrame), exportDelay);
 			};
 
 			renderFrame();
