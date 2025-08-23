@@ -3990,7 +3990,7 @@ define([
 			modal.className = 'modal-content';
 
 			const header = document.createElement('div');
-			header.className = 'modal-header';
+			header.className = 'modal-header-preview';
 
 			const title = document.createElement('h3');
 			title.textContent = l10n.get("VideoPreview") || "Video Preview";
@@ -3999,7 +3999,7 @@ define([
 				text-align: center;
 			`;			
 			const body = document.createElement('div');
-			body.className = 'modal-body';
+			body.className = 'modal-body-preview';
 
 			const previewCanvas = document.createElement('canvas');
 			previewCanvas.id = 'preview-canvas';
