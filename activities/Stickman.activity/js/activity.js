@@ -3904,6 +3904,7 @@ define([
 				border: 2px solid #666;
 				border-radius: 8px;
 				background: #f5f5f5;
+				margin-bottom: 23px;
 			`;
 
 			leftSection.appendChild(videoDisplay);
@@ -3966,11 +3967,11 @@ define([
 			contentContainer.appendChild(leftSection);
 			contentContainer.appendChild(rightSection);
 
-			// Frame counter (initially hidden)
+			// Frame counter
 			const frameCounterContainer = document.createElement('div');
 			frameCounterContainer.style.cssText = `
 				text-align: center;
-				margin: 10px 20px;
+				margin-top: 10px;
 				display: none;
 			`;
 
@@ -4036,7 +4037,6 @@ define([
 
 			// Assemble modal
 			modal.appendChild(contentContainer);
-			modal.appendChild(frameCounterContainer);
 			modal.appendChild(buttonContainer);
 			modalOverlay.appendChild(modal);
 			document.body.appendChild(modalOverlay);
@@ -4321,8 +4321,10 @@ define([
 			
 			rightSection.appendChild(stickmanCanvas);
 			
-			// Show frame counter
+			//frame counter under the stickman preview
+			frameCounterContainer.appendChild(frameCounter);
 			frameCounterContainer.style.display = 'block';
+			rightSection.appendChild(frameCounterContainer);
 			frameCounter.innerHTML = `Frame: <span id="frame-number">1</span> / ${frames.length}`;
 			
 			// Set up animation
