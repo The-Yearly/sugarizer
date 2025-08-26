@@ -3556,73 +3556,6 @@ define([
 			});
 		}
 
-		// Show spinner modal during video processing
-		function showSpinnerModal() {
-			const modal = document.createElement('div');
-			modal.id = 'video-processing-modal';
-			modal.style.cssText = `
-				position: fixed;
-				top: 0;
-				left: 0;
-				width: 100%;
-				height: 100%;
-				background: rgba(0, 0, 0, 0.7);
-				display: flex;
-				justify-content: center;
-				align-items: center;
-				z-index: 10000;
-			`;
-
-			const content = document.createElement('div');
-			content.style.cssText = `
-				background: white;
-				padding: 30px;
-				border-radius: 10px;
-				text-align: center;
-				box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-				max-width: 300px;
-			`;
-
-			const spinner = document.createElement('img');
-			spinner.src = 'icons/spinner-light.gif';
-			spinner.style.cssText = `
-				width: 64px;
-				height: 64px;
-				margin-bottom: 20px;
-			`;
-
-			const title = document.createElement('h3');
-			title.textContent = l10n.get("ProcessingVideo") || "Processing Video";
-			title.style.cssText = `
-				margin: 0 0 10px 0;
-				color: #333;
-				font-size: 18px;
-			`;
-
-			const message = document.createElement('p');
-			message.textContent = l10n.get("PleaseWait") || "Please wait while we analyze your video...";
-			message.style.cssText = `
-				margin: 0;
-				color: #666;
-				font-size: 14px;
-			`;
-
-			content.appendChild(spinner);
-			content.appendChild(title);
-			content.appendChild(message);
-			modal.appendChild(content);
-			document.body.appendChild(modal);
-
-			return modal;
-		}
-
-		// Hide spinner modal
-		function hideSpinnerModal(modal) {
-			if (modal && modal.parentNode) {
-				modal.parentNode.removeChild(modal);
-			}
-		}
-
 		// video import
 		async function importVideoAnimation() {
 			try {
@@ -3730,9 +3663,6 @@ define([
 
 		// Process the selected video file
 		async function processVideoFile(file) {
-			// Show spinner modal
-			const spinnerModal = showSpinnerModal();
-
 			try {
 				// Load PoseNet model if not already loaded
 				await loadPoseNet();
@@ -3741,48 +3671,21 @@ define([
 				const video = document.createElement('video');
 				video.src = URL.createObjectURL(file);
 				video.muted = true;
+				video.loop = true;
+				video.autoplay = true;
 				video.style.display = 'none';
 				document.body.appendChild(video);
 
-				return new Promise((resolve, reject) => {
-					video.addEventListener('loadedmetadata', async () => {
-						try {
-							const frames = await extractFramesFromVideo(video);
-							document.body.removeChild(video);
-							URL.revokeObjectURL(video.src);
+				await showVideoProcessingDialog(video, file);
 
-							hideSpinnerModal(spinnerModal);
-
-							if (frames.length > 0) {
-								// Show preview modal only after processing is complete
-								await showVideoPreview(frames, file.name);
-							} else {
-								humane.log(l10n.get("NoFramesDetected") || "No pose detected in video");
-							}
-							resolve();
-						} catch (error) {
-							document.body.removeChild(video);
-							URL.revokeObjectURL(video.src);
-							hideSpinnerModal(spinnerModal);
-							reject(error);
-						}
-					});
-
-					video.addEventListener('error', () => {
-						document.body.removeChild(video);
-						URL.revokeObjectURL(video.src);
-						hideSpinnerModal(spinnerModal);
-						reject(new Error('Failed to load video'));
-					});
-				});
 			} catch (error) {
-				hideSpinnerModal(spinnerModal);
 				console.error("Error processing video file:", error);
+				humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
 			}
 		}
 
 		// Extract frames from video and convert to stickman poses
-		async function extractFramesFromVideo(video) {
+		async function extractFramesFromVideo(video, progressCallback = null) {
 			const frames = [];
 			const canvas = document.createElement('canvas');
 			const ctx = canvas.getContext('2d');
@@ -3802,9 +3705,17 @@ define([
 			video.currentTime = 0;
 
 			let lastPoseKeypoints = null;
+			let frameIndex = 0;
+			const totalFramesToProcess = Math.ceil(duration * frameRate);
 
 			for (let time = 0; time < duration; time += frameInterval) {
 				try {
+					// Update progress if callback is provided
+					if (progressCallback) {
+						const progress = (frameIndex / totalFramesToProcess) * 100;
+						progressCallback(progress);
+					}
+					
 					video.currentTime = time;
 					
 					// Wait for video to seek to the correct time
@@ -3913,13 +3824,317 @@ define([
 				} catch (error) {
 					continue;
 				}
+				
+				frameIndex++;
+			}
+
+			// Final progress update
+			if (progressCallback) {
+				progressCallback(100);
 			}
 
 			return frames;
 		}
 
-		// Show preview modal before adding animation to canvas
-		async function showVideoPreview(frames, filename) {
+		// Show video processing dialog with immediate display
+		async function showVideoProcessingDialog(video, file) {
+			const modalOverlay = document.createElement('div');
+			modalOverlay.className = 'modal-overlay';
+			modalOverlay.style.cssText = `
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.7);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				z-index: 10000;
+			`;
+
+			const modal = document.createElement('div');
+			modal.className = 'modal-content';
+			modal.style.cssText = `
+				background: white;
+				border-radius: 10px;
+				box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+				max-width: 700px;
+				width: 90%;
+				max-height: 90vh;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+			`;
+
+			// Create container for side-by-side content
+			const contentContainer = document.createElement('div');
+			contentContainer.style.cssText = `
+				display: flex;
+				padding: 20px;
+				gap: 20px;
+				flex: 1;
+				align-items: center;
+			`;
+
+			// Left side - Video display
+			const leftSection = document.createElement('div');
+			leftSection.style.cssText = `
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				width: 320px;
+				min-width: 320px;
+				max-width: 320px;
+			`;
+
+			const videoDisplay = document.createElement('video');
+			videoDisplay.src = video.src;
+			videoDisplay.muted = true;
+			videoDisplay.loop = true;
+			videoDisplay.autoplay = true;
+			videoDisplay.style.cssText = `
+				width: 320px;
+				height: 240px;
+				object-fit: contain;
+				border: 2px solid #666;
+				border-radius: 8px;
+				background: #f5f5f5;
+			`;
+
+			leftSection.appendChild(videoDisplay);
+
+			// Right side - Initially spinner, later stickman preview
+			const rightSection = document.createElement('div');
+			rightSection.style.cssText = `
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				width: 320px;
+				min-width: 320px;
+				max-width: 320px;
+				min-height: 240px;
+			`;
+
+			// Create spinner content
+			const spinnerContent = document.createElement('div');
+			spinnerContent.style.cssText = `
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+			`;
+
+			const spinner = document.createElement('img');
+			spinner.src = 'icons/spinner-light.gif';
+			spinner.style.cssText = `
+				width: 64px;
+				height: 64px;
+				margin-bottom: 20px;
+			`;
+
+			const processingText = document.createElement('p');
+			processingText.textContent = l10n.get("ProcessingVideo") || "Processing Video...";
+			processingText.style.cssText = `
+				text-align: center;
+				color: #666;
+				font-size: 14px;
+				margin: 0 0 10px 0;
+			`;
+
+			const progressText = document.createElement('p');
+			progressText.id = 'processing-progress';
+			progressText.textContent = '0%';
+			progressText.style.cssText = `
+				text-align: center;
+				color: #666;
+				font-size: 14px;
+				margin: 0;
+			`;
+
+			spinnerContent.appendChild(spinner);
+			spinnerContent.appendChild(processingText);
+			spinnerContent.appendChild(progressText);
+			rightSection.appendChild(spinnerContent);
+
+			contentContainer.appendChild(leftSection);
+			contentContainer.appendChild(rightSection);
+
+			// Frame counter (initially hidden)
+			const frameCounterContainer = document.createElement('div');
+			frameCounterContainer.style.cssText = `
+				text-align: center;
+				margin: 10px 20px;
+				display: none;
+			`;
+
+			const frameCounter = document.createElement('span');
+			frameCounter.style.cssText = `
+				font-size: 14px;
+				color: #333;
+				font-weight: bold;
+			`;
+			frameCounterContainer.appendChild(frameCounter);
+
+			// Button container
+			const buttonContainer = document.createElement('div');
+			buttonContainer.style.cssText = `
+				display: flex;
+				justify-content: space-between;
+				padding: 20px;
+				border-top: 1px solid #e0e0e0;
+				background: #f9f9f9;
+			`;
+
+			// Cancel button (always active)
+			const cancelButton = document.createElement('button');
+			cancelButton.style.cssText = `
+				padding: 12px 24px;
+				background: #666;
+				color: white;
+				border: none;
+				border-radius: 5px;
+				cursor: pointer;
+				font-size: 14px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			`;
+			cancelButton.innerHTML = `
+				<span style="width: 16px; height: 16px; background: url('./icons/dialog-cancel.svg') no-repeat center; background-size: contain;"></span>
+				${l10n.get("Cancel") || "Cancel"}
+			`;
+
+			// Insert button (initially disabled)
+			const insertButton = document.createElement('button');
+			insertButton.disabled = true;
+			insertButton.style.cssText = `
+				padding: 12px 24px;
+				background: #cccccc;
+				color: #666666;
+				border: none;
+				border-radius: 5px;
+				cursor: not-allowed;
+				font-size: 14px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			`;
+			insertButton.innerHTML = `
+				<span style="width: 16px; height: 16px; background: url('./icons/dialog-ok.svg') no-repeat center; background-size: contain;"></span>
+				${l10n.get("Insert") || "Insert"}
+			`;
+
+			buttonContainer.appendChild(cancelButton);
+			buttonContainer.appendChild(insertButton);
+
+			// Assemble modal
+			modal.appendChild(contentContainer);
+			modal.appendChild(frameCounterContainer);
+			modal.appendChild(buttonContainer);
+			modalOverlay.appendChild(modal);
+			document.body.appendChild(modalOverlay);
+
+			// Variables for processing state
+			let isProcessing = true;
+			let processedFrames = null;
+			let currentFrame = 0;
+			let animationId = null;
+
+			// Cancel button functionality
+			cancelButton.addEventListener('click', () => {
+				if (animationId) clearTimeout(animationId);
+				isProcessing = false;
+				document.body.removeChild(video);
+				URL.revokeObjectURL(video.src);
+				document.body.removeChild(modalOverlay);
+			});
+
+			// Start processing when video is loaded
+			video.addEventListener('loadedmetadata', async () => {
+				try {
+					// Get progress element
+					const progressElement = document.getElementById('processing-progress');
+					
+					// Progress callback function
+					const updateProgress = (percentage) => {
+						if (progressElement) {
+							progressElement.textContent = `${Math.round(percentage)}%`;
+						}
+					};
+					
+					const frames = await extractFramesFromVideo(video, updateProgress);
+					
+					if (frames.length > 0) {
+						processedFrames = frames;
+						isProcessing = false;
+						
+						// Switch right side to show stickman preview
+						await showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames);
+						
+						// Enable insert button
+						insertButton.disabled = false;
+						insertButton.style.cssText = `
+							padding: 12px 24px;
+							background: #666;
+							color: white;
+							border: none;
+							border-radius: 5px;
+							cursor: pointer;
+							font-size: 14px;
+							display: flex;
+							align-items: center;
+							gap: 8px;
+						`;
+						
+						// Insert button functionality
+						insertButton.addEventListener('click', () => {
+							if (animationId) clearTimeout(animationId);
+							document.body.removeChild(video);
+							URL.revokeObjectURL(video.src);
+							document.body.removeChild(modalOverlay);
+							
+							// Extract just the joints for the animation
+							const jointFrames = frames.map(frame => frame.joints);
+							addVideoAnimationToCanvas(jointFrames);
+						});
+						
+					} else {
+						// No frames detected
+						document.body.removeChild(video);
+						URL.revokeObjectURL(video.src);
+						document.body.removeChild(modalOverlay);
+						humane.log(l10n.get("NoFramesDetected") || "No pose detected in video");
+					}
+				} catch (error) {
+					document.body.removeChild(video);
+					URL.revokeObjectURL(video.src);
+					document.body.removeChild(modalOverlay);
+					console.error("Error processing video:", error);
+					humane.log(l10n.get("VideoProcessingError") || "Error processing video file");
+				}
+			});
+
+			video.addEventListener('error', () => {
+				document.body.removeChild(video);
+				URL.revokeObjectURL(video.src);
+				document.body.removeChild(modalOverlay);
+				humane.log(l10n.get("VideoLoadError") || "Error loading video file");
+			});
+
+			// Close modal when clicking overlay (only if processing is complete)
+			modalOverlay.addEventListener('click', (e) => {
+				if (e.target === modalOverlay && !isProcessing) {
+					if (animationId) clearTimeout(animationId);
+					document.body.removeChild(video);
+					URL.revokeObjectURL(video.src);
+					document.body.removeChild(modalOverlay);
+				}
+			});
+		}
 			const modalOverlay = document.createElement('div');
 			modalOverlay.className = 'modal-overlay';
 
@@ -4084,135 +4299,42 @@ define([
 				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("AddToCanvas") || "Add to Canvas"}
 			`;
 
-			// Assemble modal structure
-			header.appendChild(title);
+		// Show stickman preview in the right section after processing
+		async function showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames) {
+			// Clear spinner content
+			rightSection.innerHTML = '';
 			
-			body.appendChild(canvasContainer);
-			body.appendChild(frameCounterContainer);
-			body.appendChild(confidenceContainer);
-			body.appendChild(controlsContainer);
-
-			buttonContainer.appendChild(cancelButton);
-			buttonContainer.appendChild(addButton);
-
-			modal.appendChild(header);
-			modal.appendChild(body);
-			modal.appendChild(buttonContainer);
-			modalOverlay.appendChild(modal);
-			document.body.appendChild(modalOverlay);
-
-			// Set up preview animation
-			const videoCtx = videoCanvas.getContext('2d');
+			// Create stickman canvas
+			const stickmanCanvas = document.createElement('canvas');
+			stickmanCanvas.width = 320;
+			stickmanCanvas.height = 240;
+			stickmanCanvas.style.cssText = `
+				width: 320px;
+				height: 240px;
+				border: 2px solid #666;
+				border-radius: 8px;
+				background: white;
+			`;
+			
+			rightSection.appendChild(stickmanCanvas);
+			
+			// Show frame counter
+			frameCounterContainer.style.display = 'block';
+			frameCounter.innerHTML = `Frame: <span id="frame-number">1</span> / ${frames.length}`;
+			
+			// Set up animation
 			const stickmanCtx = stickmanCanvas.getContext('2d');
-			const frameDisplay = document.getElementById('frame-number');
-			const confidenceDisplayElement = document.getElementById('confidence-display');
+			let currentPreviewFrame = 0;
 			
-			let currentFrame = 0;
-			let isPlaying = false;
-			let animationId = null;
-
-			// Draw keypoints on video frame
-			function drawPoseKeypoints(ctx, pose, scaleX, scaleY) {
-				const keypoints = pose.keypoints;
-				
-				// Draw keypoint connections first
-				const connections = [
-					['leftShoulder', 'rightShoulder'],
-					['leftShoulder', 'leftElbow'],
-					['leftElbow', 'leftWrist'],
-					['rightShoulder', 'rightElbow'],
-					['rightElbow', 'rightWrist'],
-					['leftShoulder', 'leftHip'],
-					['rightShoulder', 'rightHip'],
-					['leftHip', 'rightHip'],
-					['leftHip', 'leftKnee'],
-					['leftKnee', 'leftAnkle'],
-					['rightHip', 'rightKnee'],
-					['rightKnee', 'rightAnkle'],
-					['nose', 'leftShoulder'],
-					['nose', 'rightShoulder']
-				];
-
-				ctx.strokeStyle = '#00ff00';
-				ctx.lineWidth = 2;
-				
-				connections.forEach(([start, end]) => {
-					const startPoint = keypoints.find(kp => kp.part === start);
-					const endPoint = keypoints.find(kp => kp.part === end);
-					
-					if (startPoint && endPoint && startPoint.score > 0.3 && endPoint.score > 0.3) {
-						ctx.beginPath();
-						ctx.moveTo(startPoint.position.x * scaleX, startPoint.position.y * scaleY);
-						ctx.lineTo(endPoint.position.x * scaleX, endPoint.position.y * scaleY);
-						ctx.stroke();
-					}
-				});
-
-				// Draw keypoints
-				keypoints.forEach(keypoint => {
-					if (keypoint.score > 0.3) {
-						const x = keypoint.position.x * scaleX;
-						const y = keypoint.position.y * scaleY;
-						
-						// Color code by confidence
-						if (keypoint.score > 0.8) {
-							ctx.fillStyle = '#00ff00'; // High confidence - green
-						} else if (keypoint.score > 0.5) {
-							ctx.fillStyle = '#ffff00'; // Medium confidence - yellow
-						} else {
-							ctx.fillStyle = '#ff6600'; // Low confidence - orange
-						}
-						
-						ctx.beginPath();
-						ctx.arc(x, y, 4, 0, Math.PI * 2);
-						ctx.fill();
-						
-						// Add keypoint label
-						ctx.fillStyle = '#000';
-						ctx.font = '10px Arial';
-						ctx.fillText(keypoint.part, x + 6, y - 6);
-					}
-				});
-			}
-
 			// Draw frame function
-			function drawPreviewFrame(frameIndex) {
+			function drawStickmanFrame(frameIndex) {
 				if (frameIndex >= frames.length) return;
 				
 				const frameData = frames[frameIndex];
-				const { joints, videoFrame, pose, timestamp } = frameData;
-
-				// Clear canvases
-				videoCtx.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
-				stickmanCtx.clearRect(0, 0, stickmanCanvas.width, stickmanCanvas.height);
-
-				// Draw original video frame
-				const tempCanvas = document.createElement('canvas');
-				tempCanvas.width = videoFrame.width;
-				tempCanvas.height = videoFrame.height;
-				const tempCtx = tempCanvas.getContext('2d');
-				tempCtx.putImageData(videoFrame, 0, 0);
-
-				// Scale video to fit canvas
-				const scaleX = videoCanvas.width / videoFrame.width;
-				const scaleY = videoCanvas.height / videoFrame.height;
-				const scale = Math.min(scaleX, scaleY);
+				const { joints } = frameData;
 				
-				const drawWidth = videoFrame.width * scale;
-				const drawHeight = videoFrame.height * scale;
-				const offsetX = (videoCanvas.width - drawWidth) / 2;
-				const offsetY = (videoCanvas.height - drawHeight) / 2;
-
-				videoCtx.drawImage(tempCanvas, offsetX, offsetY, drawWidth, drawHeight);
-
-				// Draw pose keypoints on video
-				videoCtx.save();
-				videoCtx.translate(offsetX, offsetY);
-				videoCtx.scale(scale, scale);
-				drawPoseKeypoints(videoCtx, pose, 1, 1);
-				videoCtx.restore();
-
-				// Draw stickman on right canvas
+				// Clear canvas
+				stickmanCtx.clearRect(0, 0, stickmanCanvas.width, stickmanCanvas.height);
 				stickmanCtx.fillStyle = '#ffffff';
 				stickmanCtx.fillRect(0, 0, stickmanCanvas.width, stickmanCanvas.height);
 				
@@ -4225,95 +4347,32 @@ define([
 					y: joint.y - 200 + stickmanOffsetY,
 					name: joint.name
 				}));
-
+				
 				// Draw stickman
 				drawStickmanPreview(stickmanCtx, centeredJoints);
-
-				// Update displays
-				if (frameDisplay) {
-					frameDisplay.textContent = frameIndex + 1;
-				}
 				
-				if (confidenceDisplayElement) {
-					const confidence = (pose.score * 100).toFixed(1);
-					confidenceDisplayElement.textContent = `Pose Confidence: ${confidence}% | Time: ${timestamp.toFixed(2)}s`;
+				// Update frame counter
+				const frameNumberElement = document.getElementById('frame-number');
+				if (frameNumberElement) {
+					frameNumberElement.textContent = frameIndex + 1;
 				}
 			}
-
-			// Animation loop
+			
+			// Animation loop for auto-play
 			function animate() {
-				if (!isPlaying) return;
+				drawStickmanFrame(currentPreviewFrame);
+				currentPreviewFrame = (currentPreviewFrame + 1) % frames.length;
 				
-				drawPreviewFrame(currentFrame);
-				currentFrame = (currentFrame + 1) % frames.length;
-				
-				animationId = setTimeout(() => {
+				return setTimeout(() => {
 					requestAnimationFrame(animate);
 				}, 200); // 5 FPS preview
 			}
-
-			// Initial frame
-			drawPreviewFrame(0);
-
-			// Event listeners
-			playBtn.addEventListener('click', () => {
-				isPlaying = !isPlaying;
-				if (isPlaying) {
-					animate();
-					playBtn.innerHTML = `
-						<img src="icons/pause.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
-						${l10n.get("Pause") || "Pause"}
-					`;
-				} else {
-					if (animationId) clearTimeout(animationId);
-					playBtn.innerHTML = `
-						<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
-						${l10n.get("Play") || "Play"}
-					`;
-				}
-			});
-
-			prevBtn.addEventListener('click', () => {
-				if (animationId) clearTimeout(animationId);
-				isPlaying = false;
-				playBtn.innerHTML = `
-					<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
-					${l10n.get("Play") || "Play"}
-				`;
-				currentFrame = Math.max(0, currentFrame - 1);
-				drawPreviewFrame(currentFrame);
-			});
-
-			nextBtn.addEventListener('click', () => {
-				if (animationId) clearTimeout(animationId);
-				isPlaying = false;
-				playBtn.innerHTML = `
-					<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
-					${l10n.get("Play") || "Play"}
-				`;
-				currentFrame = Math.min(frames.length - 1, currentFrame + 1);
-				drawPreviewFrame(currentFrame);
-			});
-
-			cancelButton.addEventListener('click', () => {
-				if (animationId) clearTimeout(animationId);
-				document.body.removeChild(modalOverlay);
-			});
-
-			addButton.addEventListener('click', () => {
-				if (animationId) clearTimeout(animationId);
-				document.body.removeChild(modalOverlay);
-				// Extract just the joints for the animation
-				const jointFrames = frames.map(frame => frame.joints);
-				addVideoAnimationToCanvas(jointFrames);
-			});
-
-			modalOverlay.addEventListener('click', (e) => {
-				if (e.target === modalOverlay) {
-					if (animationId) clearTimeout(animationId);
-					document.body.removeChild(modalOverlay);
-				}
-			});
+			
+			// Start with first frame
+			drawStickmanFrame(0);
+			
+			// Start auto-play animation
+			return animate();
 		}
 
 		// Add the video animation frames to canvas as a new stickman
