@@ -72,8 +72,11 @@ define([
 			}
 		};
 		
-		// Current active configuration (change to POSENET_CONFIGS.mobilenet for MobileNet)
-		const posenetConfig = POSENET_CONFIGS.resnet50; 
+		// Current active configuration 
+		// ResNet50 for better accuracy
+		const posenetConfig = POSENET_CONFIGS.resnet50;
+		// MobileNetV1 for faster performance (change to POSENET_CONFIGS.mobilenet for MobileNet)
+		// const posenetConfig = POSENET_CONFIGS.mobilenet;
 
 		let lastMovementBroadcast = 0;
 		const MOVEMENT_BROADCAST_THROTTLE = 50;
