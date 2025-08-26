@@ -2815,12 +2815,53 @@ define([
 
 			// Handle empty canvas state
 			if (stickmen.length === 0) {
-				ctx.fillStyle = '#888888';
-				ctx.font = '20px Arial';
-				ctx.textAlign = 'center';
-				ctx.fillText('Waiting for stickmen...', canvas.width / 2, canvas.height / 2);
+				// Check if spinner element already exists
+				let spinner = document.getElementById('canvas-loading-spinner');
+				if (!spinner) {
+					// Create spinner element
+					spinner = document.createElement('div');
+					spinner.id = 'canvas-loading-spinner';
+					spinner.style.cssText = `
+						position: absolute;
+						top: 50%;
+						left: 50%;
+						transform: translate(-50%, -50%);
+						display: flex;
+						flex-direction: column;
+						align-items: center;
+						justify-content: center;
+						z-index: 10;
+					`;
+
+					const spinnerImg = document.createElement('img');
+					spinnerImg.src = 'icons/spinner-light.gif';
+					spinnerImg.style.cssText = `
+						width: 64px;
+						height: 64px;
+						margin-bottom: 10px;
+					`;
+
+					const loadingText = document.createElement('p');
+					loadingText.style.cssText = `
+						text-align: center;
+						color: #888;
+						font-size: 16px;
+						margin: 0;
+						font-family: Arial, sans-serif;
+					`;
+
+					spinner.appendChild(spinnerImg);
+					spinner.appendChild(loadingText);
+					canvas.parentElement.appendChild(spinner);
+				}
 				requestAnimationFrame(render);
 				return;
+			} else {
+				// Remove spinner when stickmen are present
+				const spinner = document.getElementById('canvas-loading-spinner');
+				if (spinner) {
+					spinner.remove();
+				}
 			}
 
 			// Draw onion skin of previous frame - only for selected stickman that is owned
