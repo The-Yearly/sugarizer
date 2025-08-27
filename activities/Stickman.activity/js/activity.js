@@ -3242,9 +3242,44 @@ define([
 
 									if (reconstructedFrame && reconstructedFrame.joints && Array.isArray(reconstructedFrame.joints)) {
 
-										// Position the imported stickman at a safe location
-										const centerX = canvas.width / 2 + (importedStickmen.length * 150) - 300;
-										const centerY = canvas.height / 2;
+										// Position the imported stickman at a random safe location
+										const stickmanHeight = 160;
+										const stickmanWidth = 80;
+										const margin = 30;
+
+										const minX = stickmanWidth / 2 + margin;
+										const maxX = canvas.width - stickmanWidth / 2 - margin;
+										const minY = 65 + margin;
+										const maxY = canvas.height - 95 - margin;
+
+										let centerX, centerY;
+										let attempts = 0;
+										const maxAttempts = 20;
+										const minDistance = 100;
+
+										// Find a random position that doesn't overlap with existing stickmen
+										do {
+											centerX = Math.random() * (maxX - minX) + minX;
+											centerY = Math.random() * (maxY - minY) + minY;
+
+											const isTooClose = stickmen.some(stickman => {
+												const existingCenter = stickman.joints[11] || stickman.joints[2];
+												const distance = Math.sqrt(
+													Math.pow(centerX - existingCenter.x, 2) +
+													Math.pow(centerY - existingCenter.y, 2)
+												);
+												return distance < minDistance;
+											});
+
+											if (!isTooClose) break;
+											attempts++;
+										} while (attempts < maxAttempts);
+
+										// Fallback to sequential positioning if random placement fails
+										if (attempts >= maxAttempts) {
+											centerX = canvas.width / 2 + (importedStickmen.length * 150) - 300;
+											centerY = canvas.height / 2;
+										}
 
 										// Calculate offset to move stickman to new position
 										const currentCenter = {
@@ -4497,6 +4532,58 @@ define([
 		function addVideoAnimationToCanvas(frames) {
 			if (frames.length === 0) return;
 
+			// Calculate random position for the imported stickman on main canvas
+			const stickmanHeight = 160;
+			const stickmanWidth = 80;
+			const margin = 30;
+
+			const minX = stickmanWidth / 2 + margin;
+			const maxX = canvas.width - stickmanWidth / 2 - margin;
+			const minY = 65 + margin;
+			const maxY = canvas.height - 95 - margin;
+
+			let centerX, centerY;
+			let attempts = 0;
+			const maxAttempts = 20;
+			const minDistance = 100;
+
+			// Find a random position that doesn't overlap with existing stickmen
+			do {
+				centerX = Math.random() * (maxX - minX) + minX;
+				centerY = Math.random() * (maxY - minY) + minY;
+
+				const isTooClose = stickmen.some(stickman => {
+					const existingCenter = stickman.joints[11] || stickman.joints[2];
+					const distance = Math.sqrt(
+						Math.pow(centerX - existingCenter.x, 2) +
+						Math.pow(centerY - existingCenter.y, 2)
+					);
+					return distance < minDistance;
+				});
+
+				if (!isTooClose) break;
+				attempts++;
+			} while (attempts < maxAttempts);
+
+			// Fallback to center if random placement fails
+			if (attempts >= maxAttempts) {
+				centerX = canvas.width / 2;
+				centerY = canvas.height / 2;
+			}
+
+			// Calculate offset to move from preview position (200, 200) to random position
+			const offsetX = centerX - 200;
+			const offsetY = centerY - 200;
+
+			// Apply random positioning to all frames
+			const repositionedFrames = frames.map(frame => {
+				return frame.map(joint => ({
+					x: joint.x + offsetX,
+					y: joint.y + offsetY,
+					name: joint.name
+				}));
+			});
+
 			// Create new stickman ID
 			let newStickmanId;
 			if (currentenv && currentenv.user) {
@@ -4506,24 +4593,24 @@ define([
 			}
 
 			// Ensure all frames have proper joint distances
-			frames.forEach(frame => enforceJointDistances(frame));
+			repositionedFrames.forEach(frame => enforceJointDistances(frame));
 
 			// Create new stickman with first frame
 			const newStickman = {
 				id: newStickmanId,
-				joints: deepClone(frames[0])
+				joints: deepClone(repositionedFrames[0])
 			};
 
 			stickmen.push(newStickman);
 
 			// Set up base frame and deltas
-			baseFrames[newStickmanId] = deepClone(frames[0]);
+			baseFrames[newStickmanId] = deepClone(repositionedFrames[0]);
 			deltaFrames[newStickmanId] = [];
 			currentFrameIndices[newStickmanId] = 0;
 
 			// Calculate deltas for subsequent frames
-			for (let i = 1; i < frames.length; i++) {
-				const delta = calculateDeltas(frames[i], frames[i - 1]);
+			for (let i = 1; i < repositionedFrames.length; i++) {
+				const delta = calculateDeltas(repositionedFrames[i], repositionedFrames[i - 1]);
 				if (delta) {
 					deltaFrames[newStickmanId].push(delta);
 				}
@@ -4560,7 +4647,7 @@ define([
 			updateRemoveButtonState();
 			render();
 
-			humane.log(`${l10n.get("VideoAnimationImported") || "Video animation imported successfully!"} (${frames.length} ${l10n.get("Frames") || "frames"})`);
+			humane.log(`${l10n.get("VideoAnimationImported") || "Video animation imported successfully!"} (${repositionedFrames.length} ${l10n.get("Frames") || "frames"})`);
 		}
 
 		// function for reconstructing frames with custom base/delta frames
