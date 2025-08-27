@@ -3635,9 +3635,137 @@ define([
 			});
 		}
 
+		// Create loading overlay for library check
+		function createLibraryLoadingOverlay() {
+			const overlay = document.createElement('div');
+			overlay.id = 'library-loading-overlay';
+			overlay.className = 'library-loading-overlay';
+			
+			const content = document.createElement('div');
+			content.className = 'library-loading-content';
+			
+			const spinner = document.createElement('img');
+			spinner.src = 'icons/spinner-light.gif';
+			spinner.className = 'library-loading-spinner';
+			spinner.alt = 'Loading...';
+			
+			content.appendChild(spinner);
+			overlay.appendChild(content);
+			
+			return overlay;
+		}
+
+		function showLibraryLoadingOverlay() {
+			// Disable the window by preventing interactions
+			const existingOverlay = document.getElementById('library-loading-overlay');
+			if (existingOverlay) {
+				return; // Already showing
+			}
+			
+			const overlay = createLibraryLoadingOverlay();
+			document.body.appendChild(overlay);
+			
+			// Disable all toolbar buttons except the stop button
+			const toolbar = document.getElementById('main-toolbar');
+			if (toolbar) {
+				const buttons = toolbar.querySelectorAll('button:not(#stop-button)');
+				buttons.forEach(button => {
+					button.style.pointerEvents = 'none';
+					button.style.opacity = '0.5';
+				});
+			}
+			
+			// Disable canvas interactions
+			const canvas = document.getElementById('stickman-canvas');
+			if (canvas) {
+				canvas.style.pointerEvents = 'none';
+				canvas.style.opacity = '0.5';
+			}
+			
+			// Disable timeline interactions
+			const timeline = document.getElementById('timeline');
+			if (timeline) {
+				timeline.style.pointerEvents = 'none';
+				timeline.style.opacity = '0.5';
+			}
+		}
+
+		function hideLibraryLoadingOverlay() {
+			const overlay = document.getElementById('library-loading-overlay');
+			if (overlay) {
+				document.body.removeChild(overlay);
+			}
+			
+			// Re-enable toolbar buttons
+			const toolbar = document.getElementById('main-toolbar');
+			if (toolbar) {
+				const buttons = toolbar.querySelectorAll('button');
+				buttons.forEach(button => {
+					button.style.pointerEvents = 'auto';
+					button.style.opacity = '1';
+				});
+			}
+			
+			// Re-enable canvas interactions
+			const canvas = document.getElementById('stickman-canvas');
+			if (canvas) {
+				canvas.style.pointerEvents = 'auto';
+				canvas.style.opacity = '1';
+			}
+			
+			// Re-enable timeline interactions
+			const timeline = document.getElementById('timeline');
+			if (timeline) {
+				timeline.style.pointerEvents = 'auto';
+				timeline.style.opacity = '1';
+			}
+		}
+
+		// Check if required libraries are loaded
+		function areLibrariesLoaded() {
+			// Check if basic libraries are available
+			if (!window.tf || !window.posenet) {
+				return false;
+			}
+			
+			// Check if model is loaded
+			if (!posenetModel) {
+				return false;
+			}
+			
+			return true;
+		}
+
 		// video import
 		async function importVideoAnimation() {
 			try {
+				// Check if libraries are loaded, if not show loading overlay
+				if (!areLibrariesLoaded()) {
+					showLibraryLoadingOverlay();
+					
+					try {
+						// Try to load the libraries with a timeout
+						const loadPromise = loadPoseNet();
+						const timeoutPromise = new Promise((_, reject) => 
+							setTimeout(() => reject(new Error('Library loading timeout')), 30000) // 30 second timeout
+						);
+						
+						await Promise.race([loadPromise, timeoutPromise]);
+						hideLibraryLoadingOverlay();
+						
+						// If loading failed, don't proceed
+						if (!areLibrariesLoaded()) {
+							humane.log(l10n.get("LibraryLoadError") || "Failed to load required libraries for video import");
+							return;
+						}
+					} catch (error) {
+						hideLibraryLoadingOverlay();
+						console.error("Error loading libraries:", error);
+						humane.log(l10n.get("LibraryLoadError") || "Failed to load required libraries for video import");
+						return;
+					}
+				}
+				
 				journalchooser.show(function (entry) {
 					// No selection
 					if (!entry) {
