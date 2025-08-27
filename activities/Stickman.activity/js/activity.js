@@ -34,7 +34,7 @@ define([
 		let deltaFrames = {}; 	// Store relative movement deltas for subsequent frames
 		let stickmen = []; 		// Array of stickmen (current working positions)
 
-		let currentFrameIndices = {}; 
+		let currentFrameIndices = {};
 		let isPlaying = false;
 		let speed = 1;
 		let selectedJoint = null;
@@ -52,11 +52,11 @@ define([
 		let isRotating = false;
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
-		let neckManuallyMoved = false; 
+		let neckManuallyMoved = false;
 
 		// PoseNet model configurations
 		let posenetModel = null;
-		
+
 		const POSENET_CONFIGS = {
 			resnet50: {
 				architecture: 'ResNet50',
@@ -71,7 +71,7 @@ define([
 				multiplier: 0.75
 			}
 		};
-		
+
 		// Current active configuration 
 		// ResNet50 for better accuracy
 		const posenetConfig = POSENET_CONFIGS.resnet50;
@@ -91,20 +91,20 @@ define([
 		let stickmanUserColors = {}; // Maps stickman ID to user color data
 
 		// UTILITY FUNCTIONS
-		
+
 		function deepClone(obj) {
 			return JSON.parse(JSON.stringify(obj));
-		} 
+		}
 
 		// Check if a stickman is owned by the current user
 		function isStickmanOwned(stickmanId) {
 			if (!isShared || !presence || !currentenv || !currentenv.user) {
 				return true; // Not in shared mode or no user info, assume owned
 			}
-			
+
 			const currentUser = presence.getUserInfo();
 			return currentUser && stickmanId.toString().startsWith(currentUser.networkId);
-		} 
+		}
 
 		// Joint hierarchy - defines parent-child relationships for rotation
 		const jointHierarchy = {
@@ -138,11 +138,11 @@ define([
 			if (!previousJoints || currentJoints.length !== previousJoints.length) {
 				return null;
 			}
-			
+
 			// Create a copy of current joints and enforce constraints
 			const constrainedJoints = deepClone(currentJoints);
 			enforceJointDistances(constrainedJoints);
-			
+
 			return constrainedJoints.map((joint, index) => ({
 				dx: joint.x - previousJoints[index].x,
 				dy: joint.y - previousJoints[index].y,
@@ -154,16 +154,16 @@ define([
 			if (!deltas || baseJoints.length !== deltas.length) {
 				return deepClone(baseJoints);
 			}
-			
+
 			const newJoints = baseJoints.map((joint, index) => ({
 				x: joint.x + deltas[index].dx,
 				y: joint.y + deltas[index].dy,
 				name: joint.name
 			}));
-			
+
 			// Apply distance constraints to maintain limb lengths
 			enforceJointDistances(newJoints);
-			
+
 			return newJoints;
 		}
 
@@ -183,25 +183,25 @@ define([
 				{ from: 2, to: 5 },    // hips to right knee
 				{ from: 5, to: 6 }     // right knee to right foot
 			];
-			
+
 			// Apply constraints in hierarchical order
 			for (let iteration = 0; iteration < 2; iteration++) {
 				processOrder.forEach(conn => {
 					const joint1 = joints[conn.from];
 					const joint2 = joints[conn.to];
-					
+
 					if (!joint1 || !joint2) return;
-					
+
 					const dx = joint2.x - joint1.x;
 					const dy = joint2.y - joint1.y;
 					const currentDistance = Math.sqrt(dx * dx + dy * dy);
 					const targetDistance = jointConnections.find(jc => jc.from === conn.from && jc.to === conn.to)?.length;
-					
+
 					if (targetDistance && currentDistance > 0 && Math.abs(currentDistance - targetDistance) > 0.5) {
 						const ratio = targetDistance / currentDistance;
 						const newX = joint1.x + dx * ratio;
 						const newY = joint1.y + dy * ratio;
-						
+
 						// Move the child joint to maintain distance from parent
 						joint2.x = newX;
 						joint2.y = newY;
@@ -214,7 +214,7 @@ define([
 			if (!baseFrames[stickmanId] || frameIndex < 0) {
 				return null;
 			}
-			
+
 			if (frameIndex === 0) {
 				// First frame is always the base frame
 				return JSON.parse(JSON.stringify({
@@ -222,14 +222,14 @@ define([
 					joints: baseFrames[stickmanId]
 				}));
 			}
-			
+
 			if (!deltaFrames[stickmanId] || frameIndex - 1 >= deltaFrames[stickmanId].length) {
 				return null;
 			}
-			
+
 			// Start with base frame and apply deltas incrementally
 			let currentJoints = deepClone(baseFrames[stickmanId]);
-			
+
 			for (let i = 0; i < frameIndex; i++) {
 				if (deltaFrames[stickmanId][i]) {
 					currentJoints = applyDeltas(currentJoints, deltaFrames[stickmanId][i]);
@@ -237,7 +237,7 @@ define([
 					enforceJointDistances(currentJoints);
 				}
 			}
-			
+
 			return {
 				id: stickmanId,
 				joints: currentJoints
@@ -246,18 +246,18 @@ define([
 
 		function rebaseDeltas(stickmanId, removedFrameIndex) {
 			if (!deltaFrames[stickmanId] || removedFrameIndex <= 0) return;
-			
+
 			const getTotalFrameCount = (id) => {
 				if (!baseFrames[id]) return 0;
 				return 1 + (deltaFrames[id] ? deltaFrames[id].length : 0);
 			};
-			
+
 			if (removedFrameIndex === 1) {
 				// Removing second frame - need to update base frame and recompute all deltas
 				const newBaseFrame = reconstructFrameFromDeltas(stickmanId, 1);
 				if (newBaseFrame) {
 					baseFrames[stickmanId] = newBaseFrame.joints;
-					
+
 					// Recompute all deltas relative to new base
 					const newDeltas = [];
 					for (let i = 2; i < getTotalFrameCount(stickmanId); i++) {
@@ -273,12 +273,12 @@ define([
 				// Remove delta frame and recompute subsequent deltas
 				const originalDeltas = [...deltaFrames[stickmanId]];
 				deltaFrames[stickmanId].splice(removedFrameIndex - 1, 1);
-				
+
 				// Recompute deltas for frames after the removed one
 				for (let i = removedFrameIndex - 1; i < deltaFrames[stickmanId].length; i++) {
 					const currentFrame = reconstructFrameFromDeltas(stickmanId, i + 1);
 					const previousFrame = reconstructFrameFromDeltas(stickmanId, i);
-					
+
 					if (currentFrame && previousFrame) {
 						const newDelta = calculateDeltas(currentFrame.joints, previousFrame.joints);
 						if (newDelta) {
@@ -391,7 +391,7 @@ define([
 							// Reconstruct stickmen 
 							if (Object.keys(baseFrames).length > 0) {
 								stickmen = [];
-								
+
 								Object.keys(baseFrames).forEach(stickmanIdStr => {
 									const stickmanId = stickmanIdStr; // Keep as string for networkId format
 									const frameIndex = currentFrameIndices[stickmanId] || 0;
@@ -400,9 +400,9 @@ define([
 										stickmen.push(stickman);
 									}
 								});
-								
+
 								stickmen.forEach((_, index) => updateMiddleJoint(index));
-								
+
 								// Select first stickman by default
 								if (stickmen.length > 0) {
 									selectedStickmanIndex = 0;
@@ -412,7 +412,7 @@ define([
 							}
 
 							updateTimeline();
-							updateRemoveButtonState(); 
+							updateRemoveButtonState();
 							render();
 						} else {
 							console.log("No instance found, creating new instance");
@@ -662,7 +662,7 @@ define([
 				// Store the current local offset before resetting
 				const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
 				const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-				
+
 				// Update the original joints to the new network data (without the offset)
 				const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 				if (stickmanIndex !== -1) {
@@ -672,10 +672,10 @@ define([
 						y: joint.y - offsetY,
 						name: joint.name
 					}));
-					
+
 					// Update the original joints to the new network position
 					remoteStickmanPositions[stickmanId].originalJoints = deepClone(currentJointsWithoutOffset);
-					
+
 					// Reapply the local offset to maintain the user's positioning
 					stickmen[stickmanIndex].joints.forEach((joint, index) => {
 						joint.x = currentJointsWithoutOffset[index].x + offsetX;
@@ -839,9 +839,9 @@ define([
 		}
 
 		function processRemoteStickmanMovement(movementData) {
-			const { 
-				stickmanId, 
-				movementType, 
+			const {
+				stickmanId,
+				movementType,
 				joints
 			} = movementData;
 
@@ -921,10 +921,10 @@ define([
 				if (remoteStickmanPositions[newId]) {
 					const offsetX = remoteStickmanPositions[newId].offsetX || 0;
 					const offsetY = remoteStickmanPositions[newId].offsetY || 0;
-					
+
 					// Update original joints to the new network data
 					remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
-					
+
 					// Apply offset for display
 					jointsToUse = jointsToUse.map(joint => ({
 						x: joint.x + offsetX,
@@ -947,16 +947,16 @@ define([
 			}
 
 			console.log("Adding new stickman with data:", stickmanData);
-			
+
 			// Apply remote offset if it exists for this stickman
 			let jointsToUse = deepClone(stickmanData.joints);
 			if (remoteStickmanPositions[newId]) {
 				const offsetX = remoteStickmanPositions[newId].offsetX || 0;
 				const offsetY = remoteStickmanPositions[newId].offsetY || 0;
-				
+
 				// Update original joints to the new network data
 				remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
-				
+
 				// Apply offset for display
 				jointsToUse = jointsToUse.map(joint => ({
 					x: joint.x + offsetX,
@@ -964,7 +964,7 @@ define([
 					name: joint.name
 				}));
 			}
-			
+
 			const newStickman = {
 				id: newId,
 				joints: jointsToUse
@@ -1093,10 +1093,10 @@ define([
 					if (remoteStickmanPositions[stickmanId]) {
 						const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
 						const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-						
+
 						// Update original joints to the new network data
 						remoteStickmanPositions[stickmanId].originalJoints = deepClone(frame.joints);
-						
+
 						// Apply offset for display
 						frame.joints = frame.joints.map(joint => ({
 							x: joint.x + offsetX,
@@ -1104,7 +1104,7 @@ define([
 							name: joint.name
 						}));
 					}
-					
+
 					stickmen[stickmanIndex] = frame;
 					updateMiddleJoint(stickmanIndex);
 					updateTimeline();
@@ -1221,7 +1221,7 @@ define([
 
 		function createStickmanJoints(centerX, centerY, id) {
 			const scale = 1.0; // Can be adjusted for different sizes
-			
+
 			return {
 				id: id,
 				joints: [
@@ -1534,23 +1534,23 @@ define([
 				// Create a new stickman with next ID
 				const newStickmanId = nextStickmanId++;
 				const newStickman = createStickmanJoints(canvas.width / 2, canvas.height / 2, newStickmanId);
-				
+
 				// Reset to single stickman
 				stickmen = [newStickman];
 				selectedStickmanIndex = 0;
-				
+
 				// Initialize delta structure for this stickman
 				baseFrames = {};
 				deltaFrames = {};
 				currentFrameIndices = {};
 				currentFrameIndices[newStickmanId] = 0;
-				
+
 				// Convert template frames to new format
 				const templateFrames = JSON.parse(JSON.stringify(templateData.frames));
 				if (templateFrames.length > 0) {
 					// Process first frame as base frame
 					let firstFrame = templateFrames[0];
-					
+
 					if (Array.isArray(firstFrame) && firstFrame.length > 0) {
 						if (Array.isArray(firstFrame[0])) {
 							baseFrames[newStickmanId] = firstFrame[0];
@@ -1564,7 +1564,7 @@ define([
 					} else {
 						baseFrames[newStickmanId] = firstFrame;
 					}
-					
+
 					// Ensure middle joint exists
 					if (baseFrames[newStickmanId].length === 11) {
 						baseFrames[newStickmanId].push({
@@ -1573,34 +1573,34 @@ define([
 							name: 'middle'
 						});
 					}
-					
+
 					// Process subsequent frames as deltas
 					deltaFrames[newStickmanId] = [];
 					for (let i = 1; i < templateFrames.length; i++) {
 						let currentFrame = templateFrames[i];
 						let previousFrame = templateFrames[i - 1];
-						
+
 						// Normalize frame structure
 						let currentJoints, previousJoints;
-						
+
 						if (Array.isArray(currentFrame) && currentFrame.length > 0) {
-							currentJoints = Array.isArray(currentFrame[0]) ? currentFrame[0] : 
+							currentJoints = Array.isArray(currentFrame[0]) ? currentFrame[0] :
 								(currentFrame[0].joints ? currentFrame[0].joints : currentFrame);
 						} else if (currentFrame.joints) {
 							currentJoints = currentFrame.joints;
 						} else {
 							currentJoints = currentFrame;
 						}
-						
+
 						if (Array.isArray(previousFrame) && previousFrame.length > 0) {
-							previousJoints = Array.isArray(previousFrame[0]) ? previousFrame[0] : 
+							previousJoints = Array.isArray(previousFrame[0]) ? previousFrame[0] :
 								(previousFrame[0].joints ? previousFrame[0].joints : previousFrame);
 						} else if (previousFrame.joints) {
 							previousJoints = previousFrame.joints;
 						} else {
 							previousJoints = previousFrame;
 						}
-						
+
 						// Ensure middle joint exists in both frames
 						if (currentJoints.length === 11) {
 							currentJoints.push({
@@ -1616,21 +1616,21 @@ define([
 								name: 'middle'
 							});
 						}
-						
+
 						// Calculate delta
 						const delta = calculateDeltas(currentJoints, previousJoints);
 						if (delta) {
 							deltaFrames[newStickmanId].push(delta);
 						}
 					}
-					
+
 					// Update current stickman to base frame
 					stickmen[0] = {
 						id: newStickmanId,
 						joints: JSON.parse(JSON.stringify(baseFrames[newStickmanId]))
 					};
 				}
-				
+
 				neckManuallyMoved = false;
 				updateMiddleJoint(0);
 				updateTimeline();
@@ -1698,40 +1698,40 @@ define([
 		function saveCurrentFrame() {
 			// If no stickman is selected or being manipulated, save all stickmen Otherwise, save only the selected stickman
 			const targetStickmanIndices = selectedStickmanIndex >= 0 ? [selectedStickmanIndex] : stickmen.map((_, index) => index);
-				
+
 			targetStickmanIndices.forEach(index => {
 				const stickman = stickmen[index];
 				const stickmanId = stickman.id;
-				
+
 				// Skip if no frames for this stickman
 				if (!baseFrames[stickmanId]) {
 					return;
 				}
-				
-				const isNeckOperation = (isRotating || isDragging) && selectedJoint && 
-					stickmen[index] === stickman && 
+
+				const isNeckOperation = (isRotating || isDragging) && selectedJoint &&
+					stickmen[index] === stickman &&
 					stickmen[index].joints.indexOf(selectedJoint) === 1;
-				
+
 				if (!isNeckOperation) {
 					updateMiddleJoint(index);
 				}
-				
+
 				// Enforce joint distance constraints before saving
 				enforceJointDistances(stickman.joints);
-				
+
 				const currentFrameIndex = currentFrameIndices[stickmanId];
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-				
+
 				if (currentFrameIndex === 0) {
 					// Update base frame
 					baseFrames[stickmanId] = JSON.parse(JSON.stringify(stickman.joints));
-					
+
 					// Recompute ALL deltas since base frame changed
 					const newDeltas = [];
 					for (let i = 1; i < totalFrames; i++) {
 						const frame = reconstructFrameFromDeltas(stickmanId, i);
 						const prevFrame = reconstructFrameFromDeltas(stickmanId, i - 1);
-						
+
 						if (frame && prevFrame) {
 							const delta = calculateDeltas(frame.joints, prevFrame.joints);
 							if (delta) {
@@ -1740,30 +1740,30 @@ define([
 						}
 					}
 					deltaFrames[stickmanId] = newDeltas;
-					
+
 				} else if (currentFrameIndex > 0) {
 					// Update a delta frame - need to recompute this and all subsequent deltas
 					const deltaIndex = currentFrameIndex - 1;
-					
+
 					if (deltaIndex >= 0 && deltaIndex < deltaFrames[stickmanId].length) {
 						// First, temporarily store the current stickman position
 						const currentJoints = JSON.parse(JSON.stringify(stickman.joints));
-						
+
 						// Get the previous frame
 						const previousFrame = reconstructFrameFromDeltas(stickmanId, currentFrameIndex - 1);
-						
+
 						if (previousFrame) {
 							// Calculate new delta for current frame
 							const newDelta = calculateDeltas(currentJoints, previousFrame.joints);
 							if (newDelta) {
 								deltaFrames[stickmanId][deltaIndex] = newDelta;
 							}
-							
+
 							// Now recompute all subsequent deltas
 							for (let i = currentFrameIndex + 1; i < totalFrames; i++) {
 								const nextFrameOld = reconstructFrameFromDeltas(stickmanId, i);
 								const prevFrameNew = reconstructFrameFromDeltas(stickmanId, i - 1);
-								
+
 								if (nextFrameOld && prevFrameNew) {
 									const subsequentDelta = calculateDeltas(nextFrameOld.joints, prevFrameNew.joints);
 									if (subsequentDelta) {
@@ -1808,32 +1808,32 @@ define([
 		function updateTimeline() {
 			const timeline = document.getElementById('timeline');
 			timeline.innerHTML = '';
-			
+
 			// If no stickmen exist, don't show timeline
 			if (stickmen.length === 0) {
 				return;
 			}
-			
+
 			// Get the currently selected stickman (or first one if none selected)
 			const stickmanIndex = selectedStickmanIndex >= 0 ? selectedStickmanIndex : 0;
 			const selectedStickman = stickmen[stickmanIndex];
 			const stickmanId = selectedStickman.id;
-			
+
 			// Check ownership in shared mode
 			let isOwnStickman = true;
 			if (isShared && presence) {
 				isOwnStickman = isStickmanOwned(stickmanId);
 			}
-			
+
 			// Only show frames if user owns the stickman
 			if (!isOwnStickman) {
 				// For non-owned stickmen, show empty timeline
 				return;
 			}
-			
+
 			const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 			const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
-			
+
 			// For each frame of the selected stickman, create a preview
 			for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
 				const frameContainer = document.createElement('div');
@@ -1850,13 +1850,13 @@ define([
 							return;
 						}
 					}
-					
+
 					currentFrameIndices[stickmanId] = frameIndex;
 
 					const newFrameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
 					if (newFrameData) {
 						stickmen[stickmanIndex] = newFrameData;
-						
+
 						neckManuallyMoved = false; // Reset flag when switching frames
 						updateMiddleJoint(stickmanIndex);
 						updateTimeline();
@@ -1929,16 +1929,16 @@ define([
 			deleteBtn.innerHTML = '';
 			deleteBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				
+
 				if (isShared && presence) {
 					if (!isStickmanOwned(stickmanId)) {
 						console.log("Cannot delete frame of non-owned stickman");
 						return;
 					}
 				}
-				
+
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-				
+
 				if (totalFrames > 1) {
 					// Remove this frame using delta system
 					if (frameIndex === 0) {
@@ -1950,7 +1950,7 @@ define([
 
 							// Remove first delta and recompute remaining deltas
 							deltaFrames[stickmanId].shift();
-							
+
 							// Recompute all remaining deltas relative to new base
 							const newDeltas = [];
 
@@ -1970,14 +1970,14 @@ define([
 						// Remove delta frame and rebase subsequent deltas
 						rebaseDeltas(stickmanId, frameIndex);
 					}
-					
+
 					// Adjust current frame index if needed
 					const newTotalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 					currentFrameIndices[stickmanId] = Math.min(
-						currentFrameIndices[stickmanId], 
+						currentFrameIndices[stickmanId],
 						newTotalFrames - 1
 					);
-					
+
 					// Find the stickman with this ID in the current stickmen array
 					for (let i = 0; i < stickmen.length; i++) {
 						if (stickmen[i].id === stickmanId) {
@@ -2011,8 +2011,8 @@ define([
 
 			ctx.fillStyle = '#ff0000';
 			joints.forEach((joint, index) => {
-				if (index === 11) 
-					return; 
+				if (index === 11)
+					return;
 				ctx.beginPath();
 				if (index === 0) {
 					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2);
@@ -2032,20 +2032,20 @@ define([
 		function drawStickman(joints, stickmanIndex) {
 			const stickmanId = stickmen[stickmanIndex].id;
 			const isOwnStickman = isStickmanOwned(stickmanId);
-			
+
 			// Apply remote offset if this is a remote stickman
 			let displayJoints = joints;
 			if (!isOwnStickman && remoteStickmanPositions[stickmanId]) {
 				const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
 				const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-				
+
 				displayJoints = joints.map(joint => ({
 					x: joint.x + offsetX,
 					y: joint.y + offsetY,
 					name: joint.name
 				}));
 			}
-			
+
 			// Draw with different style for remote stickmen
 			if (!isOwnStickman) {
 				// Get user color for remote stickman
@@ -2053,10 +2053,10 @@ define([
 				if (stickmanUserColors[stickmanId]) {
 					userColor = stickmanUserColors[stickmanId];
 				}
-				
+
 				// Draw solid black skeleton for remote stickmen
 				drawStickmanSkeleton(ctx, displayJoints, userColor, isOwnStickman);
-				
+
 				// Only show hip joint for dragging
 				const hipJoint = displayJoints[2];
 				ctx.fillStyle = '#00ff00';
@@ -2066,10 +2066,10 @@ define([
 				ctx.arc(hipJoint.x, hipJoint.y, 5, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.stroke();
-				
+
 				return; // Skip normal drawing for remote stickmen
 			}
-			
+
 			// Original drawing code for owned stickmen
 			// skeleton first
 			ctx.strokeStyle = '#000000';
@@ -2141,8 +2141,8 @@ define([
 				ctx.stroke();
 			} else if (shouldShowJoints && !isOwnStickman) {
 				// For remote stickmen, only show the hip joint
-				const hipJoint = displayJoints[2]; 
-				ctx.fillStyle = '#00ff00'; 
+				const hipJoint = displayJoints[2];
+				ctx.fillStyle = '#00ff00';
 				ctx.strokeStyle = '#00cc00';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
@@ -2221,7 +2221,7 @@ define([
 				ctx.lineWidth = 1;
 				ctx.stroke();
 			}
-			
+
 			// Restore context state
 			ctx.strokeStyle = '#000000';
 			ctx.lineWidth = 12;
@@ -2234,7 +2234,7 @@ define([
 			const sin = Math.sin(angle);
 			const dx = point.x - pivot.x;
 			const dy = point.y - pivot.y;
-			
+
 			return {
 				x: pivot.x + (dx * cos - dy * sin),
 				y: pivot.y + (dx * sin + dy * cos)
@@ -2245,21 +2245,21 @@ define([
 			const joints = stickmen[stickmanIndex].joints;
 			let pivot;
 			let pivotJointIndex_actual; // The joint that acts as the actual rotation pivot
-			
+
 			// Determine the actual pivot point for rotation
-			if (pivotJointIndex === 11) { 
+			if (pivotJointIndex === 11) {
 				// middle joint rotates around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
-			} else if (pivotJointIndex === 1) { 
+			} else if (pivotJointIndex === 1) {
 				// body/neck rotates around middle joint
 				pivot = joints[11];
 				pivotJointIndex_actual = 11;
-			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) { 
+			} else if (pivotJointIndex === 7 || pivotJointIndex === 9) {
 				// elbows rotate around body
 				pivot = joints[1];
 				pivotJointIndex_actual = 1;
-			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) { 
+			} else if (pivotJointIndex === 3 || pivotJointIndex === 5) {
 				// knees rotate around hip
 				pivot = joints[2];
 				pivotJointIndex_actual = 2;
@@ -2269,27 +2269,27 @@ define([
 			}
 
 			// Store pivot position to prevent it from changing during rotation
-			const fixedPivot = { 
-				x: pivot.x, 
-				y: pivot.y 
+			const fixedPivot = {
+				x: pivot.x,
+				y: pivot.y
 			};
 
 			// Rotate all child joints recursively
 			function rotateChildren(parentIndex, rotationAngle) {
 				const childIndices = jointHierarchy[parentIndex] || [];
-				
+
 				childIndices.forEach(childIndex => {
 					// Never rotate the pivot joint itself
 					if (childIndex === pivotJointIndex_actual) return;
-					
-					const oldPos = { 
-						x: joints[childIndex].x, 
-						y: joints[childIndex].y 
+
+					const oldPos = {
+						x: joints[childIndex].x,
+						y: joints[childIndex].y
 					};
 					const newPos = rotatePointAroundPivot(oldPos, fixedPivot, rotationAngle);
 					joints[childIndex].x = newPos.x;
 					joints[childIndex].y = newPos.y;
-					
+
 					// Recursively rotate children of this joint
 					rotateChildren(childIndex, rotationAngle);
 				});
@@ -2297,9 +2297,9 @@ define([
 
 			// First rotate the selected joint itself around its pivot (except pivot joints)
 			if (pivotJointIndex !== pivotJointIndex_actual) {
-				const oldPos = { 
-					x: joints[pivotJointIndex].x, 
-					y: joints[pivotJointIndex].y 
+				const oldPos = {
+					x: joints[pivotJointIndex].x,
+					y: joints[pivotJointIndex].y
 				};
 				const newPos = rotatePointAroundPivot(oldPos, fixedPivot, angle);
 				joints[pivotJointIndex].x = newPos.x;
@@ -2327,7 +2327,7 @@ define([
 
 		function getRotationPivot(stickmanIndex, jointIndex) {
 			const joints = stickmen[stickmanIndex].joints;
-			
+
 			// Define pivot mapping for rotational joints
 			const pivotMap = {
 				11: joints[2],  // middle joint rotates around hip
@@ -2337,7 +2337,7 @@ define([
 				3: joints[2],   // left knee rotates around hip
 				5: joints[2]    // right knee rotates around hip
 			};
-			
+
 			return pivotMap[jointIndex] || joints[jointIndex]; // fallback to joint itself
 		}
 
@@ -2365,13 +2365,13 @@ define([
 		}
 
 		function animate() {
-			if (!isPlaying) 
+			if (!isPlaying)
 				return;
 
 			stickmen.forEach((stickman, index) => {
 				const stickmanId = stickman.id;
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-				
+
 				if (totalFrames > 1) {
 					// Only animate if there are multiple frames
 					// Move to next frame for this stickman
@@ -2385,8 +2385,8 @@ define([
 					}
 				}
 			});
-			
-			neckManuallyMoved = false; 
+
+			neckManuallyMoved = false;
 			updateTimeline();
 
 			setTimeout(() => {
@@ -2462,14 +2462,14 @@ define([
 			if (result) {
 				const stickmanIndex = result.stickmanIndex;
 				const stickmanId = stickmen[stickmanIndex].id;
-				
+
 				// Check ownership
 				const isOwnStickman = isStickmanOwned(stickmanId);
 
 				// For remote stickmen, only allow dragging via hip joint
 				if (!isOwnStickman) {
 					const selectedJointIndex = stickmen[stickmanIndex].joints.indexOf(result.joint);
-					
+
 					// Only allow dragging remote stickmen by the hip joint
 					if (selectedJointIndex !== 2) {
 						console.log("Can only drag remote stickmen by the hip joint");
@@ -2478,7 +2478,7 @@ define([
 
 					selectedJoint = result.joint;
 					selectedStickmanIndex = result.stickmanIndex;
-					
+
 					// Store original positions for local dragging only
 					if (!remoteStickmanPositions[stickmanId]) {
 						remoteStickmanPositions[stickmanId] = {
@@ -2490,7 +2490,7 @@ define([
 						// Update original joints to current position
 						remoteStickmanPositions[stickmanId].originalJoints = deepClone(stickmen[stickmanIndex].joints);
 					}
-					
+
 					// Start remote stickman drag
 					isDraggingRemote = true;
 					isDraggingWhole = true;
@@ -2498,7 +2498,7 @@ define([
 						x: mouseX,
 						y: mouseY
 					};
-					
+
 					return;
 				}
 
@@ -2568,22 +2568,22 @@ define([
 				// Drag remote stickman locally only
 				const stickmanId = stickmen[selectedStickmanIndex].id;
 				const remoteData = remoteStickmanPositions[stickmanId];
-				
+
 				if (!remoteData) return;
-				
+
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
-				
+
 				// Update local offset
 				remoteStickmanPositions[stickmanId].offsetX = deltaX;
 				remoteStickmanPositions[stickmanId].offsetY = deltaY;
-				
+
 				// Apply offset to display position only (not original data)
 				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
 					joint.x = remoteData.originalJoints[index].x + deltaX;
 					joint.y = remoteData.originalJoints[index].y + deltaY;
 				});
-				
+
 				// No broadcast for remote stickman movement - local only
 				render();
 			} else if (isDraggingWhole && selectedStickmanIndex >= 0) {
@@ -2742,7 +2742,7 @@ define([
 				if (!isOwnStickman && remoteStickmanPositions[stickmanId]) {
 					const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
 					const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-					
+
 					hitTestJoints = joints.map(joint => ({
 						x: joint.x + offsetX,
 						y: joint.y + offsetY,
@@ -2756,12 +2756,12 @@ define([
 					const dx = hipJoint.x - x;
 					const dy = hipJoint.y - y;
 					const distance = Math.sqrt(dx * dx + dy * dy);
-					
+
 					// Larger hit area for remote stickman hip
 					if (distance < 15) {
-						return { 
+						return {
 							joint: joints[2], // Return original joint, not offset one
-							stickmanIndex: stickmanIndex 
+							stickmanIndex: stickmanIndex
 						};
 					}
 					continue;
@@ -2770,24 +2770,24 @@ define([
 				// Define hit radii for different joint types
 				const getHitRadius = (jointIndex) => {
 					switch (jointIndex) {
-						case 0: 
+						case 0:
 							return 15; // head - largest hit area
-						case 2: 
+						case 2:
 							return 12; // hips - large for whole stickman drag
-						case 11: 
+						case 11:
 							return 10; // middle - medium for rotation
-						case 1: 
+						case 1:
 							return 10; // body/neck - medium for rotation
-						default: 
+						default:
 							return 8;  // hands, feet, elbows, knees
 					}
 				};
 
 				// Check joints in order of interaction priority
 				const priorityOrder = [2, 11, 1, 0, 7, 9, 3, 5, 8, 10, 4, 6];
-				
+
 				for (const jointIndex of priorityOrder) {
-					if (jointIndex >= hitTestJoints.length){ 
+					if (jointIndex >= hitTestJoints.length) {
 						continue;
 					}
 
@@ -2798,9 +2798,9 @@ define([
 					const hitRadius = getHitRadius(jointIndex);
 
 					if (distance < hitRadius) {
-						return { 
+						return {
 							joint: joints[jointIndex], // Return original joint, not offset one
-							stickmanIndex: stickmanIndex 
+							stickmanIndex: stickmanIndex
 						};
 					}
 				}
@@ -2868,17 +2868,17 @@ define([
 			// do not show during playback or for remote stickmen
 			if (!isPlaying && selectedStickmanIndex >= 0) {
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				
+
 				// Only show onion skin for owned stickmen
 				if (isStickmanOwned(stickmanId)) {
 					const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 					const currentFrameIndex = currentFrameIndices[stickmanId] || 0;
-					
+
 					// Only show onion skin if there's a previous frame
 					if (totalFrames > 1 && currentFrameIndex > 0) {
 						const prevFrameIndex = currentFrameIndex - 1;
 						const prevFrame = reconstructFrameFromDeltas(stickmanId, prevFrameIndex);
-						
+
 						if (prevFrame) {
 							ctx.save();
 							ctx.globalAlpha = 0.3;
@@ -2892,7 +2892,7 @@ define([
 							ctx.fillStyle = '#0066cc';
 							prevFrame.joints.forEach((joint, index) => {
 								// Skip middle joint
-								if (index === 11) 
+								if (index === 11)
 									return;
 
 								ctx.beginPath();
@@ -2919,10 +2919,10 @@ define([
 		// Calculate bounding box for a single stickman
 		function calculateStickmanBounds(joints) {
 			if (!joints || joints.length === 0) return null;
-			
+
 			const xs = joints.map(joint => joint.x);
 			const ys = joints.map(joint => joint.y);
-			
+
 			return {
 				minX: Math.min(...xs),
 				maxX: Math.max(...xs),
@@ -2937,11 +2937,11 @@ define([
 			let globalMaxX = -Infinity;
 			let globalMinY = Infinity;
 			let globalMaxY = -Infinity;
-			
+
 			// Iterate through all stickmen and all their frames
 			Object.keys(baseFrames).forEach(stickmanId => {
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-				
+
 				for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
 					const frameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
 					if (frameData && frameData.joints) {
@@ -2955,11 +2955,11 @@ define([
 					}
 				}
 			});
-			
+
 			// Return null if no valid bounds found
-			if (globalMinX === Infinity) 
+			if (globalMinX === Infinity)
 				return null;
-			
+
 			return {
 				minX: globalMinX,
 				maxX: globalMaxX,
@@ -2982,38 +2982,38 @@ define([
 					height: canvas.height / 2
 				};
 			}
-			
+
 			// Add margin around the content
 			const boundedWidth = globalBounds.width + (margin * 2);
 			const boundedHeight = globalBounds.height + (margin * 2);
-			
+
 			// Ensure minimum size for visibility
 			const minSize = 200;
 			const finalWidth = Math.max(boundedWidth, minSize);
 			const finalHeight = Math.max(boundedHeight, minSize);
-			
+
 			// Calculate centered position
 			const centerX = (globalBounds.minX + globalBounds.maxX) / 2;
 			const centerY = (globalBounds.minY + globalBounds.maxY) / 2;
-			
+
 			const exportBounds = {
 				x: centerX - finalWidth / 2,
 				y: centerY - finalHeight / 2,
 				width: finalWidth,
 				height: finalHeight
 			};
-			
+
 			// Ensure bounds don't go outside canvas
 			exportBounds.x = Math.max(0, Math.min(exportBounds.x, canvas.width - exportBounds.width));
 			exportBounds.y = Math.max(0, Math.min(exportBounds.y, canvas.height - exportBounds.height));
-			
+
 			return exportBounds;
 		}
 
 		function exportAnimation() {
 			// Calculate optimal bounding box for export
 			const exportBounds = calculateOptimalExportBounds(50); // 50px margin
-			
+
 			const recordCanvas = document.createElement('canvas');
 			recordCanvas.width = exportBounds.width;
 			recordCanvas.height = exportBounds.height;
@@ -3028,10 +3028,10 @@ define([
 			mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
 			mediaRecorder.onstop = () => {
 				const blob = new Blob(chunks, { type: 'video/webm' });
-				
+
 				// Convert blob to data URL for journal storage
 				const reader = new FileReader();
-				reader.onload = function() {
+				reader.onload = function () {
 					const dataURL = reader.result;
 					saveVideoToJournal(dataURL);
 				};
@@ -3046,16 +3046,16 @@ define([
 				const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
 				maxFrames = Math.max(maxFrames, totalFrames);
 			});
-			
+
 			// Create a copy of current stickmen for animation
 			let animationStickmen = JSON.parse(JSON.stringify(stickmen));
 			let exportFrameIndices = {};
-			
+
 			// Initialize frame indices for export
 			stickmen.forEach(stickman => {
 				exportFrameIndices[stickman.id] = 0;
 			});
-			
+
 			let currentExportFrame = 0;
 			const renderFrame = () => {
 				if (currentExportFrame >= maxFrames) {
@@ -3069,7 +3069,7 @@ define([
 
 				// Save context and set up clipping/translation for the bounding box
 				recordCtx.save();
-				
+
 				// Translate to crop the content to our bounding box
 				recordCtx.translate(-exportBounds.x, -exportBounds.y);
 
@@ -3077,31 +3077,31 @@ define([
 				animationStickmen.forEach((stickman, index) => {
 					const stickmanId = stickman.id;
 					const totalFrames = baseFrames[stickmanId] ? 1 + deltaFrames[stickmanId].length : 0;
-					
+
 					if (totalFrames > 0) {
 						// Only advance frame if this stickman has more frames
 						if (exportFrameIndices[stickmanId] < totalFrames) {
 							const frameIndex = exportFrameIndices[stickmanId];
 							const frameData = reconstructFrameFromDeltas(stickmanId, frameIndex);
-							
+
 							if (frameData) {
 								animationStickmen[index] = frameData;
-								
+
 								// Move to next frame for next export frame
 								exportFrameIndices[stickmanId] = (exportFrameIndices[stickmanId] + 1) % totalFrames;
 							}
 						}
-						
+
 						// Draw the stickman in its current state
 						recordCtx.strokeStyle = '#000';
 						recordCtx.lineWidth = 8;
-						
+
 						// Get user color for shared mode
-						const userColor = stickmanUserColors[stickmanId] || 
-							((currentenv && currentenv.user && currentenv.user.colorvalue) 
-								? currentenv.user.colorvalue 
+						const userColor = stickmanUserColors[stickmanId] ||
+							((currentenv && currentenv.user && currentenv.user.colorvalue)
+								? currentenv.user.colorvalue
 								: null);
-						
+
 						drawStickmanSkeleton(recordCtx, animationStickmen[index].joints, userColor);
 					}
 				});
@@ -3122,7 +3122,7 @@ define([
 			// Get the mimetype from the data URL
 			const mimetype = dataURL.split(';')[0].split(':')[1];
 			const type = mimetype.split('/')[0];
-			
+
 			// Create metadata for the video entry
 			const metadata = {
 				mimetype: mimetype,
@@ -3134,7 +3134,7 @@ define([
 			};
 
 			// Save to datastore
-			datastore.create(metadata, function(error, objectId) {
+			datastore.create(metadata, function (error, objectId) {
 				if (error) {
 					console.error("Error saving video to journal:", error);
 					// Fallback to download if journal save fails
@@ -3213,11 +3213,11 @@ define([
 							try {
 								const stickmanId = stickmanIdStr;
 								const frameIndex = savedData.currentFrameIndices[stickmanId] || 0;
-								
+
 								// Reconstruct the stickman from delta system
 								const baseFrame = savedData.baseFrames[stickmanId];
 								const deltaFramesList = savedData.deltaFrames[stickmanId] || [];
-								
+
 								if (baseFrame && Array.isArray(baseFrame)) {
 									// Create new ID for imported stickman to avoid conflicts
 									let newStickmanId;
@@ -3245,7 +3245,7 @@ define([
 										// Position the imported stickman at a safe location
 										const centerX = canvas.width / 2 + (importedStickmen.length * 150) - 300;
 										const centerY = canvas.height / 2;
-										
+
 										// Calculate offset to move stickman to new position
 										const currentCenter = {
 											x: (
@@ -3255,7 +3255,7 @@ define([
 												Math.max(...reconstructedFrame.joints.map(p => p.y)) + Math.min(...reconstructedFrame.joints.map(p => p.y))
 											) / 2
 										};
-										
+
 										const offsetX = centerX - currentCenter.x;
 										const offsetY = centerY - currentCenter.y;
 
@@ -3348,7 +3348,7 @@ define([
 
 					// Load ResNet50 model
 					posenetModel = await posenet.load(posenetConfig);
-					
+
 					// Warm up the model with a dummy prediction for better performance
 					const dummyCanvas = document.createElement('canvas');
 					dummyCanvas.width = 513;
@@ -3356,12 +3356,12 @@ define([
 					const dummyCtx = dummyCanvas.getContext('2d');
 					dummyCtx.fillStyle = '#000000';
 					dummyCtx.fillRect(0, 0, 513, 513);
-					
+
 					await posenetModel.estimateSinglePose(dummyCanvas);
-					
+
 				} catch (error) {
 					console.error("Error loading ResNet50 PoseNet model:", error);
-					
+
 					// Fallback to MobileNetV1 if ResNet50 fails
 					try {
 						posenetModel = await posenet.load(POSENET_CONFIGS.mobilenet);
@@ -3376,7 +3376,7 @@ define([
 		// Convert PoseNet keypoints to stickman joint format
 		function convertPoseToStickman(pose, centerX, centerY) {
 			const keypoints = pose.keypoints;
-			
+
 			function getKeypoint(name) {
 				return keypoints.find(kp => kp.part === name);
 			}
@@ -3473,7 +3473,7 @@ define([
 			// Left leg
 			const leftKnee = getKeypointPosition('leftKnee');
 			const leftAnkle = getKeypointPosition('leftAnkle');
-			
+
 			if (leftKnee && leftKnee.score > 0.15) {
 				const kneePos = transformPoint(leftKnee.x, leftKnee.y);
 				joints[3] = { x: kneePos.x, y: kneePos.y, name: 'leftKnee' };
@@ -3491,7 +3491,7 @@ define([
 			// Right leg
 			const rightKnee = getKeypointPosition('rightKnee');
 			const rightAnkle = getKeypointPosition('rightAnkle');
-			
+
 			if (rightKnee && rightKnee.score > 0.15) {
 				const kneePos = transformPoint(rightKnee.x, rightKnee.y);
 				joints[5] = { x: kneePos.x, y: kneePos.y, name: 'rightKnee' };
@@ -3581,13 +3581,13 @@ define([
 			connections.forEach(([from, to]) => {
 				const joint1 = joints[from];
 				const joint2 = joints[to];
-				
+
 				if (!joint1 || !joint2) return;
-				
+
 				const dx = joint2.x - joint1.x;
 				const dy = joint2.y - joint1.y;
 				const distance = Math.sqrt(dx * dx + dy * dy);
-				
+
 				if (distance > maxLimbLength) {
 					const ratio = maxLimbLength / distance;
 					joint2.x = joint1.x + dx * ratio;
@@ -3622,7 +3622,7 @@ define([
 						if (mimeType && mimeType.startsWith('video/')) {
 							if (typeof dataentry.load === 'function') {
 								// For video files, we need to load as binary data
-								dataentry.load(function(err, metadata, binaryData) {
+								dataentry.load(function (err, metadata, binaryData) {
 									if (err) {
 										humane.log(l10n.get("VideoLoadError") || "Error loading video data");
 										return;
@@ -3638,7 +3638,7 @@ define([
 									}
 								});
 							} else if (typeof dataentry.loadAsDataURL === 'function') {
-								dataentry.loadAsDataURL(function(err, metadata, dataURL) {
+								dataentry.loadAsDataURL(function (err, metadata, dataURL) {
 									if (err) {
 										humane.log(l10n.get("VideoLoadError") || "Error loading video data");
 										return;
@@ -3733,7 +3733,7 @@ define([
 			const frames = [];
 			const canvas = document.createElement('canvas');
 			const ctx = canvas.getContext('2d');
-			
+
 			// Set canvas size for optimal input
 			canvas.width = 513;
 			canvas.height = 513;
@@ -3743,7 +3743,7 @@ define([
 			const frameInterval = 1 / frameRate;
 
 			// Center position for stickman
-			const centerX = 200; 
+			const centerX = 200;
 			const centerY = 200;
 
 			video.currentTime = 0;
@@ -3759,14 +3759,14 @@ define([
 						const progress = (frameIndex / totalFramesToProcess) * 100;
 						progressCallback(progress);
 					}
-					
+
 					video.currentTime = time;
-					
+
 					// Wait for video to seek to the correct time
 					await new Promise((resolve, reject) => {
 						let attempts = 0;
 						const maxAttempts = 50;
-						
+
 						const checkTime = () => {
 							attempts++;
 							if (Math.abs(video.currentTime - time) < 0.05) {
@@ -3785,11 +3785,11 @@ define([
 
 					// Draw current frame to canvas
 					ctx.clearRect(0, 0, canvas.width, canvas.height);
-					
+
 					// Calculate aspect ratio to maintain video proportions
 					const videoAspect = video.videoWidth / video.videoHeight;
 					const canvasAspect = canvas.width / canvas.height;
-					
+
 					let drawWidth, drawHeight, offsetX, offsetY;
 					if (videoAspect > canvasAspect) {
 						drawWidth = canvas.width;
@@ -3802,7 +3802,7 @@ define([
 						offsetX = (canvas.width - drawWidth) / 2;
 						offsetY = 0;
 					}
-					
+
 					ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
 					// Store the video frame as ImageData for preview
@@ -3820,22 +3820,22 @@ define([
 						// Check if this pose is significantly different from the last one
 						const currentPose = poses[0];
 						let isDuplicatePose = false;
-						
+
 						if (lastPoseKeypoints) {
 							// Compare key landmarks to detect duplicate poses
 							const threshold = 8;
 							let similarityCount = 0;
 							const keyLandmarks = ['nose', 'leftShoulder', 'rightShoulder', 'leftHip', 'rightHip'];
 							let totalComparisons = 0;
-							
+
 							for (const landmark of keyLandmarks) {
 								const lastKp = lastPoseKeypoints.find(kp => kp.part === landmark);
 								const currentKp = currentPose.keypoints.find(kp => kp.part === landmark);
-								
+
 								if (lastKp && currentKp && lastKp.score > 0.1 && currentKp.score > 0.1) {
 									totalComparisons++;
 									const distance = Math.sqrt(
-										Math.pow(lastKp.position.x - currentKp.position.x, 2) + 
+										Math.pow(lastKp.position.x - currentKp.position.x, 2) +
 										Math.pow(lastKp.position.y - currentKp.position.y, 2)
 									);
 									if (distance < threshold) {
@@ -3843,11 +3843,11 @@ define([
 									}
 								}
 							}
-							
+
 							// Check for duplicate poses
 							isDuplicatePose = totalComparisons >= 3 && similarityCount === totalComparisons;
 						}
-						
+
 						if (!isDuplicatePose) {
 							const stickmanJoints = convertPoseToStickman(currentPose, centerX, centerY);
 							if (stickmanJoints) {
@@ -3858,7 +3858,7 @@ define([
 									pose: currentPose,
 									timestamp: time
 								});
-								
+
 								// Update last pose for comparison
 								lastPoseKeypoints = currentPose.keypoints;
 							}
@@ -3868,7 +3868,7 @@ define([
 				} catch (error) {
 					continue;
 				}
-				
+
 				frameIndex++;
 			}
 
@@ -4041,7 +4041,8 @@ define([
 				background: #666;
 				color: white;
 				border: none;
-				border-radius: 5px;
+				border-radius: 22px;
+				line-height: 0;
 				cursor: pointer;
 				font-size: 14px;
 				display: flex;
@@ -4061,7 +4062,8 @@ define([
 				background: #cccccc;
 				color: #666666;
 				border: none;
-				border-radius: 5px;
+				border-radius: 22px;
+				line-height: 0;
 				cursor: not-allowed;
 				font-size: 14px;
 				display: flex;
@@ -4102,23 +4104,23 @@ define([
 				try {
 					// Get progress element
 					const progressElement = document.getElementById('processing-progress');
-					
+
 					// Progress callback function
 					const updateProgress = (percentage) => {
 						if (progressElement) {
 							progressElement.textContent = `${Math.round(percentage)}%`;
 						}
 					};
-					
+
 					const frames = await extractFramesFromVideo(video, updateProgress);
-					
+
 					if (frames.length > 0) {
 						processedFrames = frames;
 						isProcessing = false;
-						
-						// Switch right side to show stickman preview
-						await showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames);
-						
+
+						// Switch right side to show stickman preview and replace left side with pose detection
+						await showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames, leftSection, videoDisplay);
+
 						// Enable insert button
 						insertButton.disabled = false;
 						insertButton.style.cssText = `
@@ -4126,26 +4128,27 @@ define([
 							background: #666;
 							color: white;
 							border: none;
-							border-radius: 5px;
+							border-radius: 22px;
+							line-height: 0;
 							cursor: pointer;
 							font-size: 14px;
 							display: flex;
 							align-items: center;
 							gap: 8px;
 						`;
-						
+
 						// Insert button functionality
 						insertButton.addEventListener('click', () => {
 							if (animationId) clearTimeout(animationId);
 							document.body.removeChild(video);
 							URL.revokeObjectURL(video.src);
 							document.body.removeChild(modalOverlay);
-							
+
 							// Extract just the joints for the animation
 							const jointFrames = frames.map(frame => frame.joints);
 							addVideoAnimationToCanvas(jointFrames);
 						});
-						
+
 					} else {
 						// No frames detected
 						document.body.removeChild(video);
@@ -4179,175 +4182,206 @@ define([
 				}
 			});
 		}
-			const modalOverlay = document.createElement('div');
-			modalOverlay.className = 'modal-overlay';
+		
+		const modalOverlay = document.createElement('div');
+		modalOverlay.className = 'modal-overlay';
 
-			const modal = document.createElement('div');
-			modal.className = 'modal-content';
-			modal.style.cssText = `
-				max-width: 900px;
-				width: 90%;
-				max-height: 90vh;
-				overflow-y: auto;
-			`;
+		const modal = document.createElement('div');
+		modal.className = 'modal-content';
+		modal.style.cssText = `
+			max-width: 900px;
+			width: 90%;
+			max-height: 90vh;
+			overflow-y: auto;
+		`;
 
-			const header = document.createElement('div');
-			header.className = 'modal-header-preview';
+		const header = document.createElement('div');
+		header.className = 'modal-header-preview';
 
-			const title = document.createElement('h3');
-			title.textContent = l10n.get("VideoPreview") || "Video Pose Mapping Preview";
-			title.className = 'modal-title';
-			title.style.cssText = `
-				text-align: center;
-				margin-bottom: 15px;
-			`;
+		const title = document.createElement('h3');
+		title.textContent = l10n.get("VideoPreview") || "Video Pose Mapping Preview";
+		title.className = 'modal-title';
+		title.style.cssText = `
+			text-align: center;
+			margin-bottom: 15px;
+		`;
 
-			const body = document.createElement('div');
-			body.className = 'modal-body-preview';
+		const body = document.createElement('div');
+		body.className = 'modal-body-preview';
 
-			// Create container for side-by-side canvases
-			const canvasContainer = document.createElement('div');
-			canvasContainer.style.cssText = `
-				display: flex;
-				justify-content: center;
-				gap: 20px;
-				margin-bottom: 15px;
-				flex-wrap: wrap;
-			`;
+		// Create container for side-by-side canvases
+		const canvasContainer = document.createElement('div');
+		canvasContainer.style.cssText = `
+			display: flex;
+			justify-content: center;
+			gap: 20px;
+			margin-bottom: 15px;
+			flex-wrap: wrap;
+		`;
 
-			// Original video canvas
-			const videoCanvas = document.createElement('canvas');
-			videoCanvas.id = 'video-preview-canvas';
-			videoCanvas.width = 320;
-			videoCanvas.height = 240;
-			videoCanvas.style.cssText = `
-				border: 2px solid #007acc;
-				border-radius: 8px;
-				background: #f5f5f5;
-			`;
+		// Original video canvas
+		const videoCanvas = document.createElement('canvas');
+		videoCanvas.id = 'video-preview-canvas';
+		videoCanvas.width = 320;
+		videoCanvas.height = 240;
+		videoCanvas.style.cssText = `
+			border: 2px solid #007acc;
+			border-radius: 8px;
+			background: #f5f5f5;
+		`;
 
-			const videoLabel = document.createElement('div');
-			videoLabel.textContent = 'Original Video + Pose Detection';
-			videoLabel.style.cssText = `
-				text-align: center;
-				font-size: 12px;
-				color: #007acc;
-				font-weight: bold;
-				margin-bottom: 10px;
-			`;
+		const videoSection = document.createElement('div');
+		videoSection.appendChild(videoCanvas);
 
-			const videoSection = document.createElement('div');
-			videoSection.appendChild(videoLabel);
-			videoSection.appendChild(videoCanvas);
+		// Stickman canvas
+		const stickmanCanvas = document.createElement('canvas');
+		stickmanCanvas.id = 'stickman-preview-canvas';
+		stickmanCanvas.width = 320;
+		stickmanCanvas.height = 240;
+		stickmanCanvas.style.cssText = `
+			border: 2px solid #ff6600;
+			border-radius: 8px;
+			background: white;
+		`;
 
-			// Stickman canvas
-			const stickmanCanvas = document.createElement('canvas');
-			stickmanCanvas.id = 'stickman-preview-canvas';
-			stickmanCanvas.width = 320;
-			stickmanCanvas.height = 240;
-			stickmanCanvas.style.cssText = `
-				border: 2px solid #ff6600;
-				border-radius: 8px;
-				background: white;
-			`;
+		const stickmanSection = document.createElement('div');
+		stickmanSection.appendChild(stickmanCanvas);
 
-			const stickmanLabel = document.createElement('div');
-			stickmanLabel.textContent = 'Generated Stickman Animation';
-			stickmanLabel.style.cssText = `
-				text-align: center;
-				font-size: 12px;
-				color: #ff6600;
-				font-weight: bold;
-				margin-bottom: 10px;
-			`;
+		canvasContainer.appendChild(videoSection);
+		canvasContainer.appendChild(stickmanSection);
 
-			const stickmanSection = document.createElement('div');
-			stickmanSection.appendChild(stickmanLabel);
-			stickmanSection.appendChild(stickmanCanvas);
+		// Controls container
+		const controlsContainer = document.createElement('div');
+		controlsContainer.style.cssText = 'text-align: center; margin-bottom: 15px;';
 
-			canvasContainer.appendChild(videoSection);
-			canvasContainer.appendChild(stickmanSection);
+		const playBtn = document.createElement('button');
+		playBtn.innerHTML = `
+			<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
+			${l10n.get("Play") || "Play"}
+		`;
+		playBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; display: inline-flex; align-items: center; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer;';
 
-			// Frame counter container
-			const frameCounterContainer = document.createElement('div');
-			frameCounterContainer.style.cssText = `
-				text-align: center;
-				margin-bottom: 10px;
-			`;
+		const prevBtn = document.createElement('button');
+		prevBtn.innerHTML = '⏮ Previous';
+		prevBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
 
-			const frameCounter = document.createElement('span');
-			frameCounter.style.cssText = `
-				font-size: 14px;
-				color: #333;
-				font-weight: bold;
-			`;
-			frameCounter.innerHTML = `Frame: <span id="frame-number">1</span> / ${frames.length}`;
-			frameCounterContainer.appendChild(frameCounter);
+		const nextBtn = document.createElement('button');
+		nextBtn.innerHTML = 'Next ⏭';
+		nextBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
 
-			// Pose confidence display
-			const confidenceContainer = document.createElement('div');
-			confidenceContainer.style.cssText = `
-				text-align: center;
-				margin-bottom: 15px;
-			`;
+		controlsContainer.appendChild(prevBtn);
+		controlsContainer.appendChild(playBtn);
+		controlsContainer.appendChild(nextBtn);
 
-			const confidenceDisplay = document.createElement('span');
-			confidenceDisplay.id = 'confidence-display';
-			confidenceDisplay.style.cssText = `
-				font-size: 12px;
-				color: #666;
-				background: #f0f0f0;
-				padding: 4px 8px;
-				border-radius: 4px;
-			`;
-			confidenceContainer.appendChild(confidenceDisplay);
+		// Button container
+		const buttonContainer = document.createElement('div');
+		buttonContainer.className = 'modal-button-container';
 
-			// Controls container
-			const controlsContainer = document.createElement('div');
-			controlsContainer.style.cssText = 'text-align: center; margin-bottom: 15px;';
+		// Cancel button
+		const cancelButton = document.createElement('button');
+		cancelButton.className = 'modal-button';
+		cancelButton.innerHTML = `
+			<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("Cancel") || "Cancel"}
+		`;
 
-			const playBtn = document.createElement('button');
-			playBtn.innerHTML = `
-				<img src="icons/play.svg" style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;">
-				${l10n.get("Play") || "Play"}
-			`;
-			playBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; display: inline-flex; align-items: center; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer;';
-
-			const prevBtn = document.createElement('button');
-			prevBtn.innerHTML = '⏮ Previous';
-			prevBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
-
-			const nextBtn = document.createElement('button');
-			nextBtn.innerHTML = 'Next ⏭';
-			nextBtn.style.cssText = 'margin: 0 5px; padding: 8px 12px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
-
-			controlsContainer.appendChild(prevBtn);
-			controlsContainer.appendChild(playBtn);
-			controlsContainer.appendChild(nextBtn);
-
-			// Button container
-			const buttonContainer = document.createElement('div');
-			buttonContainer.className = 'modal-button-container';
-
-			// Cancel button
-			const cancelButton = document.createElement('button');
-			cancelButton.className = 'modal-button';
-			cancelButton.innerHTML = `
-				<span class="modal-button-icon modal-button-icon-cancel"></span>${l10n.get("Cancel") || "Cancel"}
-			`;
-
-			// Add button
-			const addButton = document.createElement('button');
-			addButton.className = 'modal-button modal-button-confirm';
-			addButton.innerHTML = `
+		// Add button
+		const addButton = document.createElement('button');
+		addButton.className = 'modal-button modal-button-confirm';
+		addButton.innerHTML = `
 				<span class="modal-button-icon modal-button-icon-ok"></span>${l10n.get("AddToCanvas") || "Add to Canvas"}
 			`;
 
+		// Draw keypoints on video frame
+		function drawPoseKeypoints(ctx, pose, scaleX, scaleY) {
+			const keypoints = pose.keypoints;
+
+			// Draw keypoint connections first
+			const connections = [
+				['leftShoulder', 'rightShoulder'],
+				['leftShoulder', 'leftElbow'],
+				['leftElbow', 'leftWrist'],
+				['rightShoulder', 'rightElbow'],
+				['rightElbow', 'rightWrist'],
+				['leftShoulder', 'leftHip'],
+				['rightShoulder', 'rightHip'],
+				['leftHip', 'rightHip'],
+				['leftHip', 'leftKnee'],
+				['leftKnee', 'leftAnkle'],
+				['rightHip', 'rightKnee'],
+				['rightKnee', 'rightAnkle'],
+				['nose', 'leftShoulder'],
+				['nose', 'rightShoulder']
+			];
+
+			ctx.strokeStyle = '#00ff00';
+			ctx.lineWidth = 2;
+
+			connections.forEach(([start, end]) => {
+				const startPoint = keypoints.find(kp => kp.part === start);
+				const endPoint = keypoints.find(kp => kp.part === end);
+
+				if (startPoint && endPoint && startPoint.score > 0.3 && endPoint.score > 0.3) {
+					ctx.beginPath();
+					ctx.moveTo(startPoint.position.x * scaleX, startPoint.position.y * scaleY);
+					ctx.lineTo(endPoint.position.x * scaleX, endPoint.position.y * scaleY);
+					ctx.stroke();
+				}
+			});
+
+			// Draw keypoints
+			keypoints.forEach(keypoint => {
+				if (keypoint.score > 0.3) {
+					const x = keypoint.position.x * scaleX;
+					const y = keypoint.position.y * scaleY;
+					ctx.fillStyle = '#00ff00';
+					ctx.beginPath();
+					ctx.arc(x, y, 4, 0, Math.PI * 2);
+					ctx.fill();
+
+					// Add keypoint label
+					ctx.fillStyle = '#000';
+					ctx.font = '10px Arial';
+					ctx.fillText(keypoint.part, x + 6, y - 6);
+				}
+			});
+		}
+
 		// Show stickman preview in the right section after processing
-		async function showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames) {
+		async function showStickmanPreview(rightSection, frameCounterContainer, frameCounter, frames, leftSection, videoDisplay) {
 			// Clear spinner content
 			rightSection.innerHTML = '';
-			
+
+			// Replace the original video with Video + Pose Detection
+			if (leftSection && videoDisplay) {
+				// Clear the left section
+				leftSection.innerHTML = '';
+
+				// Create video preview canvas to show pose mapping
+				const videoPoseCanvas = document.createElement('canvas');
+				videoPoseCanvas.width = 320;
+				videoPoseCanvas.height = 240;
+				videoPoseCanvas.style.cssText = `
+					width: 320px;
+					height: 240px;
+					border: 2px solid #666666;
+					border-radius: 8px;
+					background: #f5f5f5;
+					margin-bottom: 23px;
+				`;
+
+				leftSection.appendChild(videoPoseCanvas);
+			}
+
+			// Create container for stickman preview in right section
+			const previewContainer = document.createElement('div');
+			previewContainer.style.cssText = `
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 10px;
+				width: 100%;
+			`;
+
 			// Create stickman canvas
 			const stickmanCanvas = document.createElement('canvas');
 			stickmanCanvas.width = 320;
@@ -4355,68 +4389,106 @@ define([
 			stickmanCanvas.style.cssText = `
 				width: 320px;
 				height: 240px;
-				border: 2px solid #666;
+				border: 2px solid #666666;
 				border-radius: 8px;
 				background: white;
 			`;
-			
-			rightSection.appendChild(stickmanCanvas);
-			
-			//frame counter under the stickman preview
+
+			previewContainer.appendChild(stickmanCanvas);
+
+			rightSection.appendChild(previewContainer);
+
+			// Frame counter under the stickman preview
 			frameCounterContainer.appendChild(frameCounter);
 			frameCounterContainer.style.display = 'block';
 			rightSection.appendChild(frameCounterContainer);
 			frameCounter.innerHTML = `Frame: <span id="frame-number">1</span> / ${frames.length}`;
-			
-			// Set up animation
+
+			// Set up animation - get contexts for both canvases
+			const videoPoseCtx = leftSection ? leftSection.querySelector('canvas')?.getContext('2d') : null;
 			const stickmanCtx = stickmanCanvas.getContext('2d');
 			let currentPreviewFrame = 0;
-			
+
 			// Draw frame function
-			function drawStickmanFrame(frameIndex) {
+			function drawPreviewFrame(frameIndex) {
 				if (frameIndex >= frames.length) return;
-				
+
 				const frameData = frames[frameIndex];
-				const { joints } = frameData;
-				
-				// Clear canvas
+				const { joints, videoFrame, pose } = frameData;
+
+				// Clear canvases
+				if (videoPoseCtx) {
+					const canvas = videoPoseCtx.canvas;
+					videoPoseCtx.clearRect(0, 0, canvas.width, canvas.height);
+				}
 				stickmanCtx.clearRect(0, 0, stickmanCanvas.width, stickmanCanvas.height);
+
+				// Draw original video frame with pose keypoints (in left section)
+				if (videoPoseCtx && videoFrame && pose) {
+					const canvas = videoPoseCtx.canvas;
+					const tempCanvas = document.createElement('canvas');
+					tempCanvas.width = videoFrame.width;
+					tempCanvas.height = videoFrame.height;
+					const tempCtx = tempCanvas.getContext('2d');
+					tempCtx.putImageData(videoFrame, 0, 0);
+
+					// Scale video to fit canvas
+					const scaleX = canvas.width / videoFrame.width;
+					const scaleY = canvas.height / videoFrame.height;
+					const scale = Math.min(scaleX, scaleY);
+
+					const drawWidth = videoFrame.width * scale;
+					const drawHeight = videoFrame.height * scale;
+					const offsetX = (canvas.width - drawWidth) / 2;
+					const offsetY = (canvas.height - drawHeight) / 2;
+
+					videoPoseCtx.drawImage(tempCanvas, offsetX, offsetY, drawWidth, drawHeight);
+
+					// Draw pose keypoints on video
+					videoPoseCtx.save();
+					videoPoseCtx.translate(offsetX, offsetY);
+					videoPoseCtx.scale(scale, scale);
+					drawPoseKeypoints(videoPoseCtx, pose, 1, 1);
+					videoPoseCtx.restore();
+				}
+
+				// Draw stickman (in right section)
 				stickmanCtx.fillStyle = '#ffffff';
 				stickmanCtx.fillRect(0, 0, stickmanCanvas.width, stickmanCanvas.height);
-				
+
 				// Center the stickman in the canvas
 				const stickmanOffsetX = stickmanCanvas.width / 2;
 				const stickmanOffsetY = stickmanCanvas.height / 2;
-				
+
 				const centeredJoints = joints.map(joint => ({
 					x: joint.x - 200 + stickmanOffsetX,
 					y: joint.y - 200 + stickmanOffsetY,
 					name: joint.name
 				}));
-				
+
 				// Draw stickman
 				drawStickmanPreview(stickmanCtx, centeredJoints);
-				
+
 				// Update frame counter
 				const frameNumberElement = document.getElementById('frame-number');
 				if (frameNumberElement) {
 					frameNumberElement.textContent = frameIndex + 1;
 				}
 			}
-			
+
 			// Animation loop for auto-play
 			function animate() {
-				drawStickmanFrame(currentPreviewFrame);
+				drawPreviewFrame(currentPreviewFrame);
 				currentPreviewFrame = (currentPreviewFrame + 1) % frames.length;
-				
+
 				return setTimeout(() => {
 					requestAnimationFrame(animate);
 				}, 200); // 5 FPS preview
 			}
-			
+
 			// Start with first frame
-			drawStickmanFrame(0);
-			
+			drawPreviewFrame(0);
+
 			// Start auto-play animation
 			return animate();
 		}
@@ -4499,7 +4571,7 @@ define([
 			if (!baseFramesSource[stickmanId] || frameIndex < 0) {
 				return null;
 			}
-			
+
 			if (frameIndex === 0) {
 				// First frame is always the base 
 				return {
@@ -4507,14 +4579,14 @@ define([
 					joints: deepClone(baseFramesSource[stickmanId])
 				};
 			}
-			
+
 			if (!deltaFramesSource[stickmanId] || frameIndex - 1 >= deltaFramesSource[stickmanId].length) {
 				return null;
 			}
-			
+
 			// Start with base frame and apply deltas incrementally
 			let currentJoints = deepClone(baseFramesSource[stickmanId]);
-			
+
 			for (let i = 0; i < frameIndex; i++) {
 				if (deltaFramesSource[stickmanId][i]) {
 					currentJoints = applyDeltas(currentJoints, deltaFramesSource[stickmanId][i]);
@@ -4522,7 +4594,7 @@ define([
 					enforceJointDistances(currentJoints);
 				}
 			}
-			
+
 			return {
 				id: stickmanId,
 				joints: currentJoints
@@ -4530,13 +4602,13 @@ define([
 		}
 
 		// START APPLICATION
-		
+
 		// Process localize event
-		window.addEventListener("localized", function() {
+		window.addEventListener("localized", function () {
 			console.log("Localization initialized");
 			translateToolbarButtons();
 		});
-		
+
 		activity.setup();
 		initializeAnimator();
 	});
