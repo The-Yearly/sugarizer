@@ -657,6 +657,36 @@ body {
 	flex: 1;
 }
 
+/* Library Loading Overlay */
+.library-loading-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background-color: rgba(240, 240, 240, 0.8);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 9999;
+	user-select: none;
+	pointer-events: all;
+}
+
+.library-loading-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+}
+
+.library-loading-spinner {
+	width: 64px;
+	height: 64px;
+	display: block;
+}
+
 /* Responsive design for smaller screens */
 @media (max-width: 600px) {
 	.video-preview-content {
