@@ -72,11 +72,74 @@ define([
 			}
 		};
 
-		// Current active configuration 
-		// ResNet50 for better accuracy
-		const posenetConfig = POSENET_CONFIGS.resnet50;
-		// MobileNetV1 for faster performance (change to POSENET_CONFIGS.mobilenet for MobileNet)
-		// const posenetConfig = POSENET_CONFIGS.mobilenet;
+		// Mobile/Platform detection function
+		function detectPlatform() {
+			const userAgent = navigator.userAgent.toLowerCase();
+			const maxTouchPoints = navigator.maxTouchPoints || 0;
+
+			// Check for mobile devices
+			const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent) || maxTouchPoints > 0;
+
+			// Check for tablet specifically
+			const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent) || (maxTouchPoints > 0 && window.screen.width >= 768);
+
+			// Check for low-end devices (basic heuristics)
+			const isLowEnd = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
+
+			// Check for older devices (approximate check)
+			const isOlderDevice = /android [1-4]\.|cpu os [1-9]_/i.test(userAgent);
+
+			// Check available memory (if supported)
+			const hasLowMemory = navigator.deviceMemory && navigator.deviceMemory <= 2;
+
+			// Check for specific mobile platforms
+			const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+			const isAndroid = /android/i.test(userAgent);
+
+			// Screen size heuristics
+			const hasSmallScreen = window.screen.width <= 768 || window.screen.height <= 768;
+
+			return {
+				isMobile: isMobile && !isTablet,
+				isTablet: isTablet,
+				isDesktop: !isMobile && !isTablet,
+				isLowEnd: isLowEnd || hasLowMemory,
+				isOlderDevice: isOlderDevice,
+				isIOS: isIOS,
+				isAndroid: isAndroid,
+				hasSmallScreen: hasSmallScreen,
+				deviceMemory: navigator.deviceMemory || null,
+				hardwareConcurrency: navigator.hardwareConcurrency || null
+			};
+		}
+
+		// Auto-select PoseNet configuration based on platform
+		function selectOptimalPoseNetConfig() {
+			const platform = detectPlatform();
+
+			console.log('Platform detection:', platform);
+
+			// Use MobileNet for mobile phones, low-end devices, and devices with limited resources
+			if (platform.isMobile || platform.isLowEnd || platform.isOlderDevice || platform.hasSmallScreen || (platform.deviceMemory && platform.deviceMemory <= 4)) {
+				console.log('Using MobileNet');
+				return POSENET_CONFIGS.mobilenet;
+			}
+
+			// Use ResNet50 for desktop and high-end tablets for better accuracy
+			console.log('Using ResNet50');
+			return POSENET_CONFIGS.resnet50;
+		}
+
+		// Current active configuration - automatically selected based on platform
+		const posenetConfig = selectOptimalPoseNetConfig();
+
+		// Expose model info for debugging (accessible via browser console)
+		window.StickmanActivityDebug = {
+			getPlatformInfo: () => detectPlatform(),
+			getModelConfig: () => posenetConfig,
+			getCurrentModel: () => posenetModel ? posenetModel.architecture : null,
+			isModelLoaded: () => !!posenetModel
+		};
 
 		let lastMovementBroadcast = 0;
 		const MOVEMENT_BROADCAST_THROTTLE = 50;
@@ -3465,27 +3528,40 @@ define([
 						return null;
 					}
 
-					// Load ResNet50 model
+					console.log(`Loading PoseNet model: ${posenetConfig.architecture}`);
+
+					// Load the automatically selected model (ResNet50 for desktop, MobileNet for mobile)
 					posenetModel = await posenet.load(posenetConfig);
+
+					console.log(`Successfully loaded ${posenetConfig.architecture} model`);
 
 					// Warm up the model with a dummy prediction for better performance
 					const dummyCanvas = document.createElement('canvas');
-					dummyCanvas.width = 513;
-					dummyCanvas.height = 513;
+					dummyCanvas.width = posenetConfig.inputResolution;
+					dummyCanvas.height = posenetConfig.inputResolution;
 					const dummyCtx = dummyCanvas.getContext('2d');
 					dummyCtx.fillStyle = '#000000';
-					dummyCtx.fillRect(0, 0, 513, 513);
+					dummyCtx.fillRect(0, 0, posenetConfig.inputResolution, posenetConfig.inputResolution);
 
 					await posenetModel.estimateSinglePose(dummyCanvas);
 
 				} catch (error) {
-					console.error("Error loading ResNet50 PoseNet model:", error);
+					console.error(`Error loading ${posenetConfig.architecture} PoseNet model:`, error);
 
-					// Fallback to MobileNetV1 if ResNet50 fails
+					// Fallback strategy: try the alternative model
+					const fallbackConfig = posenetConfig.architecture === 'ResNet50' ? POSENET_CONFIGS.mobilenet : POSENET_CONFIGS.resnet50;
+
 					try {
-						posenetModel = await posenet.load(POSENET_CONFIGS.mobilenet);
+						console.log(`Attempting fallback to ${fallbackConfig.architecture}`);
+						posenetModel = await posenet.load(fallbackConfig);
+						console.log(`Successfully loaded fallback ${fallbackConfig.architecture} model`);
 					} catch (fallbackError) {
-						console.error("Both ResNet50 and MobileNetV1 failed:", fallbackError);
+						console.error("Both model architectures failed to load:", fallbackError);
+
+						// Show user-friendly error message
+						if (typeof humane !== 'undefined') {
+							humane.log(l10n.get("PoseNetLoadError") || "Failed to load pose detection model. Video import may not work properly.");
+						}
 					}
 				}
 			}
@@ -3981,13 +4057,21 @@ define([
 			const canvas = document.createElement('canvas');
 			const ctx = canvas.getContext('2d');
 
-			// Set canvas size for optimal input
-			canvas.width = 513;
-			canvas.height = 513;
+			// Set canvas size based on the model's optimal input resolution
+			const optimalResolution = posenetConfig.inputResolution;
+			canvas.width = optimalResolution;
+			canvas.height = optimalResolution;
+
+			console.log(`Using ${optimalResolution}x${optimalResolution} resolution for ${posenetConfig.architecture} model`);
 
 			const duration = video.duration;
-			const frameRate = 10;
+
+			// Adjust frame rate based on platform for better performance
+			const platform = detectPlatform();
+			const frameRate = platform.isMobile || platform.isLowEnd ? 8 : 10; // Lower frame rate for mobile
 			const frameInterval = 1 / frameRate;
+
+			console.log(`Using ${frameRate} FPS for video processing on ${platform.isDesktop ? 'desktop' : platform.isTablet ? 'tablet' : 'mobile'} device`);
 
 			// Center position for stickman
 			const centerX = 200;
@@ -4055,13 +4139,22 @@ define([
 					// Store the video frame as ImageData for preview
 					const videoFrameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-					// Use pose estimation
-					const poses = await posenetModel.estimateMultiplePoses(canvas, {
+					// Use pose estimation with optimized parameters based on the model
+					const estimationParams = {
 						flipHorizontal: false,
 						maxDetections: 1,
-						scoreThreshold: 0.1,
 						nmsRadius: 20
-					});
+					};
+
+					// Adjust parameters based on the model architecture
+					if (posenetConfig.architecture === 'MobileNetV1') {
+						// More lenient parameters for MobileNet on mobile devices
+						estimationParams.scoreThreshold = 0.05;
+					} else {
+						estimationParams.scoreThreshold = 0.1;
+					}
+
+					const poses = await posenetModel.estimateMultiplePoses(canvas, estimationParams);
 
 					if (poses.length > 0 && poses[0].score > 0.15) {
 						// Check if this pose is significantly different from the last one
@@ -4113,10 +4206,19 @@ define([
 					}
 
 				} catch (error) {
+					console.error(`Frame ${frameIndex} processing error:`, error);
 					continue;
 				}
 
 				frameIndex++;
+
+				// Add periodic cleanup for mobile devices to prevent memory issues
+				if (platform.isMobile && frameIndex % 20 === 0) {
+					// Force garbage collection hint (if available)
+					if (window.gc) {
+						window.gc();
+					}
+				}
 			}
 
 			// Final progress update
