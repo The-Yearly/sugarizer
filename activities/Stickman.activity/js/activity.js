@@ -305,8 +305,6 @@ define([
 		}
 
 		function setupDatastore() {
-			activity.setup();
-
 			env.getEnvironment(function (err, environment) {
 				currentenv = environment;
 
