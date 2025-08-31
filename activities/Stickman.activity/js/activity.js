@@ -72,11 +72,74 @@ define([
 			}
 		};
 
-		// Current active configuration 
-		// ResNet50 for better accuracy
-		const posenetConfig = POSENET_CONFIGS.resnet50;
-		// MobileNetV1 for faster performance (change to POSENET_CONFIGS.mobilenet for MobileNet)
-		// const posenetConfig = POSENET_CONFIGS.mobilenet;
+		// Mobile/Platform detection function
+		function detectPlatform() {
+			const userAgent = navigator.userAgent.toLowerCase();
+			const maxTouchPoints = navigator.maxTouchPoints || 0;
+
+			// Check for mobile devices
+			const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent) || maxTouchPoints > 0;
+
+			// Check for tablet specifically
+			const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent) || (maxTouchPoints > 0 && window.screen.width >= 768);
+
+			// Check for low-end devices (basic heuristics)
+			const isLowEnd = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
+
+			// Check for older devices (approximate check)
+			const isOlderDevice = /android [1-4]\.|cpu os [1-9]_/i.test(userAgent);
+
+			// Check available memory (if supported)
+			const hasLowMemory = navigator.deviceMemory && navigator.deviceMemory <= 2;
+
+			// Check for specific mobile platforms
+			const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+			const isAndroid = /android/i.test(userAgent);
+
+			// Screen size heuristics
+			const hasSmallScreen = window.screen.width <= 768 || window.screen.height <= 768;
+
+			return {
+				isMobile: isMobile && !isTablet,
+				isTablet: isTablet,
+				isDesktop: !isMobile && !isTablet,
+				isLowEnd: isLowEnd || hasLowMemory,
+				isOlderDevice: isOlderDevice,
+				isIOS: isIOS,
+				isAndroid: isAndroid,
+				hasSmallScreen: hasSmallScreen,
+				deviceMemory: navigator.deviceMemory || null,
+				hardwareConcurrency: navigator.hardwareConcurrency || null
+			};
+		}
+
+		// Auto-select PoseNet configuration based on platform
+		function selectOptimalPoseNetConfig() {
+			const platform = detectPlatform();
+
+			console.log('Platform detection:', platform);
+
+			// Use MobileNet for mobile phones, low-end devices, and devices with limited resources
+			if (platform.isMobile || platform.isLowEnd || platform.isOlderDevice || platform.hasSmallScreen || (platform.deviceMemory && platform.deviceMemory <= 4)) {
+				console.log('Using MobileNet');
+				return POSENET_CONFIGS.mobilenet;
+			}
+
+			// Use ResNet50 for desktop and high-end tablets for better accuracy
+			console.log('Using ResNet50');
+			return POSENET_CONFIGS.resnet50;
+		}
+
+		// Current active configuration - automatically selected based on platform
+		const posenetConfig = selectOptimalPoseNetConfig();
+
+		// Expose model info for debugging (accessible via browser console)
+		window.StickmanActivityDebug = {
+			getPlatformInfo: () => detectPlatform(),
+			getModelConfig: () => posenetConfig,
+			getCurrentModel: () => posenetModel ? posenetModel.architecture : null,
+			isModelLoaded: () => !!posenetModel
+		};
 
 		let lastMovementBroadcast = 0;
 		const MOVEMENT_BROADCAST_THROTTLE = 50;
@@ -305,8 +368,6 @@ define([
 		}
 
 		function setupDatastore() {
-			activity.setup();
-
 			env.getEnvironment(function (err, environment) {
 				currentenv = environment;
 
@@ -581,7 +642,7 @@ define([
 
 			// Template palette - temporarily disabled due to loading issues
 			var templateButton = document.getElementById("template-button");
-			// var templatePalette = new templatepalette.TemplatePalette(templateButton);
+			var templatePalette = new templatepalette.TemplatePalette(templateButton);
 
 			document.addEventListener('template-selected', function (e) {
 				loadTemplate(e.detail.template);
@@ -1531,109 +1592,171 @@ define([
 				}
 				const templateData = await response.json();
 
-				// Create a new stickman with next ID
-				const newStickmanId = nextStickmanId++;
-				const newStickman = createStickmanJoints(canvas.width / 2, canvas.height / 2, newStickmanId);
-
-				// Reset to single stickman
-				stickmen = [newStickman];
-				selectedStickmanIndex = 0;
-
-				// Initialize delta structure for this stickman
-				baseFrames = {};
-				deltaFrames = {};
-				currentFrameIndices = {};
-				currentFrameIndices[newStickmanId] = 0;
-
-				// Convert template frames to new format
-				const templateFrames = JSON.parse(JSON.stringify(templateData.frames));
-				if (templateFrames.length > 0) {
-					// Process first frame as base frame
-					let firstFrame = templateFrames[0];
-
-					if (Array.isArray(firstFrame) && firstFrame.length > 0) {
-						if (Array.isArray(firstFrame[0])) {
-							baseFrames[newStickmanId] = firstFrame[0];
-						} else if (firstFrame[0].joints) {
-							baseFrames[newStickmanId] = firstFrame[0].joints;
-						} else {
-							baseFrames[newStickmanId] = firstFrame;
-						}
-					} else if (firstFrame.joints) {
-						baseFrames[newStickmanId] = firstFrame.joints;
-					} else {
-						baseFrames[newStickmanId] = firstFrame;
+				// Check if this is journal-style format (with metadata and text)
+				let savedData;
+				if (templateData.metadata && templateData.text) {
+					// This is journal-style format - parse the text field
+					try {
+						savedData = JSON.parse(templateData.text);
+					} catch (parseError) {
+						console.error('Error parsing template text data:', parseError);
+						return;
 					}
-
-					// Ensure middle joint exists
-					if (baseFrames[newStickmanId].length === 11) {
-						baseFrames[newStickmanId].push({
-							x: (baseFrames[newStickmanId][1].x + baseFrames[newStickmanId][2].x) / 2,
-							y: (baseFrames[newStickmanId][1].y + baseFrames[newStickmanId][2].y) / 2,
-							name: 'middle'
-						});
-					}
-
-					// Process subsequent frames as deltas
-					deltaFrames[newStickmanId] = [];
-					for (let i = 1; i < templateFrames.length; i++) {
-						let currentFrame = templateFrames[i];
-						let previousFrame = templateFrames[i - 1];
-
-						// Normalize frame structure
-						let currentJoints, previousJoints;
-
-						if (Array.isArray(currentFrame) && currentFrame.length > 0) {
-							currentJoints = Array.isArray(currentFrame[0]) ? currentFrame[0] :
-								(currentFrame[0].joints ? currentFrame[0].joints : currentFrame);
-						} else if (currentFrame.joints) {
-							currentJoints = currentFrame.joints;
-						} else {
-							currentJoints = currentFrame;
-						}
-
-						if (Array.isArray(previousFrame) && previousFrame.length > 0) {
-							previousJoints = Array.isArray(previousFrame[0]) ? previousFrame[0] :
-								(previousFrame[0].joints ? previousFrame[0].joints : previousFrame);
-						} else if (previousFrame.joints) {
-							previousJoints = previousFrame.joints;
-						} else {
-							previousJoints = previousFrame;
-						}
-
-						// Ensure middle joint exists in both frames
-						if (currentJoints.length === 11) {
-							currentJoints.push({
-								x: (currentJoints[1].x + currentJoints[2].x) / 2,
-								y: (currentJoints[1].y + currentJoints[2].y) / 2,
-								name: 'middle'
-							});
-						}
-						if (previousJoints.length === 11) {
-							previousJoints.push({
-								x: (previousJoints[1].x + previousJoints[2].x) / 2,
-								y: (previousJoints[1].y + previousJoints[2].y) / 2,
-								name: 'middle'
-							});
-						}
-
-						// Calculate delta
-						const delta = calculateDeltas(currentJoints, previousJoints);
-						if (delta) {
-							deltaFrames[newStickmanId].push(delta);
-						}
-					}
-
-					// Update current stickman to base frame
-					stickmen[0] = {
-						id: newStickmanId,
-						joints: JSON.parse(JSON.stringify(baseFrames[newStickmanId]))
-					};
+				} else {
+					console.error('Unknown template format');
+					return;
 				}
 
+				// Handle journal-style data format
+				if (savedData.baseFrames && savedData.deltaFrames && savedData.currentFrameIndices) {
+					const templateStickmen = [];
+
+					// Process each stickman from the template data
+					Object.keys(savedData.baseFrames).forEach((originalStickmanId, index) => {
+						try {
+							// Create new ID for template stickman - always use current user as owner
+							let newStickmanId;
+							if (currentenv && currentenv.user) {
+								newStickmanId = `${currentenv.user.networkId}_${Date.now()}_template_${index}`;
+							} else {
+								newStickmanId = nextStickmanId++;
+							}
+
+							// Copy the animation data
+							const baseFrame = savedData.baseFrames[originalStickmanId];
+							const deltaFramesList = savedData.deltaFrames[originalStickmanId] || [];
+							const frameIndex = savedData.currentFrameIndices[originalStickmanId] || 0;
+
+							if (baseFrame && Array.isArray(baseFrame)) {
+								// Store the animation data
+								baseFrames[newStickmanId] = deepClone(baseFrame);
+								deltaFrames[newStickmanId] = deepClone(deltaFramesList);
+								currentFrameIndices[newStickmanId] = 0; // Start from first frame
+
+								// Assign current user's color to template stickman (ignore original buddy color)
+								if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+									stickmanUserColors[newStickmanId] = currentenv.user.colorvalue;
+								}
+
+								// Reconstruct the first frame to create the stickman
+								const reconstructedFrame = reconstructFrameFromDeltas(newStickmanId, 0);
+								if (reconstructedFrame && reconstructedFrame.joints) {
+									// Position the template stickman to avoid collision with existing stickmen
+									const existingStickmenCount = stickmen.length;
+									const templateStickmenCount = Object.keys(savedData.baseFrames).length;
+
+									// Calculate safe position considering existing stickmen
+									let centerX, centerY;
+									if (existingStickmenCount === 0) {
+										// No existing stickmen - use canvas center
+										centerX = canvas.width / 2 + (index * 150) - (templateStickmenCount - 1) * 75;
+										centerY = canvas.height / 2;
+									} else {
+										// Try to place template stickman without overlapping existing ones
+										const stickmanHeight = 160;
+										const stickmanWidth = 80;
+										const margin = 50;
+
+										const minX = stickmanWidth / 2 + margin;
+										const maxX = canvas.width - stickmanWidth / 2 - margin;
+										const minY = 65 + margin;
+										const maxY = canvas.height - 95 - margin;
+
+										let attempts = 0;
+										const maxAttempts = 20;
+										const minDistance = 120;
+
+										do {
+											centerX = Math.random() * (maxX - minX) + minX;
+											centerY = Math.random() * (maxY - minY) + minY;
+
+											const isTooClose = stickmen.some(existingStickman => {
+												const existingCenter = existingStickman.joints[11] || existingStickman.joints[2];
+												const distance = Math.sqrt(
+													Math.pow(centerX - existingCenter.x, 2) +
+													Math.pow(centerY - existingCenter.y, 2)
+												);
+												return distance < minDistance;
+											});
+
+											if (!isTooClose) break;
+											attempts++;
+										} while (attempts < maxAttempts);
+
+										// If couldn't find safe position, offset from canvas center
+										if (attempts >= maxAttempts) {
+											centerX = canvas.width / 2 + (existingStickmenCount + index) * 100;
+											centerY = canvas.height / 2;
+										}
+									}
+
+									// Calculate current center of the stickman
+									const currentCenter = {
+										x: (Math.max(...reconstructedFrame.joints.map(p => p.x)) + Math.min(...reconstructedFrame.joints.map(p => p.x))) / 2,
+										y: (Math.max(...reconstructedFrame.joints.map(p => p.y)) + Math.min(...reconstructedFrame.joints.map(p => p.y))) / 2
+									};
+
+									const offsetX = centerX - currentCenter.x;
+									const offsetY = centerY - currentCenter.y;
+
+									// Apply offset to base frame
+									baseFrames[newStickmanId] = baseFrames[newStickmanId].map(joint => ({
+										x: joint.x + offsetX,
+										y: joint.y + offsetY,
+										name: joint.name
+									}));
+
+									// Reconstruct with new position
+									const finalFrame = reconstructFrameFromDeltas(newStickmanId, 0);
+									if (finalFrame) {
+										stickmen.push(finalFrame);
+										templateStickmen.push({
+											stickman: {
+												id: newStickmanId,
+												joints: finalFrame.joints,
+												baseFrame: baseFrames[newStickmanId],
+												deltaFrames: deltaFrames[newStickmanId],
+												currentFrameIndex: currentFrameIndices[newStickmanId]
+											},
+											color: stickmanUserColors[newStickmanId]
+										});
+									}
+								}
+							}
+						} catch (stickmanError) {
+							console.error('Error processing template stickman:', originalStickmanId, stickmanError);
+						}
+					});
+
+					// In shared mode, broadcast all template stickmen to other users
+					if (isShared && presence && templateStickmen.length > 0) {
+						templateStickmen.forEach(templateStickmanData => {
+							presence.sendMessage(presence.getSharedInfo().id, {
+								user: presence.getUserInfo(),
+								action: 'new_stickman',
+								content: templateStickmanData
+							});
+						});
+					}
+				} else {
+					console.error('Template data missing required fields');
+				}
+
+				// Set up UI state - select the newly added template stickman
+				if (stickmen.length > 0) {
+					selectedStickmanIndex = stickmen.length - 1; // Select the newly added template stickman
+				} else {
+					selectedStickmanIndex = -1;
+				}
 				neckManuallyMoved = false;
-				updateMiddleJoint(0);
+
+				// Update middle joints for all stickmen
+				stickmen.forEach((_, index) => updateMiddleJoint(index));
+
 				updateTimeline();
+				updateRemoveButtonState();
+				render();
+
 			} catch (error) {
 				console.error('Error loading template:', error);
 				createInitialStickman();
@@ -3207,6 +3330,7 @@ define([
 						const importedDeltaFrames = {};
 						const importedCurrentFrameIndices = {};
 						const importedStickmanUserColors = {};
+						const importedStickmenForSharing = [];
 
 						// Process each stickman from the imported data
 						Object.keys(savedData.baseFrames).forEach(stickmanIdStr => {
@@ -3219,7 +3343,7 @@ define([
 								const deltaFramesList = savedData.deltaFrames[stickmanId] || [];
 
 								if (baseFrame && Array.isArray(baseFrame)) {
-									// Create new ID for imported stickman to avoid conflicts
+									// Create new ID for imported stickman - always use current user as owner
 									let newStickmanId;
 									if (currentenv && currentenv.user) {
 										newStickmanId = `${currentenv.user.networkId}_${Date.now()}_imported_${Object.keys(importedBaseFrames).length}`;
@@ -3322,6 +3446,18 @@ define([
 										importedDeltaFrames[newStickmanId] = newDeltas;
 
 										importedStickmen.push(reconstructedFrame);
+
+										// Prepare for sharing in shared mode
+										importedStickmenForSharing.push({
+											stickman: {
+												id: newStickmanId,
+												joints: reconstructedFrame.joints,
+												baseFrame: importedBaseFrames[newStickmanId],
+												deltaFrames: importedDeltaFrames[newStickmanId],
+												currentFrameIndex: importedCurrentFrameIndices[newStickmanId]
+											},
+											color: importedStickmanUserColors[newStickmanId]
+										});
 									} else {
 										console.log("Could not reconstruct frame for stickman:", stickmanId);
 									}
@@ -3340,6 +3476,17 @@ define([
 							Object.assign(deltaFrames, importedDeltaFrames);
 							Object.assign(currentFrameIndices, importedCurrentFrameIndices);
 							Object.assign(stickmanUserColors, importedStickmanUserColors);
+
+							// In shared mode, broadcast all imported stickmen to other users
+							if (isShared && presence && importedStickmenForSharing.length > 0) {
+								importedStickmenForSharing.forEach(importedStickmanData => {
+									presence.sendMessage(presence.getSharedInfo().id, {
+										user: presence.getUserInfo(),
+										action: 'new_stickman',
+										content: importedStickmanData
+									});
+								});
+							}
 
 							// Update middle joints for all imported stickmen
 							const startIndex = stickmen.length - importedStickmen.length;
@@ -3381,27 +3528,40 @@ define([
 						return null;
 					}
 
-					// Load ResNet50 model
+					console.log(`Loading PoseNet model: ${posenetConfig.architecture}`);
+
+					// Load the automatically selected model (ResNet50 for desktop, MobileNet for mobile)
 					posenetModel = await posenet.load(posenetConfig);
+
+					console.log(`Successfully loaded ${posenetConfig.architecture} model`);
 
 					// Warm up the model with a dummy prediction for better performance
 					const dummyCanvas = document.createElement('canvas');
-					dummyCanvas.width = 513;
-					dummyCanvas.height = 513;
+					dummyCanvas.width = posenetConfig.inputResolution;
+					dummyCanvas.height = posenetConfig.inputResolution;
 					const dummyCtx = dummyCanvas.getContext('2d');
 					dummyCtx.fillStyle = '#000000';
-					dummyCtx.fillRect(0, 0, 513, 513);
+					dummyCtx.fillRect(0, 0, posenetConfig.inputResolution, posenetConfig.inputResolution);
 
 					await posenetModel.estimateSinglePose(dummyCanvas);
 
 				} catch (error) {
-					console.error("Error loading ResNet50 PoseNet model:", error);
+					console.error(`Error loading ${posenetConfig.architecture} PoseNet model:`, error);
 
-					// Fallback to MobileNetV1 if ResNet50 fails
+					// Fallback strategy: try the alternative model
+					const fallbackConfig = posenetConfig.architecture === 'ResNet50' ? POSENET_CONFIGS.mobilenet : POSENET_CONFIGS.resnet50;
+
 					try {
-						posenetModel = await posenet.load(POSENET_CONFIGS.mobilenet);
+						console.log(`Attempting fallback to ${fallbackConfig.architecture}`);
+						posenetModel = await posenet.load(fallbackConfig);
+						console.log(`Successfully loaded fallback ${fallbackConfig.architecture} model`);
 					} catch (fallbackError) {
-						console.error("Both ResNet50 and MobileNetV1 failed:", fallbackError);
+						console.error("Both model architectures failed to load:", fallbackError);
+
+						// Show user-friendly error message
+						if (typeof humane !== 'undefined') {
+							humane.log(l10n.get("PoseNetLoadError") || "Failed to load pose detection model. Video import may not work properly.");
+						}
 					}
 				}
 			}
@@ -3640,18 +3800,18 @@ define([
 			const overlay = document.createElement('div');
 			overlay.id = 'library-loading-overlay';
 			overlay.className = 'library-loading-overlay';
-			
+
 			const content = document.createElement('div');
 			content.className = 'library-loading-content';
-			
+
 			const spinner = document.createElement('img');
 			spinner.src = 'icons/spinner-light.gif';
 			spinner.className = 'library-loading-spinner';
 			spinner.alt = 'Loading...';
-			
+
 			content.appendChild(spinner);
 			overlay.appendChild(content);
-			
+
 			return overlay;
 		}
 
@@ -3661,10 +3821,10 @@ define([
 			if (existingOverlay) {
 				return; // Already showing
 			}
-			
+
 			const overlay = createLibraryLoadingOverlay();
 			document.body.appendChild(overlay);
-			
+
 			// Disable all toolbar buttons except the stop button
 			const toolbar = document.getElementById('main-toolbar');
 			if (toolbar) {
@@ -3674,14 +3834,14 @@ define([
 					button.style.opacity = '0.5';
 				});
 			}
-			
+
 			// Disable canvas interactions
 			const canvas = document.getElementById('stickman-canvas');
 			if (canvas) {
 				canvas.style.pointerEvents = 'none';
 				canvas.style.opacity = '0.5';
 			}
-			
+
 			// Disable timeline interactions
 			const timeline = document.getElementById('timeline');
 			if (timeline) {
@@ -3695,7 +3855,7 @@ define([
 			if (overlay) {
 				document.body.removeChild(overlay);
 			}
-			
+
 			// Re-enable toolbar buttons
 			const toolbar = document.getElementById('main-toolbar');
 			if (toolbar) {
@@ -3705,14 +3865,14 @@ define([
 					button.style.opacity = '1';
 				});
 			}
-			
+
 			// Re-enable canvas interactions
 			const canvas = document.getElementById('stickman-canvas');
 			if (canvas) {
 				canvas.style.pointerEvents = 'auto';
 				canvas.style.opacity = '1';
 			}
-			
+
 			// Re-enable timeline interactions
 			const timeline = document.getElementById('timeline');
 			if (timeline) {
@@ -3727,12 +3887,12 @@ define([
 			if (!window.tf || !window.posenet) {
 				return false;
 			}
-			
+
 			// Check if model is loaded
 			if (!posenetModel) {
 				return false;
 			}
-			
+
 			return true;
 		}
 
@@ -3742,17 +3902,17 @@ define([
 				// Check if libraries are loaded, if not show loading overlay
 				if (!areLibrariesLoaded()) {
 					showLibraryLoadingOverlay();
-					
+
 					try {
 						// Try to load the libraries with a timeout
 						const loadPromise = loadPoseNet();
-						const timeoutPromise = new Promise((_, reject) => 
+						const timeoutPromise = new Promise((_, reject) =>
 							setTimeout(() => reject(new Error('Library loading timeout')), 30000) // 30 second timeout
 						);
-						
+
 						await Promise.race([loadPromise, timeoutPromise]);
 						hideLibraryLoadingOverlay();
-						
+
 						// If loading failed, don't proceed
 						if (!areLibrariesLoaded()) {
 							humane.log(l10n.get("LibraryLoadError") || "Failed to load required libraries for video import");
@@ -3765,7 +3925,7 @@ define([
 						return;
 					}
 				}
-				
+
 				journalchooser.show(function (entry) {
 					// No selection
 					if (!entry) {
@@ -3897,13 +4057,21 @@ define([
 			const canvas = document.createElement('canvas');
 			const ctx = canvas.getContext('2d');
 
-			// Set canvas size for optimal input
-			canvas.width = 513;
-			canvas.height = 513;
+			// Set canvas size based on the model's optimal input resolution
+			const optimalResolution = posenetConfig.inputResolution;
+			canvas.width = optimalResolution;
+			canvas.height = optimalResolution;
+
+			console.log(`Using ${optimalResolution}x${optimalResolution} resolution for ${posenetConfig.architecture} model`);
 
 			const duration = video.duration;
-			const frameRate = 10;
+
+			// Adjust frame rate based on platform for better performance
+			const platform = detectPlatform();
+			const frameRate = platform.isMobile || platform.isLowEnd ? 8 : 10; // Lower frame rate for mobile
 			const frameInterval = 1 / frameRate;
+
+			console.log(`Using ${frameRate} FPS for video processing on ${platform.isDesktop ? 'desktop' : platform.isTablet ? 'tablet' : 'mobile'} device`);
 
 			// Center position for stickman
 			const centerX = 200;
@@ -3971,13 +4139,22 @@ define([
 					// Store the video frame as ImageData for preview
 					const videoFrameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-					// Use pose estimation
-					const poses = await posenetModel.estimateMultiplePoses(canvas, {
+					// Use pose estimation with optimized parameters based on the model
+					const estimationParams = {
 						flipHorizontal: false,
 						maxDetections: 1,
-						scoreThreshold: 0.1,
 						nmsRadius: 20
-					});
+					};
+
+					// Adjust parameters based on the model architecture
+					if (posenetConfig.architecture === 'MobileNetV1') {
+						// More lenient parameters for MobileNet on mobile devices
+						estimationParams.scoreThreshold = 0.05;
+					} else {
+						estimationParams.scoreThreshold = 0.1;
+					}
+
+					const poses = await posenetModel.estimateMultiplePoses(canvas, estimationParams);
 
 					if (poses.length > 0 && poses[0].score > 0.15) {
 						// Check if this pose is significantly different from the last one
@@ -4029,10 +4206,19 @@ define([
 					}
 
 				} catch (error) {
+					console.error(`Frame ${frameIndex} processing error:`, error);
 					continue;
 				}
 
 				frameIndex++;
+
+				// Add periodic cleanup for mobile devices to prevent memory issues
+				if (platform.isMobile && frameIndex % 20 === 0) {
+					// Force garbage collection hint (if available)
+					if (window.gc) {
+						window.gc();
+					}
+				}
 			}
 
 			// Final progress update
@@ -4345,7 +4531,7 @@ define([
 				}
 			});
 		}
-		
+
 		const modalOverlay = document.createElement('div');
 		modalOverlay.className = 'modal-overlay';
 

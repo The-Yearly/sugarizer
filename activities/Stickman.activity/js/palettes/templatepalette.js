@@ -14,26 +14,16 @@ define([
 		// event listeners for template buttons
 		var self = this;
 		setTimeout(function () {
-			var walkButton = self.getPalette().querySelector("#walk-button");
 			var runButton = self.getPalette().querySelector("#run-button");
-			var danceButton = self.getPalette().querySelector("#dance-button");
-			var jumpButton = self.getPalette().querySelector("#jump-button");
+			var boxingButton = self.getPalette().querySelector("#boxing-button");
+			var dance1Button = self.getPalette().querySelector("#dance1-button");
+			var dance2Button = self.getPalette().querySelector("#dance2-button");
 
 			function setActiveButton(activeButton) {
-				[walkButton, runButton, danceButton, jumpButton].forEach(button => {
+				[runButton, boxingButton, dance1Button, dance2Button].forEach(button => {
 					if (button) button.classList.remove('active');
 				});
 				if (activeButton) activeButton.classList.add('active');
-			}
-
-			if (walkButton) {
-				walkButton.addEventListener("click", function () {
-					document.dispatchEvent(new CustomEvent('template-selected', {
-						detail: { template: 'walk' }
-					}));
-					setActiveButton(walkButton);
-					self.popDown();
-				});
 			}
 
 			if (runButton) {
@@ -46,22 +36,32 @@ define([
 				});
 			}
 
-			if (danceButton) {
-				danceButton.addEventListener("click", function () {
+			if (boxingButton) {
+				boxingButton.addEventListener("click", function () {
 					document.dispatchEvent(new CustomEvent('template-selected', {
-						detail: { template: 'dance' }
+						detail: { template: 'boxing' }
 					}));
-					setActiveButton(danceButton);
+					setActiveButton(boxingButton);
 					self.popDown();
 				});
 			}
 
-			if (jumpButton) {
-				jumpButton.addEventListener("click", function () {
+			if (dance1Button) {
+				dance1Button.addEventListener("click", function () {
 					document.dispatchEvent(new CustomEvent('template-selected', {
-						detail: { template: 'jump' }
+						detail: { template: 'dance1' }
 					}));
-					setActiveButton(jumpButton);
+					setActiveButton(dance1Button);
+					self.popDown();
+				});
+			}
+
+			if (dance2Button) {
+				dance2Button.addEventListener("click", function () {
+					document.dispatchEvent(new CustomEvent('template-selected', {
+						detail: { template: 'dance2' }
+					}));
+					setActiveButton(dance2Button);
 					self.popDown();
 				});
 			}
