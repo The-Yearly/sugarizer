@@ -2127,10 +2127,19 @@ define([
 
 			drawStickmanSkeleton(ctx, joints);
 
-			ctx.fillStyle = '#ff0000';
 			joints.forEach((joint, index) => {
 				if (index === 11)
 					return;
+				
+				// Different colors for different joint types
+				if (index === 2) {
+					// Hip joint - keep green
+					ctx.fillStyle = '#00ff00';
+				} else {
+					// All other joints - red
+					ctx.fillStyle = '#ff0000';
+				}
+				
 				ctx.beginPath();
 				if (index === 0) {
 					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2);
@@ -2224,19 +2233,11 @@ define([
 
 					// Different colors for different joint types
 					if (index === 2) {
-						// Hip joint - drag anchor
+						// Hip joint - drag anchor (keep green)
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
-					} else if (index === 0) {
-						// Head joint - always red for own stickmen in joint view
-						ctx.fillStyle = '#ff0000';
-						ctx.strokeStyle = '#cc0000';
-					} else if (isRotationalJoint(index)) {
-						// Rotational joints
-						ctx.fillStyle = '#ff8800';
-						ctx.strokeStyle = '#cc6600';
 					} else {
-						// Regular joints
+						// All other joints - red
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
 					}
@@ -2248,10 +2249,10 @@ define([
 					ctx.stroke();
 				});
 
-				// Draw middle joint only for owned stickmen
+				// Draw middle joint only for owned stickmen - red
 				const middleJoint = displayJoints[11];
-				ctx.fillStyle = '#ff8800';
-				ctx.strokeStyle = '#cc6600';
+				ctx.fillStyle = '#ff0000';
+				ctx.strokeStyle = '#cc0000';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
 				ctx.arc(middleJoint.x, middleJoint.y, 4, 0, Math.PI * 2);
