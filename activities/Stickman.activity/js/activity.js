@@ -60,7 +60,7 @@ define([
 		const POSENET_CONFIGS = {
 			resnet50: {
 				architecture: 'ResNet50',
-				outputStride: 32,
+				outputStride: 16,
 				inputResolution: 513,
 				quantBytes: 2
 			},
@@ -68,6 +68,7 @@ define([
 				architecture: 'MobileNetV1',
 				outputStride: 16,
 				inputResolution: 257,
+				quantBytes: 2,
 				multiplier: 0.75
 			}
 		};
@@ -119,14 +120,8 @@ define([
 
 			console.log('Platform detection:', platform);
 
-			// Use MobileNet for mobile phones, low-end devices, and devices with limited resources
-			if (platform.isMobile || platform.isLowEnd || platform.isOlderDevice || platform.hasSmallScreen || (platform.deviceMemory && platform.deviceMemory <= 4)) {
-				console.log('Using MobileNet');
-				return POSENET_CONFIGS.mobilenet;
-			}
-
-			// Use ResNet50 for desktop and high-end tablets for better accuracy
-			console.log('Using ResNet50');
+			// Use ResNet50 as preferred default, with MobileNet fallback for offline
+			console.log('Preferred model: ResNet50');
 			return POSENET_CONFIGS.resnet50;
 		}
 
@@ -2132,10 +2127,19 @@ define([
 
 			drawStickmanSkeleton(ctx, joints);
 
-			ctx.fillStyle = '#ff0000';
 			joints.forEach((joint, index) => {
 				if (index === 11)
 					return;
+				
+				// Different colors for different joint types
+				if (index === 2) {
+					// Hip joint - keep green
+					ctx.fillStyle = '#00ff00';
+				} else {
+					// All other joints - red
+					ctx.fillStyle = '#ff0000';
+				}
+				
 				ctx.beginPath();
 				if (index === 0) {
 					ctx.arc(joint.x, joint.y, 3, 0, Math.PI * 2);
@@ -2229,19 +2233,11 @@ define([
 
 					// Different colors for different joint types
 					if (index === 2) {
-						// Hip joint - drag anchor
+						// Hip joint - drag anchor (keep green)
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
-					} else if (index === 0) {
-						// Head joint - always red for own stickmen in joint view
-						ctx.fillStyle = '#ff0000';
-						ctx.strokeStyle = '#cc0000';
-					} else if (isRotationalJoint(index)) {
-						// Rotational joints
-						ctx.fillStyle = '#ff8800';
-						ctx.strokeStyle = '#cc6600';
 					} else {
-						// Regular joints
+						// All other joints - red
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
 					}
@@ -2253,10 +2249,10 @@ define([
 					ctx.stroke();
 				});
 
-				// Draw middle joint only for owned stickmen
+				// Draw middle joint only for owned stickmen - red
 				const middleJoint = displayJoints[11];
-				ctx.fillStyle = '#ff8800';
-				ctx.strokeStyle = '#cc6600';
+				ctx.fillStyle = '#ff0000';
+				ctx.strokeStyle = '#cc0000';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
 				ctx.arc(middleJoint.x, middleJoint.y, 4, 0, Math.PI * 2);
@@ -3530,10 +3526,41 @@ define([
 
 					console.log(`Loading PoseNet model: ${posenetConfig.architecture}`);
 
-					// Load the automatically selected model (ResNet50 for desktop, MobileNet for mobile)
-					posenetModel = await posenet.load(posenetConfig);
-
-					console.log(`Successfully loaded ${posenetConfig.architecture} model`);
+					// Try to load local model first
+					let modelConfig = { ...posenetConfig };
+					
+					// Set local model URL based on architecture
+					if (posenetConfig.architecture === 'MobileNetV1') {
+						modelConfig.modelUrl = './models/mobilenet/model-stride16.json';
+					} else if (posenetConfig.architecture === 'ResNet50') {
+						modelConfig.modelUrl = './models/resnet50/model-stride16.json';
+					}
+					
+					try {
+						console.log('Attempting to load local PoseNet model...');
+						posenetModel = await posenet.load(modelConfig);
+						console.log(`Successfully loaded local ${posenetConfig.architecture} model`);
+					} catch (localError) {
+						console.warn('Local model loading failed, trying remote:', localError);
+						
+						// For ResNet50, try remote download first before falling back to MobileNet
+						if (posenetConfig.architecture === 'ResNet50') {
+							try {
+								console.log('Attempting remote ResNet50 download...');
+								delete modelConfig.modelUrl; 
+								posenetModel = await posenet.load(modelConfig);
+								console.log(`Successfully loaded remote ${posenetConfig.architecture} model`);
+							} catch (remoteError) {
+								console.warn('Remote ResNet50 loading failed, falling back to MobileNet:', remoteError);
+								console.error('ResNet50 remote fallback error:', remoteError); 
+							}
+						} else {
+							// For MobileNet, try remote
+							delete modelConfig.modelUrl; 
+							posenetModel = await posenet.load(modelConfig);
+							console.log(`Successfully loaded remote ${posenetConfig.architecture} model`);
+						}
+					}
 
 					// Warm up the model with a dummy prediction for better performance
 					const dummyCanvas = document.createElement('canvas');
@@ -3548,13 +3575,36 @@ define([
 				} catch (error) {
 					console.error(`Error loading ${posenetConfig.architecture} PoseNet model:`, error);
 
-					// Fallback strategy: try the alternative model
-					const fallbackConfig = posenetConfig.architecture === 'ResNet50' ? POSENET_CONFIGS.mobilenet : POSENET_CONFIGS.resnet50;
+					// Fallback strategy: always try ResNet50 first, then MobileNet
+					const fallbackConfig = POSENET_CONFIGS.resnet50;
 
 					try {
 						console.log(`Attempting fallback to ${fallbackConfig.architecture}`);
-						posenetModel = await posenet.load(fallbackConfig);
-						console.log(`Successfully loaded fallback ${fallbackConfig.architecture} model`);
+						
+						// Try local ResNet50 model first
+						let fallbackModelConfig = { ...fallbackConfig };
+						fallbackModelConfig.modelUrl = './models/resnet50/model-stride16.json';
+						
+						try {
+							posenetModel = await posenet.load(fallbackModelConfig);
+							console.log(`Successfully loaded local fallback ${fallbackConfig.architecture} model`);
+						} catch (localFallbackError) {
+							console.warn('Local ResNet50 fallback failed, trying MobileNet:', localFallbackError);
+							
+							// Final fallback: try local MobileNet
+							const mobilenetConfig = { ...POSENET_CONFIGS.mobilenet };
+							mobilenetConfig.modelUrl = './models/mobilenet/model-stride16.json';
+							
+							try {
+								posenetModel = await posenet.load(mobilenetConfig);
+								console.log('Successfully loaded local MobileNet as final fallback');
+							} catch (mobilenetError) {
+								console.warn('Local MobileNet fallback failed, trying remote MobileNet:', mobilenetError);
+								delete mobilenetConfig.modelUrl;
+								posenetModel = await posenet.load(POSENET_CONFIGS.mobilenet);
+								console.log('Successfully loaded remote MobileNet as final fallback');
+							}
+						}
 					} catch (fallbackError) {
 						console.error("Both model architectures failed to load:", fallbackError);
 
