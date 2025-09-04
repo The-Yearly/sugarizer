@@ -2133,10 +2133,13 @@ define([
 				
 				// Different colors for different joint types
 				if (index === 2) {
-					// Hip joint - keep green
+					// Hip joint - green
 					ctx.fillStyle = '#00ff00';
+				} else if (index === 1 || index === 3 || index === 5 || index === 7 || index === 9) {
+					// Middle joints (neck, knees, elbows) - orange
+					ctx.fillStyle = '#ff8800';
 				} else {
-					// All other joints - red
+					// End joints (head, hands, feet) - red
 					ctx.fillStyle = '#ff0000';
 				}
 				
@@ -2233,11 +2236,15 @@ define([
 
 					// Different colors for different joint types
 					if (index === 2) {
-						// Hip joint - drag anchor (keep green)
+						// Hip joint - green
 						ctx.fillStyle = '#00ff00';
 						ctx.strokeStyle = '#00cc00';
+					} else if (index === 1 || index === 3 || index === 5 || index === 7 || index === 9) {
+						// Middle joints (neck, knees, elbows) - orange
+						ctx.fillStyle = '#ff8800';
+						ctx.strokeStyle = '#cc6600';
 					} else {
-						// All other joints - red
+						// End joints (head, hands, feet) - red
 						ctx.fillStyle = '#ff0000';
 						ctx.strokeStyle = '#cc0000';
 					}
@@ -2249,10 +2256,10 @@ define([
 					ctx.stroke();
 				});
 
-				// Draw middle joint only for owned stickmen - red
+				// Draw middle joint only for owned stickmen - orange
 				const middleJoint = displayJoints[11];
-				ctx.fillStyle = '#ff0000';
-				ctx.strokeStyle = '#cc0000';
+				ctx.fillStyle = '#ff8800';
+				ctx.strokeStyle = '#cc6600';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
 				ctx.arc(middleJoint.x, middleJoint.y, 4, 0, Math.PI * 2);

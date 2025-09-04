@@ -42,6 +42,12 @@ define([
 				intro: l10n.get("AddStickmanIntro"),
 			},
 			{
+				element: "#stickman-canvas",
+				position: "top",
+				title: l10n.get("JointColorsTitle"),
+				intro: l10n.get("JointColorsIntro"),
+			},
+			{
 				element: "#template-button",
 				position: "bottom",
 				title: l10n.get("TemplatesTitle"),

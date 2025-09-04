@@ -167,7 +167,7 @@ body {
 
 /* Stickman canvas */
 #stickman-canvas {
-	height: calc(100vh - 100px);
+	height: calc(100vh - 180px);
 	background-color: #ffffff;
 	width: 100%;
 
