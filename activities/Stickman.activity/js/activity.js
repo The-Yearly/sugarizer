@@ -496,6 +496,7 @@ define([
 				{ id: 'export-button', key: 'Export' },
 				{ id: 'stop-button', key: 'Stop' },
 				{ id: 'fullscreen-button', key: 'Fullscreen' },
+				{ id: 'unfullscreen-button', key: 'Unfullscreen' },
 				{ id: 'help-button', key: 'Tutorial' },
 				{ id: 'add-button', key: 'AddFrame' }
 			];
@@ -587,6 +588,31 @@ define([
 			tutorial.start();
 		});
 
+		// Fullscreen functionality
+		document.getElementById("fullscreen-button").addEventListener('click', function() {
+			document.getElementById("main-toolbar").style.display = "none";
+			document.querySelector(".bottomContainer").style.display = "none";
+			document.getElementById("unfullscreen-button").style.visibility = "visible";
+			
+			// Add fullscreen class to canvas
+			const canvas = document.getElementById("stickman-canvas");
+			canvas.classList.add("fullscreen");
+			
+			resizeCanvas(); // Adjust canvas size for fullscreen
+		});
+
+		document.getElementById("unfullscreen-button").addEventListener('click', function() {
+			document.getElementById("main-toolbar").style.display = "block";
+			document.querySelector(".bottomContainer").style.display = "flex";
+			document.getElementById("unfullscreen-button").style.visibility = "hidden";
+			
+			// Remove fullscreen class from canvas
+			const canvas = document.getElementById("stickman-canvas");
+			canvas.classList.remove("fullscreen");
+			
+			resizeCanvas(); // Readjust canvas size for normal view
+		});
+
 		function initCanvas() {
 			canvas = document.getElementById('stickman-canvas');
 			ctx = canvas.getContext('2d');
@@ -595,9 +621,19 @@ define([
 		}
 
 		function resizeCanvas() {
-			canvas.width = canvas.parentElement.clientWidth - 32;
-			// Reduce canvas height by an additional 50 pixels to ensure stickmen never go behind the timeline
-			canvas.height = canvas.parentElement.clientHeight - 250;
+			// Check if we're in fullscreen mode
+			const canvas = document.getElementById("stickman-canvas");
+			const isFullscreen = canvas.classList.contains("fullscreen");
+			
+			if (isFullscreen) {
+				// In fullscreen mode, use full viewport dimensions
+				canvas.width = window.innerWidth;
+				canvas.height = window.innerHeight;
+			} else {
+				// Normal mode: Use calculated dimensions based on container
+				canvas.width = canvas.parentElement.clientWidth - 32;
+				canvas.height = canvas.parentElement.clientHeight - 250;
+			}
 		}
 
 		function initEvents() {
