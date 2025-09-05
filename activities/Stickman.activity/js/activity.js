@@ -751,28 +751,12 @@ define([
 		// function to reset remote positions when receiving updates
 		function resetRemoteStickmanPosition(stickmanId) {
 			if (remoteStickmanPositions[stickmanId]) {
-				// Store the current local offset before resetting
-				const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
-				const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-
-				// Update the original joints to the new network data (without the offset)
+				// Update the original joints to the new network data
 				const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 				if (stickmanIndex !== -1) {
-					// The current joints already have the network update, so we store them as the new original
-					const currentJointsWithoutOffset = stickmen[stickmanIndex].joints.map(joint => ({
-						x: joint.x - offsetX,
-						y: joint.y - offsetY,
-						name: joint.name
-					}));
-
-					// Update the original joints to the new network position
-					remoteStickmanPositions[stickmanId].originalJoints = deepClone(currentJointsWithoutOffset);
-
-					// Reapply the local offset to maintain the user's positioning
-					stickmen[stickmanIndex].joints.forEach((joint, index) => {
-						joint.x = currentJointsWithoutOffset[index].x + offsetX;
-						joint.y = currentJointsWithoutOffset[index].y + offsetY;
-					});
+					// Store the new network position as the original joints
+					remoteStickmanPositions[stickmanId].originalJoints = deepClone(stickmen[stickmanIndex].joints);
+					// Keep the existing offset - it will be applied during rendering
 				}
 			}
 		}
@@ -952,11 +936,36 @@ define([
 				return;
 			}
 
+			// Reset to frame 1 when user moves a remote stickman, this makes it easier to handle and prevents complex pose conflicts
+			if (remoteStickmanPositions[stickmanId] && 
+				(remoteStickmanPositions[stickmanId].offsetX !== 0 || remoteStickmanPositions[stickmanId].offsetY !== 0)) {
+				
+				console.log("Remote stickman was moved locally - resetting to frame 1 and clearing offset");
+				
+				// Reset to first frame (frame 0)
+				if (baseFrames[stickmanId]) {
+					currentFrameIndices[stickmanId] = 0;
+					const baseFrame = reconstructFrameFromDeltas(stickmanId, 0);
+					if (baseFrame) {
+						stickmen[stickmanIndex] = baseFrame;
+					}
+				}
+				
+				// Clear the local offset since we're getting fresh network data
+				remoteStickmanPositions[stickmanId].offsetX = 0;
+				remoteStickmanPositions[stickmanId].offsetY = 0;
+			}
+
 			// Update the stickman joints with received data
 			if (joints && joints.length === stickmen[stickmanIndex].joints.length) {
 				stickmen[stickmanIndex].joints = deepClone(joints);
 				updateMiddleJoint(stickmanIndex);
 				console.log("Updated remote stickman movement for:", stickmanId);
+				
+				// Update original joints for this remote stickman
+				if (remoteStickmanPositions[stickmanId]) {
+					remoteStickmanPositions[stickmanId].originalJoints = deepClone(joints);
+				}
 			}
 		}
 
@@ -1008,25 +1017,14 @@ define([
 			if (existingIndex !== -1) {
 				console.log("Stickman already exists, updating:", newId);
 
-				// Apply remote offset if it exists for this stickman
-				let jointsToUse = deepClone(stickmanData.joints);
+				// Store original joints if remote positioning data exists
 				if (remoteStickmanPositions[newId]) {
-					const offsetX = remoteStickmanPositions[newId].offsetX || 0;
-					const offsetY = remoteStickmanPositions[newId].offsetY || 0;
-
 					// Update original joints to the new network data
 					remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
-
-					// Apply offset for display
-					jointsToUse = jointsToUse.map(joint => ({
-						x: joint.x + offsetX,
-						y: joint.y + offsetY,
-						name: joint.name
-					}));
 				}
 
-				// Update existing stickman instead of ignoring
-				stickmen[existingIndex].joints = jointsToUse;
+				// Update existing stickman with new network data (offset will be applied during rendering)
+				stickmen[existingIndex].joints = deepClone(stickmanData.joints);
 				baseFrames[newId] = deepClone(stickmanData.baseFrame || stickmanData.joints);
 				deltaFrames[newId] = deepClone(stickmanData.deltaFrames || []);
 				currentFrameIndices[newId] = stickmanData.currentFrameIndex || 0;
@@ -1040,26 +1038,15 @@ define([
 
 			console.log("Adding new stickman with data:", stickmanData);
 
-			// Apply remote offset if it exists for this stickman
-			let jointsToUse = deepClone(stickmanData.joints);
+			// Store original joints if remote positioning data exists
 			if (remoteStickmanPositions[newId]) {
-				const offsetX = remoteStickmanPositions[newId].offsetX || 0;
-				const offsetY = remoteStickmanPositions[newId].offsetY || 0;
-
 				// Update original joints to the new network data
 				remoteStickmanPositions[newId].originalJoints = deepClone(stickmanData.joints);
-
-				// Apply offset for display
-				jointsToUse = jointsToUse.map(joint => ({
-					x: joint.x + offsetX,
-					y: joint.y + offsetY,
-					name: joint.name
-				}));
 			}
 
 			const newStickman = {
 				id: newId,
-				joints: jointsToUse
+				joints: deepClone(stickmanData.joints) // Store original joints, offset applied during rendering
 			};
 
 			stickmen.push(newStickman);
@@ -1181,20 +1168,10 @@ define([
 				// Reconstruct current frame
 				const frame = reconstructFrameFromDeltas(stickmanId, data.currentFrameIndex);
 				if (frame) {
-					// Apply remote offset if it exists for this stickman
+					// Store original joints if remote positioning data exists
 					if (remoteStickmanPositions[stickmanId]) {
-						const offsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
-						const offsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
-
 						// Update original joints to the new network data
 						remoteStickmanPositions[stickmanId].originalJoints = deepClone(frame.joints);
-
-						// Apply offset for display
-						frame.joints = frame.joints.map(joint => ({
-							x: joint.x + offsetX,
-							y: joint.y + offsetY,
-							name: joint.name
-						}));
 					}
 
 					stickmen[stickmanIndex] = frame;
@@ -2648,10 +2625,16 @@ define([
 							offsetY: 0,
 							originalJoints: deepClone(stickmen[stickmanIndex].joints)
 						};
-					} else {
-						// Update original joints to current position
-						remoteStickmanPositions[stickmanId].originalJoints = deepClone(stickmen[stickmanIndex].joints);
 					}
+					
+					// Record the starting offset for this drag operation
+					// This allows us to continue from the current visual position
+					const startingOffsetX = remoteStickmanPositions[stickmanId].offsetX || 0;
+					const startingOffsetY = remoteStickmanPositions[stickmanId].offsetY || 0;
+					
+					// Store these for use in mouse move
+					remoteStickmanPositions[stickmanId].dragStartOffsetX = startingOffsetX;
+					remoteStickmanPositions[stickmanId].dragStartOffsetY = startingOffsetY;
 
 					// Start remote stickman drag
 					isDraggingRemote = true;
@@ -2736,15 +2719,12 @@ define([
 				const deltaX = mouseX - dragStartPos.x;
 				const deltaY = mouseY - dragStartPos.y;
 
-				// Update local offset
-				remoteStickmanPositions[stickmanId].offsetX = deltaX;
-				remoteStickmanPositions[stickmanId].offsetY = deltaY;
-
-				// Apply offset to display position only (not original data)
-				stickmen[selectedStickmanIndex].joints.forEach((joint, index) => {
-					joint.x = remoteData.originalJoints[index].x + deltaX;
-					joint.y = remoteData.originalJoints[index].y + deltaY;
-				});
+				// Apply movement delta to the starting offset position, this ensures we continue from where the stickman was visually positioned
+				const startingOffsetX = remoteData.dragStartOffsetX || 0;
+				const startingOffsetY = remoteData.dragStartOffsetY || 0;
+				
+				remoteStickmanPositions[stickmanId].offsetX = startingOffsetX + deltaX;
+				remoteStickmanPositions[stickmanId].offsetY = startingOffsetY + deltaY;
 
 				// No broadcast for remote stickman movement - local only
 				render();
@@ -2851,6 +2831,12 @@ define([
 				// For remote stickmen, keep the local offset but don't save to frames
 				const stickmanId = stickmen[selectedStickmanIndex].id;
 				console.log("Finished dragging remote stickman locally - position not saved");
+				
+				// Clean up temporary drag variables
+				if (remoteStickmanPositions[stickmanId]) {
+					delete remoteStickmanPositions[stickmanId].dragStartOffsetX;
+					delete remoteStickmanPositions[stickmanId].dragStartOffsetY;
+				}
 			}
 
 			isDragging = false;
