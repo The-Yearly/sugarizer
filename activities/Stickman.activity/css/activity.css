@@ -139,7 +139,7 @@ body {
 	right: 20px;
 	position: fixed;
 	visibility: hidden;
-	z-index: 1000;
+	z-index: 1001;
 }
 
 #unfullscreen-button.visible {
@@ -167,10 +167,19 @@ body {
 
 /* Stickman canvas */
 #stickman-canvas {
-	height: calc(100vh - 100px);
+	height: calc(100vh - 180px);
 	background-color: #ffffff;
 	width: 100%;
+}
 
+/* Fullscreen canvas mode */
+#stickman-canvas.fullscreen {
+	height: 100vh;
+	width: 100vw;
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 999;
 }
 
 /* timeline */
