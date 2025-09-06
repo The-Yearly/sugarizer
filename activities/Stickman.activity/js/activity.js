@@ -3162,9 +3162,31 @@ define([
 			// Calculate optimal bounding box for export
 			const exportBounds = calculateOptimalExportBounds(50); // 50px margin
 
+			// Choose dimensions based on aspect ratio that fits the content well
+			const aspectRatio = exportBounds.width / exportBounds.height;
+			let videoWidth, videoHeight;
+			
+			if (aspectRatio > 1.77) { 
+				// Wide content
+				videoWidth = 1280;
+				videoHeight = 720;
+			} else if (aspectRatio > 1.33) { 
+				// Standard widescreen
+				videoWidth = 1280;
+				videoHeight = 720;
+			} else if (aspectRatio > 0.75) { 
+				// Square-ish content
+				videoWidth = 720;
+				videoHeight = 720;
+			} else { 
+				// Tall content
+				videoWidth = 720;
+				videoHeight = 1280;
+			}
+
 			const recordCanvas = document.createElement('canvas');
-			recordCanvas.width = exportBounds.width;
-			recordCanvas.height = exportBounds.height;
+			recordCanvas.width = videoWidth;
+			recordCanvas.height = videoHeight;
 			const recordCtx = recordCanvas.getContext('2d');
 
 			const stream = recordCanvas.captureStream(15);
@@ -3215,10 +3237,23 @@ define([
 				recordCtx.fillStyle = '#ffffff';
 				recordCtx.fillRect(0, 0, recordCanvas.width, recordCanvas.height);
 
-				// Save context and set up clipping/translation for the bounding box
+				// Save context for content rendering
 				recordCtx.save();
 
-				// Translate to crop the content to our bounding box
+				// Calculate scaling factor to fit content in standard video dimensions
+				const scaleX = (videoWidth - 100) / exportBounds.width; // 100px total margin
+				const scaleY = (videoHeight - 100) / exportBounds.height; // 100px total margin
+				const scale = Math.min(scaleX, scaleY); // Use smaller scale to maintain aspect ratio
+
+				// Center the content in the video canvas
+				const scaledWidth = exportBounds.width * scale;
+				const scaledHeight = exportBounds.height * scale;
+				const offsetX = (videoWidth - scaledWidth) / 2;
+				const offsetY = (videoHeight - scaledHeight) / 2;
+
+				// Apply transformations: translate to center, scale to fit, then translate to crop area
+				recordCtx.translate(offsetX, offsetY);
+				recordCtx.scale(scale, scale);
 				recordCtx.translate(-exportBounds.x, -exportBounds.y);
 
 				// Update each stickman to its current frame for this export frame
@@ -3240,9 +3275,11 @@ define([
 							}
 						}
 
-						// Draw the stickman in its current state
+						// Draw the stickman in its current state with appropriate line width for the scaled video
 						recordCtx.strokeStyle = '#000';
-						recordCtx.lineWidth = 8;
+						const baseLineWidth = 12;
+						const adjustedLineWidth = Math.max(2, Math.min(baseLineWidth / scale, 20));
+						recordCtx.lineWidth = adjustedLineWidth;
 
 						// Get user color for shared mode
 						const userColor = stickmanUserColors[stickmanId] ||
