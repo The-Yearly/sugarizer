@@ -53,6 +53,7 @@ define([
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false;
+		let templatePaletteInstance = null; // Store template palette reference for localization
 
 		// PoseNet model configurations
 		let posenetModel = null;
@@ -510,6 +511,11 @@ define([
 					}
 				}
 			});
+
+			// Also localize template palette buttons if the instance exists
+			if (templatePaletteInstance && typeof templatePaletteInstance.localizeTemplateButtons === 'function') {
+				templatePaletteInstance.localizeTemplateButtons();
+			}
 		}
 
 		document.getElementById('stop-button').addEventListener('click', function () {
@@ -673,7 +679,7 @@ define([
 
 			// Template palette - temporarily disabled due to loading issues
 			var templateButton = document.getElementById("template-button");
-			var templatePalette = new templatepalette.TemplatePalette(templateButton);
+			templatePaletteInstance = new templatepalette.TemplatePalette(templateButton);
 
 			document.addEventListener('template-selected', function (e) {
 				loadTemplate(e.detail.template);
