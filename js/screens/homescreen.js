@@ -276,6 +276,7 @@ const HomeScreen = {
 				};
 				let iconColor = -1;
 				let entries = sugarizer.modules.journal.getByActivity(activity.id);
+				entries.sort((a, b) => new Date(b.metadata.timestamp) - new Date(a.metadata.timestamp));
 				for (let i = 0 ; i < entries.length ; i++) {
 					const entry = entries[i];
 					if (popup.itemList.length < this.constant.maxPopupHistory) {
