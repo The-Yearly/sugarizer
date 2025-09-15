@@ -669,13 +669,31 @@ const app = new Vue({
 			const index = this.selectedFontIdx;
 			return this.pref.font.propertyOrder[index];
 		},
+		csvHeader() {
+			return [this.pref.labels.x, this.pref.labels.y];
+		},
+		shouldUpdateCsv() {
+			// Triggers when tabularData, labels.x, or labels.y change
+			return `${this.tabularData.length}-${this.pref.labels.x}-${this.pref.labels.y}`;
+		}
 	},
 	watch: {
+		shouldUpdateCsv() {
+			// Consolidated watcher for CSV updates - triggers only when needed
+			this.$refs.csvView.updateJsonData(this.tabularData, this.csvHeader, true);
+		},
 		"pref.labels.x"() {
 			this.chartview.updateLabel("x");
 		},
 		"pref.labels.y"() {
 			this.chartview.updateLabel("y");
+		},
+		tabularData: {
+			handler() {
+				// Real-time update for tabular data changes
+				this.$refs.csvView.updateJsonData(this.tabularData, this.csvHeader, true);
+			},
+			deep: true
 		},
 		"pref.chartType"() {
 			if (this.pref.chartType === "csvMode") return;
