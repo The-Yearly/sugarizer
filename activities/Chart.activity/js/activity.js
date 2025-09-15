@@ -673,13 +673,11 @@ const app = new Vue({
 			return [this.pref.labels.x, this.pref.labels.y];
 		},
 		shouldUpdateCsv() {
-			// Triggers when tabularData, labels.x, or labels.y change
 			return `${this.tabularData.length}-${this.pref.labels.x}-${this.pref.labels.y}`;
 		}
 	},
 	watch: {
 		shouldUpdateCsv() {
-			// Consolidated watcher for CSV updates - triggers only when needed
 			this.$refs.csvView.updateJsonData(this.tabularData, this.csvHeader, true);
 		},
 		"pref.labels.x"() {
@@ -690,7 +688,6 @@ const app = new Vue({
 		},
 		tabularData: {
 			handler() {
-				// Real-time update for tabular data changes
 				this.$refs.csvView.updateJsonData(this.tabularData, this.csvHeader, true);
 			},
 			deep: true
