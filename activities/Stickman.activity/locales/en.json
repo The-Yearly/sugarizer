@@ -70,5 +70,13 @@
 	"AddToCanvas": "Add to Canvas",
 	"ProcessingProgress": "Processing",
 	"FramesProcessed": "frames processed",
-	"VideoAnimationImported": "Video animation imported successfully!"
+	"VideoAnimationImported": "Video animation imported successfully!",
+	"Run": "Run",
+	"Boxing": "Boxing",
+	"Dance1": "Dance 1",
+	"Dance2": "Dance 2",
+	"RunTemplate": "Run template",
+	"BoxingTemplate": "Boxing template",
+	"Dance1Template": "Dance 1 template",
+	"Dance2Template": "Dance 2 template"
 }

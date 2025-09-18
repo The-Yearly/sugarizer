@@ -53,6 +53,7 @@ define([
 		let rotationPivot = null;
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false;
+		let templatePaletteInstance = null; // Store template palette reference for localization
 
 		// PoseNet model configurations
 		let posenetModel = null;
@@ -442,7 +443,9 @@ define([
 							speed = savedData.speed || 1;
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
-							stickmanUserColors = savedData.stickmanUserColors || {};
+							
+							// Always initialize with current user's color, ignoring any saved colors
+							stickmanUserColors = {};
 
 							// Reconstruct stickmen 
 							if (Object.keys(baseFrames).length > 0) {
@@ -454,6 +457,11 @@ define([
 									const stickman = reconstructFrameFromDeltas(stickmanId, frameIndex);
 									if (stickman) {
 										stickmen.push(stickman);
+										
+										// Assign current user's color to all loaded stickmen
+										if (currentenv && currentenv.user && currentenv.user.colorvalue) {
+											stickmanUserColors[stickmanId] = currentenv.user.colorvalue;
+										}
 									}
 								});
 
@@ -510,6 +518,11 @@ define([
 					}
 				}
 			});
+
+			// Also localize template palette buttons if the instance exists
+			if (templatePaletteInstance && typeof templatePaletteInstance.localizeTemplateButtons === 'function') {
+				templatePaletteInstance.localizeTemplateButtons();
+			}
 		}
 
 		document.getElementById('stop-button').addEventListener('click', function () {
@@ -522,7 +535,6 @@ define([
 				const updatedBaseFrames = {};
 				const updatedDeltaFrames = {};
 				const updatedCurrentFrameIndices = {};
-				const updatedStickmanUserColors = {};
 
 				// update ownership
 				stickmen.forEach((stickman, index) => {
@@ -547,17 +559,12 @@ define([
 					if (currentFrameIndices[oldId] !== undefined) {
 						updatedCurrentFrameIndices[newId] = currentFrameIndices[oldId];
 					}
-					// Assign current user's color to all stickmen
-					if (currentenv.user.colorvalue) {
-						updatedStickmanUserColors[newId] = currentenv.user.colorvalue;
-					}
 				});
 
 				// Replace the original data structures
 				baseFrames = updatedBaseFrames;
 				deltaFrames = updatedDeltaFrames;
 				currentFrameIndices = updatedCurrentFrameIndices;
-				stickmanUserColors = updatedStickmanUserColors;
 
 				console.log("All stickmen ownership updated to current user before saving");
 			}
@@ -568,8 +575,8 @@ define([
 				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
-				nextStickmanId: nextStickmanId,
-				stickmanUserColors: stickmanUserColors
+				nextStickmanId: nextStickmanId
+				// Note: stickmanUserColors intentionally removed from journal save
 			};
 
 			var jsonData = JSON.stringify(saveData);
@@ -673,7 +680,7 @@ define([
 
 			// Template palette - temporarily disabled due to loading issues
 			var templateButton = document.getElementById("template-button");
-			var templatePalette = new templatepalette.TemplatePalette(templateButton);
+			templatePaletteInstance = new templatepalette.TemplatePalette(templateButton);
 
 			document.addEventListener('template-selected', function (e) {
 				loadTemplate(e.detail.template);
@@ -3418,7 +3425,7 @@ define([
 									importedDeltaFrames[newStickmanId] = deepClone(deltaFramesList);
 									importedCurrentFrameIndices[newStickmanId] = 0;
 
-									// Assign current user's color to imported stickman
+									// Always assign current user's color to imported stickman, ignoring any original color
 									if (currentenv && currentenv.user && currentenv.user.colorvalue) {
 										importedStickmanUserColors[newStickmanId] = currentenv.user.colorvalue;
 									}

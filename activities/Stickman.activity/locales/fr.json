@@ -70,5 +70,13 @@
 	"AddToCanvas": "Ajouter au Canevas",
 	"ProcessingProgress": "Traitement",
 	"FramesProcessed": "images traitées",
-	"VideoAnimationImported": "Animation vidéo importée avec succès!"
+	"VideoAnimationImported": "Animation vidéo importée avec succès!",
+	"Run": "Courir",
+	"Boxing": "Boxe",
+	"Dance1": "Danse 1",
+	"Dance2": "Danse 2",
+	"RunTemplate": "Modèle de course",
+	"BoxingTemplate": "Modèle de boxe",
+	"Dance1Template": "Modèle de danse 1",
+	"Dance2Template": "Modèle de danse 2"
 }
