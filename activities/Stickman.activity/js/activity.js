@@ -634,12 +634,18 @@ define([
 			
 			if (isFullscreen) {
 				// In fullscreen mode, use full viewport dimensions
+				document.getElementById("main-toolbar").style.opacity = 0;
+				document.getElementById("timeline").style.opacity = 0;
 				canvas.width = window.innerWidth;
 				canvas.height = window.innerHeight;
+				canvas.getContext("2d").scale(1.1,1.3);
 			} else {
 				// Normal mode: Use calculated dimensions based on container
+				document.getElementById("main-toolbar").style.opacity = 1;
+				document.getElementById("timeline").style.opacity = 1;
 				canvas.width = canvas.parentElement.clientWidth - 32;
 				canvas.height = canvas.parentElement.clientHeight - 250;
+				canvas.getContext("2d").scale(1,1);
 			}
 		}
 
