@@ -1284,12 +1284,11 @@ define([
 				}
 			}
 
+			minusButton.title = l10n.get("RemoveStickmanTooltip");
 			if (ownedStickmenCount <= 1) {
 				minusButton.disabled = true;
-				minusButton.title = l10n.get("CannotRemoveLastStickman");
 			} else {
 				minusButton.disabled = false;
-				minusButton.title = l10n.get("RemoveStickmanTooltip");
 			}
 		}
 
@@ -1575,12 +1574,11 @@ define([
 		function updateRemoveButtonState() {
 			const minusButton = document.getElementById('minus-button');
 
+			minusButton.title = l10n.get("RemoveStickmanTooltip");
 			if (stickmen.length <= 1) {
 				minusButton.disabled = true;
-				minusButton.title = l10n.get("CannotRemoveLastStickman");
 			} else {
-				minusButton.disabled = false;
-				minusButton.title = l10n.get("RemoveStickmanTooltip");
+				minusButton.disabled = false;			
 			}
 		}
 
