@@ -119,10 +119,7 @@ define([
 		function selectOptimalPoseNetConfig() {
 			const platform = detectPlatform();
 
-			console.log('Platform detection:', platform);
-
 			// Use ResNet50 as preferred default, with MobileNet fallback for offline
-			console.log('Preferred model: ResNet50');
 			return POSENET_CONFIGS.resnet50;
 		}
 
@@ -373,14 +370,12 @@ define([
 				l10n.init(language);
 
 				if (environment.sharedId) {
-					console.log("Shared instance");
 					isShared = true;
 					presence = activity.getPresenceObject(function (error, network) {
 						if (error) {
 							console.log("Error joining shared activity:", error);
 							return;
 						}
-						console.log("Joined shared activity");
 
 						// Set up handlers immediately - like HumanBody
 						network.onDataReceived(onNetworkDataReceived);
@@ -391,9 +386,6 @@ define([
 							const sharedInfo = network.getSharedInfo();
 							const userInfo = network.getUserInfo();
 
-							console.log("Shared info:", sharedInfo);
-							console.log("User info:", userInfo);
-
 							// More robust host detection
 							if (sharedInfo && userInfo && sharedInfo.owner && userInfo.networkId) {
 								isHost = userInfo.networkId === sharedInfo.owner;
@@ -401,8 +393,6 @@ define([
 								// If we can't determine host status, assume not host
 								isHost = false;
 							}
-
-							console.log("Host status:", isHost);
 
 						} catch (e) {
 							console.log("Error checking host status:", e);
@@ -414,8 +404,6 @@ define([
 
 				// Load from datastore
 				if (!environment.objectId) {
-					console.log("New instance");
-
 					// Only create initial stickman if NOT in shared mode or if we're the host
 					if (!environment.sharedId) {
 						createInitialStickman();
@@ -425,7 +413,6 @@ define([
 					} else {
 						// In shared mode, non-host users start with empty canvas
 						// and wait for data from host
-						console.log("Shared mode - waiting for host data");
 						stickmen = [];
 						updateTimeline();
 						updateRemoveButtonState();
@@ -479,7 +466,6 @@ define([
 							updateRemoveButtonState();
 							render();
 						} else {
-							console.log("No instance found, creating new instance");
 							createInitialStickman();
 							updateTimeline();
 							updateRemoveButtonState();
@@ -526,8 +512,6 @@ define([
 		}
 
 		document.getElementById('stop-button').addEventListener('click', function () {
-			console.log("writing...");
-
 			if (currentenv && currentenv.user) {
 				const currentUserId = currentenv.user.networkId || currentenv.user.name || 'user';
 
@@ -565,8 +549,6 @@ define([
 				baseFrames = updatedBaseFrames;
 				deltaFrames = updatedDeltaFrames;
 				currentFrameIndices = updatedCurrentFrameIndices;
-
-				console.log("All stickmen ownership updated to current user before saving");
 			}
 
 			const saveData = {
@@ -681,7 +663,6 @@ define([
 			speedPalette.addEventListener('speed', function (e) {
 				currentSpeed = e.detail.speed;
 				speed = currentSpeed;
-				console.log("Speed set to:", currentSpeed.toFixed(2) + "x");
 			});
 
 			// Template palette - temporarily disabled due to loading issues
@@ -707,7 +688,6 @@ define([
 					}
 
 					network.createSharedActivity('org.sugarlabs.Stickman', function (groupId) {
-						console.log("Activity shared");
 						isShared = true;
 						isHost = true;
 
@@ -777,51 +757,39 @@ define([
 		// NETWORK CALLBACKS
 
 		var onNetworkDataReceived = function (msg) {
-			console.log("Raw message received:", msg);
-
 			if (presence.getUserInfo().networkId === msg.user.networkId) {
-				console.log("Ignoring own message");
 				return;
 			}
 
-			console.log("Processing message from:", msg.user.networkId);
-
 			if (msg.action === 'new_stickman') {
-				console.log("Received new stickman with ID", msg.content.stickman.id);
 				processIncomingStickman(msg.content.stickman, msg.content.stickman.id, msg.content.color);
 				render();
 			}
 
 			if (msg.action === 'all_stickmen') {
-				console.log("Receiving all stickmen, count:", msg.content.length);
 				msg.content.forEach(stickman => {
-					console.log("Processing stickman from all_stickmen:", stickman.id);
 					processIncomingStickman(stickman, stickman.id, stickman.color);
 				});
 				render();
 			}
 
 			if (msg.action === 'stickman_update' || msg.action === 'stickman_final_position') {
-				console.log("Receiving stickman update for", msg.content.stickmanId);
 				const stickmanId = msg.content.stickmanId;
 				updateStickmanFromNetwork(msg.content);
 				render();
 			}
 
 			if (msg.action === 'stickman_movement') {
-				console.log("Receiving real-time movement for", msg.content.stickmanId);
 				processStickmanMovement(msg.content);
 				render();
 			}
 
 			if (msg.action === 'remote_stickman_movement') {
-				console.log("Receiving remote stickman movement for", msg.content.stickmanId);
 				processRemoteStickmanMovement(msg.content);
 				render();
 			}
 
 			if (msg.action === 'stickman_removal') {
-				console.log("Receiving stickman removal for", msg.content.stickmanId);
 				processStickmanRemoval(msg.content);
 				render();
 			}
@@ -830,18 +798,14 @@ define([
 		var onNetworkUserChanged = function (msg) {
 			if (!msg || !msg.user) return;
 
-			console.log("User " + msg.user.name + " " + (msg.move == 1 ? "joined" : "left"));
-
 			if (isHost && msg.move == 1) {
 				// Host sends all stickmen to new user
-				console.log("Host sending all stickmen to new user");
 				setTimeout(sendAllStickmen, 500); // Small delay to ensure connection is ready
 			}
 		};
 
 		function sendAllStickmen() {
 			if (!isHost || !presence) {
-				console.log("Not host or presence not available");
 				return;
 			}
 
@@ -858,8 +822,6 @@ define([
 					};
 				});
 
-				console.log("Sending all stickmen data:", stickmenData);
-
 				// Send even if empty array to sync removal state
 				presence.sendMessage(presence.getSharedInfo().id, {
 					user: presence.getUserInfo(),
@@ -874,12 +836,10 @@ define([
 
 		function broadcastStickman(stickmanData) {
 			if (!isHost || !presence) {
-				console.log("Not host or presence not available");
 				return;
 			}
 
 			try {
-				console.log("Broadcasting new stickman:", stickmanData);
 				presence.sendMessage({
 					type: 'new_stickman',
 					stickman: stickmanData.stickman,
@@ -920,7 +880,6 @@ define([
 					}
 				};
 
-				console.log("Broadcasting remote movement:", movementType, "for stickman:", stickmanId);
 				presence.sendMessage(presence.getSharedInfo().id, message);
 			} catch (error) {
 				console.log("Error broadcasting remote movement:", error);
@@ -934,26 +893,20 @@ define([
 				joints
 			} = movementData;
 
-			console.log("Processing remote movement:", movementType, "for stickman:", stickmanId);
-
 			// Find the stickman to update
 			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 			if (stickmanIndex === -1) {
-				console.log("Stickman not found for remote movement update:", stickmanId);
 				return;
 			}
 
 			// Don't process movements of currently selected stickman to avoid conflicts
 			if (stickmanIndex === selectedStickmanIndex && (isDragging || isDraggingWhole || isRotating)) {
-				console.log("Ignoring remote movement - stickman is currently being manipulated");
 				return;
 			}
 
 			// Reset to frame 1 when user moves a remote stickman, this makes it easier to handle and prevents complex pose conflicts
 			if (remoteStickmanPositions[stickmanId] && 
 				(remoteStickmanPositions[stickmanId].offsetX !== 0 || remoteStickmanPositions[stickmanId].offsetY !== 0)) {
-				
-				console.log("Remote stickman was moved locally - resetting to frame 1 and clearing offset");
 				
 				// Reset to first frame (frame 0)
 				if (baseFrames[stickmanId]) {
@@ -973,7 +926,6 @@ define([
 			if (joints && joints.length === stickmen[stickmanIndex].joints.length) {
 				stickmen[stickmanIndex].joints = deepClone(joints);
 				updateMiddleJoint(stickmanIndex);
-				console.log("Updated remote stickman movement for:", stickmanId);
 				
 				// Update original joints for this remote stickman
 				if (remoteStickmanPositions[stickmanId]) {
@@ -1015,7 +967,6 @@ define([
 					}
 				};
 
-				console.log("Broadcasting movement:", movementType, "for stickman:", stickmanId);
 				presence.sendMessage(presence.getSharedInfo().id, message);
 			} catch (error) {
 				console.log("Error broadcasting movement:", error);
@@ -1023,12 +974,10 @@ define([
 		}
 
 		function processIncomingStickman(stickmanData, newId, color) {
-			console.log("Processing incoming stickman - ID:", newId, "Current stickmen IDs:", stickmen.map(s => s.id));
 
 			// Check if stickman already exists
 			const existingIndex = stickmen.findIndex(s => s.id === newId);
 			if (existingIndex !== -1) {
-				console.log("Stickman already exists, updating:", newId);
 
 				// Store original joints if remote positioning data exists
 				if (remoteStickmanPositions[newId]) {
@@ -1049,8 +998,6 @@ define([
 				return;
 			}
 
-			console.log("Adding new stickman with data:", stickmanData);
-
 			// Store original joints if remote positioning data exists
 			if (remoteStickmanPositions[newId]) {
 				// Update original joints to the new network data
@@ -1068,9 +1015,6 @@ define([
 			currentFrameIndices[newId] = stickmanData.currentFrameIndex || 0;
 			stickmanUserColors[newId] = color;
 
-			console.log("Stickman added successfully. Total stickmen:", stickmen.length);
-			console.log("New stickmen array:", stickmen.map(s => ({ id: s.id, joints: s.joints.length })));
-
 			updateMiddleJoint(stickmen.length - 1);
 			updateTimeline();
 			updateRemoveButtonState();
@@ -1084,18 +1028,14 @@ define([
 		function processStickmanMovement(movementData) {
 			const { stickmanId, movementType, joints, timestamp } = movementData;
 
-			console.log("Processing movement:", movementType, "for stickman:", stickmanId);
-
 			// Find the stickman to update
 			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 			if (stickmanIndex === -1) {
-				console.log("Stickman not found for movement update:", stickmanId);
 				return;
 			}
 
 			// Don't process movements of currently selected stickman to avoid conflicts
 			if (stickmanIndex === selectedStickmanIndex && (isDragging || isDraggingWhole || isRotating)) {
-				console.log("Ignoring movement - stickman is currently being manipulated");
 				return;
 			}
 
@@ -1127,8 +1067,6 @@ define([
 						}
 					}
 				}
-
-				console.log("Updated stickman movement for:", stickmanId);
 			}
 		}
 
@@ -1161,7 +1099,6 @@ define([
 					}
 				};
 
-				console.log("Broadcasting final position for stickman:", stickmanId);
 				presence.sendMessage(presence.getSharedInfo().id, message);
 			} catch (error) {
 				console.log("Error broadcasting final position:", error);
@@ -1170,7 +1107,6 @@ define([
 
 		function updateStickmanFromNetwork(data) {
 			const stickmanId = data.stickmanId;
-			console.log("Updating stickman from network:", stickmanId);
 
 			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 			if (stickmanIndex >= 0) {
@@ -1191,14 +1127,11 @@ define([
 					updateMiddleJoint(stickmanIndex);
 					updateTimeline();
 				}
-			} else {
-				console.log("Stickman not found for update:", stickmanId);
 			}
 		}
 
 		function broadcastStickmanRemoval(stickmanId) {
 			if (!isShared || !presence) {
-				console.log("Not in shared mode or presence not available");
 				return;
 			}
 
@@ -1219,7 +1152,6 @@ define([
 					}
 				};
 
-				console.log("Broadcasting stickman removal:", stickmanId);
 				presence.sendMessage(presence.getSharedInfo().id, message);
 			} catch (error) {
 				console.log("Error broadcasting stickman removal:", error);
@@ -1228,7 +1160,6 @@ define([
 
 		function processStickmanRemoval(removalData) {
 			const { stickmanId, timestamp } = removalData;
-			console.log("Processing stickman removal:", stickmanId);
 
 			// Clean up local position data
 			if (remoteStickmanPositions[stickmanId]) {
@@ -1238,11 +1169,8 @@ define([
 			// Find and remove the stickman
 			const stickmanIndex = stickmen.findIndex(s => s.id === stickmanId);
 			if (stickmanIndex === -1) {
-				console.log("Stickman not found for removal:", stickmanId);
 				return;
 			}
-
-			console.log("Removing stickman:", stickmanId, "at index:", stickmanIndex);
 
 			// Remove from current stickmen array
 			stickmen.splice(stickmanIndex, 1);
@@ -1261,14 +1189,11 @@ define([
 				selectedStickmanIndex--;
 			}
 
-			console.log("Stickman removed. Total remaining:", stickmen.length);
-
 			updateTimeline();
 			updateRemoveButtonState();
 
 			// If no stickmen remain for current user, create a new one
 			if (stickmen.length === 0) {
-				console.log("No stickmen remaining, creating new one");
 				createInitialStickman();
 				updateTimeline();
 				updateRemoveButtonState();
@@ -1438,7 +1363,6 @@ define([
 
 			updateTimeline();
 			updateRemoveButtonState();
-			console.log(`Added new stickman with ID: ${newId}. Total: ${stickmen.length}`);
 		}
 
 		function confirmationModal(stickmanId, stickmanToRemove) {
@@ -1564,7 +1488,6 @@ define([
 		function removeSelectedStickman() {
 			// Check if only one stickman remains
 			if (stickmen.length <= 1) {
-				console.log("Cannot remove the last stickman");
 				return;
 			}
 
@@ -1798,7 +1721,6 @@ define([
 			});
 
 			if (allowedIndices.length === 0) {
-				console.log("No owned stickmen to add frames for");
 				return;
 			}
 
@@ -1988,7 +1910,6 @@ define([
 				previewCanvas.addEventListener('click', () => {
 					if (isShared && presence) {
 						if (!isStickmanOwned(stickmanId)) {
-							console.log("Cannot switch frames of non-owned stickman");
 							return;
 						}
 					}
@@ -2074,7 +1995,6 @@ define([
 
 				if (isShared && presence) {
 					if (!isStickmanOwned(stickmanId)) {
-						console.log("Cannot delete frame of non-owned stickman");
 						return;
 					}
 				}
@@ -2558,7 +2478,6 @@ define([
 				// Check ownership in shared mode
 				if (isShared && presence) {
 					if (!isStickmanOwned(stickmanId)) {
-						console.log("Cannot remove other user's stickman");
 						return; // Simply return without any action
 					}
 				}
@@ -2622,7 +2541,6 @@ define([
 
 					// Only allow dragging remote stickmen by the hip joint
 					if (selectedJointIndex !== 2) {
-						console.log("Can only drag remote stickmen by the hip joint");
 						return;
 					}
 
@@ -2841,7 +2759,6 @@ define([
 			if (isDraggingRemote && selectedStickmanIndex >= 0) {
 				// For remote stickmen, keep the local offset but don't save to frames
 				const stickmanId = stickmen[selectedStickmanIndex].id;
-				console.log("Finished dragging remote stickman locally - position not saved");
 				
 				// Clean up temporary drag variables
 				if (remoteStickmanPositions[stickmanId]) {
@@ -3377,7 +3294,6 @@ define([
 					}
 
 					if (!jsonData) {
-						console.log("No data found in journal entry");
 						return;
 					}
 
@@ -3386,14 +3302,11 @@ define([
 
 						// Check if savedData is valid
 						if (!savedData || typeof savedData !== 'object') {
-							console.log("Invalid data format - not an object");
 							return;
 						}
 
 						// Validate that this is stickman data
 						if (!savedData.baseFrames || !savedData.deltaFrames || !savedData.currentFrameIndices) {
-							console.log("Invalid stickman data format - missing required properties");
-							console.log("Available properties:", Object.keys(savedData));
 							return;
 						}
 
@@ -3531,11 +3444,7 @@ define([
 											},
 											color: importedStickmanUserColors[newStickmanId]
 										});
-									} else {
-										console.log("Could not reconstruct frame for stickman:", stickmanId);
 									}
-								} else {
-									console.log("Invalid base frame for stickman:", stickmanId, baseFrame);
 								}
 							} catch (stickmanError) {
 								console.log("Error processing individual stickman:", stickmanIdStr, stickmanError);
@@ -3575,10 +3484,6 @@ define([
 							render();
 
 							humane.log((l10n.get("StickmanImported") || "Stickman imported successfully!"));
-
-							console.log(`Imported ${importedStickmen.length} stickmen from journal`);
-						} else {
-							console.log("No valid stickmen found in the selected entry");
 						}
 
 					} catch (parseError) {
@@ -3601,8 +3506,6 @@ define([
 						return null;
 					}
 
-					console.log(`Loading PoseNet model: ${posenetConfig.architecture}`);
-
 					// Try to load local model first
 					let modelConfig = { ...posenetConfig };
 					
@@ -3614,19 +3517,15 @@ define([
 					}
 					
 					try {
-						console.log('Attempting to load local PoseNet model...');
 						posenetModel = await posenet.load(modelConfig);
-						console.log(`Successfully loaded local ${posenetConfig.architecture} model`);
 					} catch (localError) {
 						console.warn('Local model loading failed, trying remote:', localError);
 						
 						// For ResNet50, try remote download first before falling back to MobileNet
 						if (posenetConfig.architecture === 'ResNet50') {
 							try {
-								console.log('Attempting remote ResNet50 download...');
 								delete modelConfig.modelUrl; 
 								posenetModel = await posenet.load(modelConfig);
-								console.log(`Successfully loaded remote ${posenetConfig.architecture} model`);
 							} catch (remoteError) {
 								console.warn('Remote ResNet50 loading failed, falling back to MobileNet:', remoteError);
 								console.error('ResNet50 remote fallback error:', remoteError); 
@@ -3635,7 +3534,6 @@ define([
 							// For MobileNet, try remote
 							delete modelConfig.modelUrl; 
 							posenetModel = await posenet.load(modelConfig);
-							console.log(`Successfully loaded remote ${posenetConfig.architecture} model`);
 						}
 					}
 
@@ -3656,15 +3554,12 @@ define([
 					const fallbackConfig = POSENET_CONFIGS.resnet50;
 
 					try {
-						console.log(`Attempting fallback to ${fallbackConfig.architecture}`);
-						
 						// Try local ResNet50 model first
 						let fallbackModelConfig = { ...fallbackConfig };
 						fallbackModelConfig.modelUrl = './models/resnet50/model-stride16.json';
 						
 						try {
 							posenetModel = await posenet.load(fallbackModelConfig);
-							console.log(`Successfully loaded local fallback ${fallbackConfig.architecture} model`);
 						} catch (localFallbackError) {
 							console.warn('Local ResNet50 fallback failed, trying MobileNet:', localFallbackError);
 							
@@ -3674,12 +3569,10 @@ define([
 							
 							try {
 								posenetModel = await posenet.load(mobilenetConfig);
-								console.log('Successfully loaded local MobileNet as final fallback');
 							} catch (mobilenetError) {
 								console.warn('Local MobileNet fallback failed, trying remote MobileNet:', mobilenetError);
 								delete mobilenetConfig.modelUrl;
 								posenetModel = await posenet.load(POSENET_CONFIGS.mobilenet);
-								console.log('Successfully loaded remote MobileNet as final fallback');
 							}
 						}
 					} catch (fallbackError) {
@@ -4189,16 +4082,12 @@ define([
 			canvas.width = optimalResolution;
 			canvas.height = optimalResolution;
 
-			console.log(`Using ${optimalResolution}x${optimalResolution} resolution for ${posenetConfig.architecture} model`);
-
 			const duration = video.duration;
 
 			// Adjust frame rate based on platform for better performance
 			const platform = detectPlatform();
 			const frameRate = platform.isMobile || platform.isLowEnd ? 8 : 10; // Lower frame rate for mobile
 			const frameInterval = 1 / frameRate;
-
-			console.log(`Using ${frameRate} FPS for video processing on ${platform.isDesktop ? 'desktop' : platform.isTablet ? 'tablet' : 'mobile'} device`);
 
 			// Center position for stickman
 			const centerX = 200;
@@ -5133,7 +5022,6 @@ define([
 
 		// Process localize event
 		window.addEventListener("localized", function () {
-			console.log("Localization initialized");
 			translateToolbarButtons();
 		});
 
