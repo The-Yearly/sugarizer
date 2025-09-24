@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - Rewrite of Sugarizer Core using Vue.js
 - Human Body activity
+- Stickman activity
 
 ### Fixed
 - Bug in Jappy activity editor during initial rendering #1738
