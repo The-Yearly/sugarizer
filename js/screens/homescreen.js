@@ -18,6 +18,7 @@ const HomeScreen = {
 											:ref="'activity'+activity.id"
 											class="home-icon"
 											:svgfile="activity.directory + '/' + activity.icon"
+											:color="activityColors[activity.id]"
 											:x="restrictedModeInfo.positions != undefined ? restrictedModeInfo.positions[index].x : (activityPositions[index] ? activityPositions[index].x : 0)"
 											:y="restrictedModeInfo.positions != undefined ? restrictedModeInfo.positions[index].y : (activityPositions[index] ? activityPositions[index].y : 0)"
 											isNative="true"
@@ -112,6 +113,7 @@ const HomeScreen = {
 			favactivities: [],
 			activities: [],
 			activityPositions: [],
+			activityColors: {},
 			popup: null, // singular popup data
 			username: null,
 			buddycolor: null,
@@ -298,11 +300,7 @@ const HomeScreen = {
 				if (popup.itemList && popup.itemList.length >= 1) {
 					popup.icon.color = iconColor;
 					const iconRef = this.$refs["activity" + popup.id][0];
-					if (iconRef) {
-						iconRef.wait().then(() => {
-							iconRef.colorData = iconColor;
-						})
-					}
+					this.activityColors[activity.id] = iconColor;
 				}
 				popupData[activity.id] = popup;
 			});
