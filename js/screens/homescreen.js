@@ -308,6 +308,9 @@ const HomeScreen = {
 		},
 
 		showPopupTimer(e, id) {
+			if (this.$refs['activity' + id] && this.$refs['activity' + id][0].fallback) {
+				return;
+			}
 			if (this.timer != null) {
 				window.clearTimeout(this.timer);
 			}
