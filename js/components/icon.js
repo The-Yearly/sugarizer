@@ -1,4 +1,10 @@
 
+// Icon fallback constants
+let constant = {
+	fallbackSugarizerIcon: "./icons/icon-fallback-sugarizer.svg",
+	fallbackSugarIcon: "./icons/icon-fallback-sugar.svg"
+};
+
 /**
  * @module Icon
  * @desc This is an icon component for both native and simple SVG icons
@@ -17,6 +23,7 @@
  * @vue-data {Number} [yData=0] - to change the top-bottom margin data
  * @vue-data {Boolean} [disabledData=false] - to change the disability condition
  * @vue-data {Boolean} [disableHoverEffect=false] - to disable hover effect
+ * @vue-data {Boolean} fallback - true if fallback icon is used
 */
 const Icon ={
 	name: 'Icon',
@@ -48,7 +55,8 @@ const Icon ={
 			yData: this.y ? this.y: 0,
 			disabledData: this.disabled ? this.disabled: false,
 			_originalColor: { fill: null, stroke: null},
-			_element: null
+			_element: null,
+			fallback: false
 		}
 	},
 	created() {
@@ -142,6 +150,7 @@ const Icon ={
 		},
 
 		async _createIcon(svgfile, color, size) {
+			let vm=this;
 			if(!svgfile)
 				return null;
 			var parent =document.getElementById(this.id) || this.parent;
@@ -187,7 +196,25 @@ const Icon ={
 							}
 							resolve();
 						};
-						img.onerror = reject;
+						img.onerror = function() {
+							// Try to load fallback image
+							const fallbackImg = new Image();
+							fallbackImg.onload = function() {
+								if (this.width != size) {
+									let intersectsize = this.width;
+									svgElement.setAttribute("viewBox", "0 0 " + intersectsize + " " + intersectsize);
+								} else {
+									svgElement.setAttribute("viewBox", "0 0 55 55");
+								}
+								vm.fallback = true;
+								resolve();
+							};
+							fallbackImg.onerror = function() {
+								reject();
+							};
+							fallbackImg.src = constant.fallbackSugarizerIcon;
+							svgfile = constant.fallbackSugarizerIcon;
+						};
 						img.src = svgfile;
 					});
 				}
@@ -209,11 +236,17 @@ const Icon ={
 		},
 		// Load icon url and return raw data of file
 		async _loadIcon(url) {
+			let vm=this;
 			return new Promise(function(resolve, reject) {
 			   axios.get(url).then(function(response) {
 					resolve(response.data);
-				}).catch(function(error) {
-					reject(error);
+				}).catch(async function(error) {
+					await axios.get(constant.fallbackSugarIcon).then(function(response) {
+						vm.fallback = true;
+						resolve(response.data);
+					}).catch(function(error) {
+						reject(error);
+					});
 				});
 			});
 		},

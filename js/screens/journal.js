@@ -1021,6 +1021,9 @@ const Journal = {
 			}
 		},
 		showPopupTimer(e, iconRef, data) {
+			if (this.$refs[iconRef] && this.$refs[iconRef][0] && this.$refs[iconRef][0].fallback) {
+				return;
+			}
 			if (this.popupTimer != null) {
 				window.clearTimeout(this.popupTimer);
 			}
