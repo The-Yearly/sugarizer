@@ -25,6 +25,9 @@ define(["sugar-web/activity/activity","sugar-web/graphics/radiobuttonsgroup","ge
 
         gearSketch = new window.gearsketch.GearSketch(false);
 
+        // Initialize undo/redo functionality
+        initHistory();
+
         // History Manager
         var MAX_HISTORY = 50;
         var undoStack = [];
@@ -166,6 +169,8 @@ define(["sugar-web/activity/activity","sugar-web/graphics/radiobuttonsgroup","ge
         }
 
         function installInteractionHooks() {
+            if (gearSketch.__interactionWrapped) { return; }
+            gearSketch.__interactionWrapped = true;
             var originalHandlePenDown = gearSketch.handlePenDown.bind(gearSketch);
             gearSketch.handlePenDown = function(x, y) {
                 if (!this.getButtonAt(x, y)) {
@@ -210,7 +215,6 @@ define(["sugar-web/activity/activity","sugar-web/graphics/radiobuttonsgroup","ge
             else {
                 console.log("read failed.");
             }
-            initHistory();
         }
         datastoreObject.loadAsText(onLoaded);
 
