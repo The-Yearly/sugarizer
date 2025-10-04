@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - On Safari and iOS only the tutorial first step popup is displayed #1790
 - Incorrect Total Dice Value Subtraction After Shaking #1774
 - CSV View data not updated in chart activity without saving #1809
+- Undo button for Gears activity #838
 
 ## [1.9.0] - 2025-03-25
 ### Added
