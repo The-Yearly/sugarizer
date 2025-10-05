@@ -1527,12 +1527,31 @@ define([
 
 		async function loadTemplate(templateName) {
 			try {
-				const response = await fetch(`js/templates/${templateName}.json`);
-				if (!response.ok) {
-					console.error(`Failed to load template: ${templateName}`);
-					return;
-				}
-				const templateData = await response.json();
+				// Use XMLHttpRequest for Cordova compatibility
+				const templateData = await new Promise((resolve, reject) => {
+					const xhr = new XMLHttpRequest();
+					xhr.open('GET', `js/templates/${templateName}.json`);
+					xhr.responseType = 'json';
+					xhr.onload = function() {
+						if (xhr.status === 200 || xhr.status === 0) {
+							if (xhr.response && typeof xhr.response === 'object') {
+								resolve(xhr.response);
+							} else {
+								try {
+									resolve(JSON.parse(xhr.responseText));
+								} catch (e) {
+									reject(e);
+								}
+							}
+						} else {
+							reject(new Error('Failed to load template: ' + xhr.status));
+						}
+					};
+					xhr.onerror = function() {
+						reject(new Error('XHR error'));
+					};
+					xhr.send();
+				});
 
 				// Check if this is journal-style format (with metadata and text)
 				let savedData;
