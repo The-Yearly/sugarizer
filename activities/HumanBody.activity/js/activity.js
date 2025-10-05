@@ -1741,16 +1741,55 @@ define([
 		async function loadAllBodyPartsData() {
 			try {
 				// Load skeleton parts
-				const skeletonResponse = await fetch("./js/bodyParts/skeletonParts.json");
-				bodyPartsData.skeleton = await skeletonResponse.json();
+				await new Promise((resolve, reject) => {
+					const xhr = new XMLHttpRequest();
+					xhr.open("GET", "./js/bodyParts/skeletonParts.json", true);
+					xhr.onreadystatechange = function () {
+						if (xhr.readyState === 4) {
+							if (xhr.status === 200) {
+								bodyPartsData.skeleton = JSON.parse(xhr.responseText);
+								resolve();
+							} else {
+								reject(new Error("Failed to load skeletonParts.json"));
+							}
+						}
+					};
+					xhr.send();
+				});
 
 				// Load body parts
-				const bodyResponse = await fetch("./js/bodyParts/humanBodyParts.json");
-				bodyPartsData.body = await bodyResponse.json();
+				await new Promise((resolve, reject) => {
+					const xhr = new XMLHttpRequest();
+					xhr.open("GET", "./js/bodyParts/humanBodyParts.json", true);
+					xhr.onreadystatechange = function () {
+						if (xhr.readyState === 4) {
+							if (xhr.status === 200) {
+								bodyPartsData.body = JSON.parse(xhr.responseText);
+								resolve();
+							} else {
+								reject(new Error("Failed to load humanBodyParts.json"));
+							}
+						}
+					};
+					xhr.send();
+				});
 
 				// Load organs parts
-				const organsResponse = await fetch("./js/bodyParts/organParts.json");
-				bodyPartsData.organs = await organsResponse.json();
+				await new Promise((resolve, reject) => {
+					const xhr = new XMLHttpRequest();
+					xhr.open("GET", "./js/bodyParts/organParts.json", true);
+					xhr.onreadystatechange = function () {
+						if (xhr.readyState === 4) {
+							if (xhr.status === 200) {
+								bodyPartsData.organs = JSON.parse(xhr.responseText);
+								resolve();
+							} else {
+								reject(new Error("Failed to load organParts.json"));
+							}
+						}
+					};
+					xhr.send();
+				});
 
 				// Set initial body parts based on current model
 				updateBodyPartsForModel(currentModelName);
