@@ -635,6 +635,22 @@ define([
 			canvas.addEventListener('mousedown', handleMouseDown);
 			canvas.addEventListener('mousemove', handleMouseMove);
 			canvas.addEventListener('mouseup', handleMouseUp);
+			canvas.addEventListener('touchstart', function(e) {
+				e.preventDefault();
+				if (e.touches.length > 0) {
+				handleMouseDown(e.touches[0]);
+				}
+			}, { passive: false });
+			canvas.addEventListener('touchmove', function(e) {
+				e.preventDefault();
+				if (e.touches.length > 0) {
+				handleMouseMove(e.touches[0]);
+			}
+			}, { passive: false });
+			canvas.addEventListener('touchend', function(e) {
+				e.preventDefault();
+				handleMouseUp(e);
+			}, { passive: false });
 
 			// Control buttons
 			document.getElementById('add-button').addEventListener('click', addFrame);
