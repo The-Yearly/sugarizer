@@ -37,7 +37,7 @@ const FirstScreen = {
                         />
                     </div>
                     <div class="firstscreen_landing" v-show="!showLoginScreen">
-                        <div class="firstscreen_newuser">
+                        <div class="firstscreen_newuser" v-if="!isNoSignupMode()">
                             <div class="column">
                                 <icon
                                     id="newuser-icon"
@@ -51,7 +51,7 @@ const FirstScreen = {
                                 <div class="firstscreen_text" id="newuser_text">{{$t('NewUser')}}</div>
                             </div>
                         </div>
-                        <div class="firstscreen_login">
+                        <div class="firstscreen_login" v-if="!isNoLoginMode()">
                             <div class="column">
                                 <icon
                                     id="login-icon"
@@ -170,6 +170,12 @@ const FirstScreen = {
 		},
 		startTutorial() {
 			sugarizer.modules.tutorial.startTutorial(sugarizer.constant.firstscreen);
+		},
+		isNoLoginMode() {
+			return sugarizer.constant.noLoginMode;
+		},
+		isNoSignupMode() {
+			return sugarizer.constant.noSignupMode;
 		}
 	}
 }

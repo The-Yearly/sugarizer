@@ -21,6 +21,8 @@ let sugarizer = {
 
 		sugarizerVersion: '2.0.0',
 		noServerMode: false,
+		noLoginMode: false,
+		noSignupMode: false,
 		defaultServerUrl: "https://server.sugarizer.org",
 		platform: {
 			ios: /(iPhone|iPad|iPod)/.test(navigator.userAgent),
