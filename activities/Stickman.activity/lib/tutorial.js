@@ -30,6 +30,12 @@ define([
 				intro: l10n.get("SpeedIntro"),
 			},
 			{
+				element: "#zoom-button",
+				position: "bottom",
+				title: l10n.get("ZoomTitle"),
+				intro: l10n.get("ZoomIntro"),
+			},
+			{
 				element: "#minus-button",
 				position: "bottom",
 				title: l10n.get("RemoveTitle"),
