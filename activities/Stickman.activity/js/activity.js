@@ -5,6 +5,7 @@ define([
 	"sugar-web/graphics/presencepalette",
 	"sugar-web/graphics/journalchooser",
 	"activity/palettes/speedpalette",
+	"activity/palettes/zoompalette",
 	"activity/palettes/templatepalette",
 	"tutorial",
 	"l10n",
@@ -16,6 +17,7 @@ define([
 	presencepalette,
 	journalchooser,
 	speedpalette,
+	zoompalette,
 	templatepalette,
 	tutorial,
 	l10n,
@@ -54,6 +56,11 @@ define([
 		let rotationStartAngle = 0;
 		let neckManuallyMoved = false;
 		let templatePaletteInstance = null; // Store template palette reference for localization
+
+		// Zoom functionality
+		let currentZoom = 1; 	// Default zoom level
+		let minZoom = 0.5; 		// Minimum zoom level (50%)
+		let maxZoom = 3.0; 		// Maximum zoom level (300%)
 
 		// PoseNet model configurations
 		let posenetModel = null;
@@ -431,6 +438,11 @@ define([
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
 							
+							if (savedData.currentZoom !== undefined) {
+								currentZoom = savedData.currentZoom;
+								resizeCanvas(); 
+							}
+							
 							// Always initialize with current user's color, ignoring any saved colors
 							stickmanUserColors = {};
 
@@ -482,6 +494,11 @@ define([
 				{ id: 'network-button', key: 'Network' },
 				{ id: 'play-pause-button', key: 'PlayPause' },
 				{ id: 'speed-button', key: 'Speed' },
+				{ id: 'zoom-button', key: 'Zoom' },
+				{ id: 'zoom-in-button', key: 'ZoomIn' },
+				{ id: 'zoom-out-button', key: 'ZoomOut' },
+				{ id: 'zoom-original-button', key: 'ZoomReset' },
+				{ id: 'zoom-fit-button', key: 'ZoomFit' },
 				{ id: 'minus-button', key: 'RemoveStickman' },
 				{ id: 'addStickman-button', key: 'AddStickman' },
 				{ id: 'template-button', key: 'Templates' },
@@ -557,7 +574,8 @@ define([
 				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
-				nextStickmanId: nextStickmanId
+				nextStickmanId: nextStickmanId,
+				currentZoom: currentZoom
 				// Note: stickmanUserColors intentionally removed from journal save
 			};
 
@@ -620,14 +638,14 @@ define([
 				document.getElementById("timeline").style.opacity = 0;
 				canvas.width = window.innerWidth;
 				canvas.height = window.innerHeight;
-				canvas.getContext("2d").scale(1.1,1.3);
+				canvas.getContext("2d").scale(currentZoom * 1.1, currentZoom * 1.3);
 			} else {
 				// Normal mode: Use calculated dimensions based on container
 				document.getElementById("main-toolbar").style.opacity = 1;
 				document.getElementById("timeline").style.opacity = 1;
 				canvas.width = canvas.parentElement.clientWidth - 32;
 				canvas.height = canvas.parentElement.clientHeight - 250;
-				canvas.getContext("2d").scale(1,1);
+				canvas.getContext("2d").scale(currentZoom, currentZoom);
 			}
 		}
 
@@ -638,16 +656,18 @@ define([
 			canvas.addEventListener('touchstart', function(e) {
 				e.preventDefault();
 				if (e.touches.length > 0) {
-				handleMouseDown(e.touches[0]);
+					handleMouseDown(e.touches[0]);
 				}
 			}, { passive: false });
-			canvas.addEventListener('touchmove', function(e) {
+
+			canvas.addEventListener('touchmove', function (e) {
 				e.preventDefault();
 				if (e.touches.length > 0) {
-				handleMouseMove(e.touches[0]);
-			}
+					handleMouseMove(e.touches[0]);
+				}
 			}, { passive: false });
-			canvas.addEventListener('touchend', function(e) {
+			
+			canvas.addEventListener('touchend', function (e) {
 				e.preventDefault();
 				handleMouseUp(e);
 			}, { passive: false });
@@ -680,6 +700,27 @@ define([
 				currentSpeed = e.detail.speed;
 				speed = currentSpeed;
 			});
+
+			// Zoom control setup
+			const zoomButton = document.getElementById("zoom-button");
+			const zoomPalette = new zoompalette.ZoomPalette(zoomButton);
+
+			// Set up zoom button event handlers
+			setTimeout(() => {
+				const zoomInButton = document.getElementById("zoom-in-button");
+				const zoomOutButton = document.getElementById("zoom-out-button");
+				const zoomOriginalButton = document.getElementById("zoom-original-button");
+				const zoomFitButton = document.getElementById("zoom-fit-button");
+
+				if (zoomInButton) 
+					zoomInButton.addEventListener("click", () => handleZoomChange("zoomIn"));
+				if (zoomOutButton) 
+					zoomOutButton.addEventListener("click", () => handleZoomChange("zoomOut"));
+				if (zoomOriginalButton) 
+					zoomOriginalButton.addEventListener("click", () => handleZoomChange("reset"));
+				if (zoomFitButton) 
+					zoomFitButton.addEventListener("click", () => handleZoomChange("fit"));
+			}, 100);
 
 			// Template palette - temporarily disabled due to loading issues
 			var templateButton = document.getElementById("template-button");
@@ -755,6 +796,95 @@ define([
 					});
 				});
 			});
+		}
+
+		// Handle zoom change from zoom palette (inspired by Human Body activity)
+		function handleZoomChange(zoomType) {
+			let newZoom = currentZoom;
+			const zoomStep = 0.25; // 25% increment/decrement steps
+
+			switch (zoomType) {
+				case "zoomIn":
+					if (currentZoom < maxZoom) {
+						newZoom = Math.min(maxZoom, currentZoom + zoomStep);
+					}
+					break;
+				case "zoomOut":
+					if (currentZoom > minZoom) {
+						newZoom = Math.max(minZoom, currentZoom - zoomStep);
+					}
+					break;
+				case "reset":
+					newZoom = 1.0; // Standard zoom level
+					break;
+				case "fit":
+					newZoom = calculateFitToScreenZoom();
+					break;
+			}
+
+			if (Math.abs(newZoom - currentZoom) > 0.01) {
+				currentZoom = newZoom;
+
+				// Reset canvas transform and apply new zoom
+				const canvas = document.getElementById('stickman-canvas');
+				const ctx = canvas.getContext('2d');
+				ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+
+				// Reapply canvas size and zoom
+				resizeCanvas();
+
+				// Re-render all stickmen with new zoom
+				render();
+
+				console.log(`Zoom changed to: ${(currentZoom * 100).toFixed(0)}%`);
+			}
+		}
+
+		// Calculate optimal zoom to fit all stickmen on screen
+		function calculateFitToScreenZoom() {
+			if (stickmen.length === 0) {
+				return 1.0;
+			}
+
+			let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+			// Find bounding box of all stickmen
+			stickmen.forEach(stickman => {
+				if (stickman && stickman.joints) {
+					stickman.joints.forEach(joint => {
+						if (joint) {
+							minX = Math.min(minX, joint.x);
+							maxX = Math.max(maxX, joint.x);
+							minY = Math.min(minY, joint.y);
+							maxY = Math.max(maxY, joint.y);
+						}
+					});
+				}
+			});
+
+			if (minX === Infinity) {
+				return 1.0;
+			}
+
+			// Add padding around stickmen
+			const padding = 50;
+			const contentWidth = (maxX - minX) + (padding * 2);
+			const contentHeight = (maxY - minY) + (padding * 2);
+
+			// Calculate zoom to fit in canvas
+			const canvasWidth = canvas.width / (canvas.classList.contains("fullscreen") ? 1.1 : 1);
+			const canvasHeight = canvas.height / (canvas.classList.contains("fullscreen") ? 1.3 : 1);
+
+			const scaleX = canvasWidth / contentWidth;
+			const scaleY = canvasHeight / contentHeight;
+
+			// Use the smaller scale to ensure everything fits
+			let fitZoom = Math.min(scaleX, scaleY);
+
+			// Clamp to zoom limits
+			fitZoom = Math.max(minZoom, Math.min(maxZoom, fitZoom));
+
+			return fitZoom;
 		}
 
 		// function to reset remote positions when receiving updates
@@ -2837,8 +2967,8 @@ define([
 			const scaleX = canvas.width / rect.width;
 			const scaleY = canvas.height / rect.height;
 			return {
-				mouseX: (e.clientX - rect.left) * scaleX,
-				mouseY: (e.clientY - rect.top) * scaleY
+				mouseX: ((e.clientX - rect.left) * scaleX) / currentZoom,
+				mouseY: ((e.clientY - rect.top) * scaleY) / currentZoom
 			};
 		}
 
@@ -2922,7 +3052,11 @@ define([
 		// RENDERING LOOP
 
 		function render() {
+			// Clear the entire canvas accounting for zoom scaling
+			ctx.save();
+			ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to clear unscaled canvas
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.restore(); // Restore the zoom transform
 
 			// Handle empty canvas state
 			if (stickmen.length === 0) {
