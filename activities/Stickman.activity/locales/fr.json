@@ -30,7 +30,7 @@
 	"SpeedTitle": "Vitesse d'Animation",
 	"SpeedIntro": "Cliquez ici pour ajuster la vitesse de votre animation",
 	"ZoomTitle": "Zoom",
-	"ZoomIntro": "Cliquez ici pour agrandir ou réduire l'affichage pour faciliter la manipulation des silhouettes sur mobile",
+	"ZoomIntro": "Cliquez ici pour agrandir ou réduire l'affichage",
 	"ZoomIn": "Agrandir",
 	"ZoomOut": "Réduire",
 	"ZoomReset": "Réinitialiser zoom",

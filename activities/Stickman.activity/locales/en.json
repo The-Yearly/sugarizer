@@ -30,7 +30,7 @@
 	"SpeedTitle": "Animation Speed",
 	"SpeedIntro": "Click here to adjust the speed of your animation",
 	"ZoomTitle": "Zoom",
-	"ZoomIntro": "Click here to zoom in or out to make stickmen easier to manipulate on mobile devices",
+	"ZoomIntro": "Click here to zoom in or out the board",
 	"ZoomIn": "Zoom in",
 	"ZoomOut": "Zoom out", 
 	"ZoomReset": "Reset zoom",
