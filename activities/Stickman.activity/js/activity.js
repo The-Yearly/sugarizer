@@ -438,6 +438,11 @@ define([
 							currentSpeed = savedData.currentSpeed || 1;
 							nextStickmanId = savedData.nextStickmanId || 0;
 							
+							if (savedData.currentZoom !== undefined) {
+								currentZoom = savedData.currentZoom;
+								resizeCanvas(); 
+							}
+							
 							// Always initialize with current user's color, ignoring any saved colors
 							stickmanUserColors = {};
 
@@ -569,7 +574,8 @@ define([
 				currentFrameIndices: currentFrameIndices,
 				speed: speed,
 				currentSpeed: currentSpeed,
-				nextStickmanId: nextStickmanId
+				nextStickmanId: nextStickmanId,
+				currentZoom: currentZoom
 				// Note: stickmanUserColors intentionally removed from journal save
 			};
 
@@ -3046,7 +3052,11 @@ define([
 		// RENDERING LOOP
 
 		function render() {
+			// Clear the entire canvas accounting for zoom scaling
+			ctx.save();
+			ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to clear unscaled canvas
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.restore(); // Restore the zoom transform
 
 			// Handle empty canvas state
 			if (stickmen.length === 0) {
