@@ -398,8 +398,15 @@ define([
 				callback = null
 			} = options;
 
+			// Determine the full model path using network check
+			let fullModelPath = modelPath;
+			if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck) {
+				const baseUrl = HumanBody.NetworkCheck.getModelsBaseUrl();
+				fullModelPath = baseUrl + modelPath;
+			}
+
 			loader.load(
-				modelPath,
+				fullModelPath,
 				function (gltf) {
 					const model = gltf.scene;
 					model.name = name;
@@ -495,8 +502,34 @@ define([
 					console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
 				},
 				function (error) {
-					console.log("An error happened while loading", name);
+					console.log("An error happened while loading", name, "from", fullModelPath);
 					console.log(error);
+					
+					// If we were trying to load from remote and it failed, try local as fallback
+					if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck && 
+						!HumanBody.NetworkCheck.isConnected() && fullModelPath !== modelPath) {
+						console.log("Trying to fallback to local model for", name);
+						
+						loader.load(
+							modelPath, // Try original local path
+							function (gltf) {
+								const model = gltf.scene;
+								model.name = name;
+								model.position.set(position.x, position.y, position.z);
+								model.scale.set(scale.x, scale.y, scale.z);
+								scene.add(model);
+								if (callback) callback(model);
+							},
+							function (xhr) {
+								console.log("Fallback: " + (xhr.loaded / xhr.total) * 100 + "% loaded");
+							},
+							function (fallbackError) {
+								console.error("Both remote and local loading failed for", name);
+								console.error("Remote error:", error);
+								console.error("Local fallback error:", fallbackError);
+							}
+						);
+					}
 				}
 			);
 		}
@@ -1994,8 +2027,25 @@ define([
 		const loader = new THREE.GLTFLoader();
 		let skeleton;
 
-		if (presence == null) {
-			switchModel('body');
+		// Initialize network check for model availability
+		if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck) {
+			// Set remote base URL if we're connected to a Sugarizer server
+			if (env.getEnvironment().server) {
+				HumanBody.NetworkCheck.setRemoteBaseUrl(env.getEnvironment().server);
+			}
+			
+			// Check model availability and then initialize
+			HumanBody.NetworkCheck.check(function(hasLocalModels) {
+				console.log('Model availability check:', hasLocalModels ? 'Local models available' : 'Using remote models');
+				if (presence == null) {
+					switchModel('body');
+				}
+			});
+		} else {
+			// Fallback if network check is not available
+			if (presence == null) {
+				switchModel('body');
+			}
 		}
 
 		function setModelColor(model, color) {
