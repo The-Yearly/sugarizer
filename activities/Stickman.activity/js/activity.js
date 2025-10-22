@@ -3680,9 +3680,9 @@ define([
 					let shouldTryLocal = true;
 					
 					// Check if we have network check available and local models are not available
-					if (typeof Stickman !== 'undefined' && Stickman.NetworkCheck && !Stickman.NetworkCheck.isConnected()) {
-						console.log('Network check indicates no local models, will try remote first');
-						shouldTryLocal = false;
+					if (typeof Stickman !== 'undefined' && Stickman.NetworkCheck) {
+						const isConnected = Stickman.NetworkCheck.isConnected();
+						shouldTryLocal = isConnected;
 					}
 					
 					// Set local model URL based on architecture if we should try local
@@ -3709,21 +3709,18 @@ define([
 						try {
 							// For ResNet50, try remote download first before falling back to MobileNet
 							if (posenetConfig.architecture === 'ResNet50') {
-								console.log('Trying to load ResNet50 from remote (CDN)');
 								delete modelConfig.modelUrl; 
 								posenetModel = await posenet.load(modelConfig);
 							} else {
 								// For MobileNet, try remote
-								console.log('Trying to load MobileNet from remote (CDN)');
 								delete modelConfig.modelUrl; 
 								posenetModel = await posenet.load(modelConfig);
 							}
 						} catch (remoteError) {
-							console.warn('Remote loading failed:', remoteError);
+							console.error('Remote loading failed:', remoteError);
 							
 							// Final fallback: try MobileNet from CDN if we were trying ResNet50
 							if (posenetConfig.architecture === 'ResNet50') {
-								console.log('Falling back to MobileNet from CDN');
 								try {
 									const mobilenetConfig = { ...POSENET_CONFIGS.mobilenet };
 									posenetModel = await posenet.load(mobilenetConfig);
@@ -5226,17 +5223,30 @@ define([
 		
 		// Initialize network check for AI model availability
 		if (typeof Stickman !== 'undefined' && Stickman.NetworkCheck) {
+			// Get environment asynchronously (it requires a callback)
+			env.getEnvironment(function(err, environment) {
+				if (err) {
+					startNetworkCheck(null);
+				} else {
+					startNetworkCheck(environment);
+				}
+			});
+		} else {
+			initializeAnimator();
+		}
+		
+		function startNetworkCheck(environment) {
 			// Set remote base URL if we're connected to a Sugarizer server
-			if (env.getEnvironment().server) {
-				Stickman.NetworkCheck.setRemoteBaseUrl(env.getEnvironment().server);
+			if (environment && environment.server) {
+				Stickman.NetworkCheck.setRemoteBaseUrl(environment.server);
 			}
 			
 			// Check model availability
 			Stickman.NetworkCheck.check(function(hasLocalModels) {
-				console.log('AI Model availability check:', hasLocalModels ? 'Local models available' : 'Using remote models');
+				// Network check completed, models will load based on availability
 			});
+			
+			initializeAnimator();
 		}
-		
-		initializeAnimator();
 	});
 });

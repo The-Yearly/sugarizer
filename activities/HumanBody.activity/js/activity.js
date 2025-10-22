@@ -502,12 +502,9 @@ define([
 					console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
 				},
 				function (error) {
-					console.log("An error happened while loading", name, "from", fullModelPath);
-					console.log(error);
 					
 					// If we were trying to load from remote and it failed, try local as fallback
-					if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck && 
-						!HumanBody.NetworkCheck.isConnected() && fullModelPath !== modelPath) {
+					if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck && !HumanBody.NetworkCheck.isConnected() && fullModelPath !== modelPath) {
 						console.log("Trying to fallback to local model for", name);
 						
 						loader.load(
@@ -523,11 +520,6 @@ define([
 							function (xhr) {
 								console.log("Fallback: " + (xhr.loaded / xhr.total) * 100 + "% loaded");
 							},
-							function (fallbackError) {
-								console.error("Both remote and local loading failed for", name);
-								console.error("Remote error:", error);
-								console.error("Local fallback error:", fallbackError);
-							}
 						);
 					}
 				}
@@ -2029,16 +2021,12 @@ define([
 
 		// Initialize network check for model availability
 		if (typeof HumanBody !== 'undefined' && HumanBody.NetworkCheck) {
-			// Set remote base URL if we're connected to a Sugarizer server
-			if (env.getEnvironment().server) {
-				HumanBody.NetworkCheck.setRemoteBaseUrl(env.getEnvironment().server);
-			}
-			
-			// Check model availability and then initialize
-			HumanBody.NetworkCheck.check(function(hasLocalModels) {
-				console.log('Model availability check:', hasLocalModels ? 'Local models available' : 'Using remote models');
-				if (presence == null) {
-					switchModel('body');
+			// Get environment asynchronously (it requires a callback)
+			env.getEnvironment(function(err, environment) {
+				if (err) {
+					startNetworkCheck(null);
+				} else {
+					startNetworkCheck(environment);
 				}
 			});
 		} else {
@@ -2046,6 +2034,20 @@ define([
 			if (presence == null) {
 				switchModel('body');
 			}
+		}
+		
+		function startNetworkCheck(environment) {
+			// Set remote base URL if we're connected to a Sugarizer server
+			if (environment && environment.server) {
+				HumanBody.NetworkCheck.setRemoteBaseUrl(environment.server);
+			}
+			
+			// Check model availability and then initialize
+			HumanBody.NetworkCheck.check(function(hasLocalModels) {
+				if (presence == null) {
+					switchModel('body');
+				}
+			});
 		}
 
 		function setModelColor(model, color) {

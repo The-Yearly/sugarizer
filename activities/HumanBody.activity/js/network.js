@@ -1,28 +1,42 @@
-HumanBody = HumanBody || {};
+// Initialize namespace first to avoid "not defined" errors
+if (typeof HumanBody === 'undefined') {
+	HumanBody = {};
+}
 
 HumanBody.NetworkCheck = {
 	connected: false,
 	remoteBaseUrl: "",
+	checkCompleted: false,
 
 	// Check if local models are available by trying to load a ping file
 	check: function (callback) {
-		const pingImage = new Image();
+		const self = this;
 		const timestamp = new Date().getTime();
+		const pingUrl = `models/_ping.png?${timestamp}`;
+		const pingImage = new Image();
 
 		pingImage.onload = () => {
-			this.connected = true;
-			if (callback) 
-				callback(this.connected);
+			self.connected = true;
+			self.checkCompleted = true;
+			if (callback) callback(self.connected);
 		};
 
 		pingImage.onerror = () => {
-			this.connected = false;
-			if (callback)
-				callback(this.connected);
+			self.connected = false;
+			self.checkCompleted = true;
+			if (callback) callback(self.connected);
 		};
 
-		// Try to load a small test file from models directory
-		pingImage.src = `models/_ping.png?${timestamp}`;
+		pingImage.src = pingUrl;
+		
+		// Timeout fallback in case of hanging requests
+		setTimeout(() => {
+			if (!self.checkCompleted) {
+				self.connected = false;
+				self.checkCompleted = true;
+				if (callback) callback(self.connected);
+			}
+		}, 5000);
 	},
 
 	// Get the base URL for models (empty if local, remote URL if not local)
@@ -30,7 +44,7 @@ HumanBody.NetworkCheck = {
 		if (this.connected) {
 			return ""; // Local files available
 		} else {
-			// Remote URL - this should be configured to point to Sugarizer server
+			// Remote URL - configured to point to Sugarizer server
 			return this.remoteBaseUrl + "activities/HumanBody.activity/";
 		}
 	},
