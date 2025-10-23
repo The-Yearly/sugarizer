@@ -3675,34 +3675,59 @@ define([
 						return null;
 					}
 
-					// Try to load local model first
+					// Use network check to determine if we should try local models first
 					let modelConfig = { ...posenetConfig };
+					let shouldTryLocal = true;
 					
-					// Set local model URL based on architecture
-					if (posenetConfig.architecture === 'MobileNetV1') {
-						modelConfig.modelUrl = './models/mobilenet/model-stride16.json';
-					} else if (posenetConfig.architecture === 'ResNet50') {
-						modelConfig.modelUrl = './models/resnet50/model-stride16.json';
+					// Check if we have network check available and local models are not available
+					if (typeof Stickman !== 'undefined' && Stickman.NetworkCheck) {
+						const isConnected = Stickman.NetworkCheck.isConnected();
+						shouldTryLocal = isConnected;
 					}
 					
-					try {
-						posenetModel = await posenet.load(modelConfig);
-					} catch (localError) {
-						console.warn('Local model loading failed, trying remote:', localError);
-						
-						// For ResNet50, try remote download first before falling back to MobileNet
-						if (posenetConfig.architecture === 'ResNet50') {
-							try {
+					// Set local model URL based on architecture if we should try local
+					if (shouldTryLocal) {
+						if (posenetConfig.architecture === 'MobileNetV1') {
+							modelConfig.modelUrl = './models/mobilenet/model-stride16.json';
+						} else if (posenetConfig.architecture === 'ResNet50') {
+							modelConfig.modelUrl = './models/resnet50/model-stride16.json';
+						}
+					}
+					
+					// Try loading with the determined configuration
+					if (shouldTryLocal) {
+						try {
+							posenetModel = await posenet.load(modelConfig);
+						} catch (localError) {
+							console.warn('Local model loading failed, trying remote:', localError);
+							shouldTryLocal = false; // Switch to remote
+						}
+					}
+					
+					// If local failed or we decided to skip local, try remote
+					if (!posenetModel && !shouldTryLocal) {
+						try {
+							// For ResNet50, try remote download first before falling back to MobileNet
+							if (posenetConfig.architecture === 'ResNet50') {
 								delete modelConfig.modelUrl; 
 								posenetModel = await posenet.load(modelConfig);
-							} catch (remoteError) {
-								console.warn('Remote ResNet50 loading failed, falling back to MobileNet:', remoteError);
-								console.error('ResNet50 remote fallback error:', remoteError); 
+							} else {
+								// For MobileNet, try remote
+								delete modelConfig.modelUrl; 
+								posenetModel = await posenet.load(modelConfig);
 							}
-						} else {
-							// For MobileNet, try remote
-							delete modelConfig.modelUrl; 
-							posenetModel = await posenet.load(modelConfig);
+						} catch (remoteError) {
+							console.error('Remote loading failed:', remoteError);
+							
+							// Final fallback: try MobileNet from CDN if we were trying ResNet50
+							if (posenetConfig.architecture === 'ResNet50') {
+								try {
+									const mobilenetConfig = { ...POSENET_CONFIGS.mobilenet };
+									posenetModel = await posenet.load(mobilenetConfig);
+								} catch (mobilenetError) {
+									console.error('All loading attempts failed:', mobilenetError);
+								}
+							}
 						}
 					}
 
@@ -5195,6 +5220,33 @@ define([
 		});
 
 		activity.setup();
-		initializeAnimator();
+		
+		// Initialize network check for AI model availability
+		if (typeof Stickman !== 'undefined' && Stickman.NetworkCheck) {
+			// Get environment asynchronously (it requires a callback)
+			env.getEnvironment(function(err, environment) {
+				if (err) {
+					startNetworkCheck(null);
+				} else {
+					startNetworkCheck(environment);
+				}
+			});
+		} else {
+			initializeAnimator();
+		}
+		
+		function startNetworkCheck(environment) {
+			// Set remote base URL if we're connected to a Sugarizer server
+			if (environment && environment.server) {
+				Stickman.NetworkCheck.setRemoteBaseUrl(environment.server);
+			}
+			
+			// Check model availability
+			Stickman.NetworkCheck.check(function(hasLocalModels) {
+				// Network check completed, models will load based on availability
+			});
+			
+			initializeAnimator();
+		}
 	});
 });
