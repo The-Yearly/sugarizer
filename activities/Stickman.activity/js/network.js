@@ -5,7 +5,7 @@ if (typeof Stickman === 'undefined') {
 
 Stickman.NetworkCheck = {
 	connected: false,
-	remoteBaseUrl: "",
+	remoteBaseUrl: "https://dev.sugarizer.org/",
 	checkCompleted: false,
 
 	// Check if local AI models are available by trying to load a ping file

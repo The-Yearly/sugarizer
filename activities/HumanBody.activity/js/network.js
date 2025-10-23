@@ -5,7 +5,7 @@ if (typeof HumanBody === 'undefined') {
 
 HumanBody.NetworkCheck = {
 	connected: false,
-	remoteBaseUrl: "",
+	remoteBaseUrl: "https://dev.sugarizer.org/",
 	checkCompleted: false,
 
 	// Check if local models are available by trying to load a ping file
