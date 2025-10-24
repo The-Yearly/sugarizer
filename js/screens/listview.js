@@ -176,7 +176,7 @@ const ListView = {
 		},
 
 		launchActivity(activity) {
-			sugarizer.modules.activities.runActivity(activity, null, activity.title);
+			sugarizer.modules.activities.runActivity(activity, null, activity.title, undefined, false, 'list_view');
 		},
 
 		computePopup() {

@@ -643,7 +643,7 @@ const Neighborhood = {
 		//prettier-ignore
 		joinActivity(activity, sharedId) {
 			sugarizer.modules.stats.trace("neighborhood_view", "click", "logoff");
-			sugarizer.modules.activities.runActivity(activity, null, activity.name, sharedId);
+			sugarizer.modules.activities.runActivity(activity, null, activity.name, sharedId, false, 'neighborhood_view');
 		},
 		//prettier-ignore
 		emitOpenSettings() {

@@ -228,7 +228,7 @@ const HomeScreen = {
 				break;
 			}
 			const help = activity.id === sugarizer.modules.tutorial.activityId;
-			sugarizer.modules.activities.runActivity(activity, objectId, name, undefined, help);
+			sugarizer.modules.activities.runActivity(activity, objectId, name, undefined, help, 'home_view');
 		},
 
 		launchActivity(activity, item) {
@@ -251,7 +251,7 @@ const HomeScreen = {
 					}
 				}
 			}
-			sugarizer.modules.activities.runActivity(activity.activity, objectId, name);
+			sugarizer.modules.activities.runActivity(activity.activity, objectId, name, undefined, false, 'home_view');
 		},
 
 		computePopup() {

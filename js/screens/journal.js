@@ -753,7 +753,10 @@ const Journal = {
 			sugarizer.modules.activities.runActivity(
 				activity,
 				entry.objectId,
-				activity.title
+				activity.title,
+				undefined,
+				false,
+				this.filterAssignment ? 'assignment_view' : 'journal_view'
 			);
 		},
 
