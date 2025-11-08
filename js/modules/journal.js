@@ -166,6 +166,22 @@ define(["sugar-web/datastore"], function(datastore) {
 		return entries.filter((entry) => entry.metadata.activity == activity);
 	}
 
+	// Get entries by objectId
+	journal.getByObjectId = function(objectId) {
+		if (!objectId) return null;
+		for (var i = 0 ; i < entries.length ; i++) {
+			if (entries[i].objectId == objectId) {
+				return entries[i];
+			}
+		}
+		return null;
+	}
+
+	// Generate UUID
+	journal.generateUUID = function() {
+		return datastore.createUUID();
+	}
+
 	// Copy & Duplicate Operations
 	journal.copyToLocal = async function(entry, journalId) {
 		const { metadata, text } = await journal.loadEntry(entry, journalId);

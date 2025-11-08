@@ -258,10 +258,8 @@ const MainScreen = {
 				if (activityExist) {
 					let objectId = redirectUrl.searchParams.get("o");
 					if (objectId) {
-						let data = datastore.find(activityId).filter(function(o) {
-							return o.objectId == objectId;
-						});
-						if (data.length == 0) {
+						let data = sugarizer.modules.journal.getByObjectId(objectId);
+						if (!data) {
 							redirectUrl.searchParams.delete("o");
 							redirectUrl.searchParams.set("n", sugarizer.modules.activities.getById(activityId).name);
 							console.log("Redirect object not found"); 
@@ -269,6 +267,7 @@ const MainScreen = {
 					} else {
 						redirectUrl.searchParams.set("n", sugarizer.modules.activities.getById(activityId).name);
 					}
+					redirectUrl.searchParams.set("aid", sugarizer.modules.journal.generateUUID());
 					window.location = decodeURIComponent(redirectUrl.href);
 					return;
 				} else {
