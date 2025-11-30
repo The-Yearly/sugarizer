@@ -55,8 +55,8 @@ let sugarizer = {
 			// Load modules
 			requirejs(
 				//For modules don't add ".js" at the end
-				["modules/xocolor", "modules/contributors", "modules/server","modules/settings","modules/activities", "modules/journal", "modules/file", "modules/user", "modules/history", "modules/stats", "modules/i18next", "modules/tutorial", "lib/humane.js", "lib/sugar-web/presence.js"],
-				function(xocolor, contributors, server, settings, activities, journal, file, user, history, stats, i18next, tutorial, humane, presence) {
+				["modules/xocolor", "modules/contributors", "modules/server","modules/settings","modules/activities", "modules/journal", "modules/file", "modules/user", "modules/history", "modules/stats", "modules/i18next", "modules/tutorial", "modules/qrcode", "lib/humane.js", "lib/sugar-web/presence.js"],
+				function(xocolor, contributors, server, settings, activities, journal, file, user, history, stats, i18next, tutorial, qrcode, humane, presence) {
 					sugarizer.modules.xocolor = xocolor;
 					sugarizer.modules.contributors = contributors;
 					sugarizer.modules.server = server;
@@ -71,6 +71,7 @@ let sugarizer = {
 					sugarizer.modules.presence = presence;
 					sugarizer.modules.file = file;
 					sugarizer.modules.tutorial = tutorial;
+					sugarizer.modules.qrcode = qrcode;
 					i18next.init().then(resolve);
 				}
 			);

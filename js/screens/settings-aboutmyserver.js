@@ -22,6 +22,9 @@ const AboutMyServer = {
 						<div class="aboutserver-subbox" id="aboutserver-serverurl" v-if='connected && connectingStep < 2'>
 							<div class="aboutserver-leftitem">{{$t('ServerUrl')}}</div>
 							<div class="aboutserver-rightitem"><input ref="serverAddress" class="input_field" type="text" v-model="details.serverAddress" :disabled="!connectingStep" @keyup="handleEnterKey"></div>
+							<div @click="scanQRCode" style="position: absolute; margin-top: 0px; margin-left: 400px; z-index: 2;" v-if="hasQRCode">
+								<icon id="qrcode" svgfile="./icons/qrcode.svg" :size="42" :x="50" :y="0" isNative="true"></icon>
+							</div>
 						</div>
 						<div class="aboutserver-subbox" v-if='connected && !connectingStep'>
 							<div class="aboutserver-leftitem">{{$t('ServerName')}}</div>
@@ -107,6 +110,7 @@ const AboutMyServer = {
 			consentPolicy: '',
 			createAccount: true,
 			isLoading: false,
+			hasQRCode: sugarizer.constant.platform.android || sugarizer.constant.platform.ios
 		}
 	},
 
@@ -153,6 +157,13 @@ const AboutMyServer = {
 			})
 			this.connectingStep++;
 			this.warning.show = false;
+		},
+
+		scanQRCode() {
+			sugarizer.modules.qrcode.scanQRCode((code) => {
+				this.details.serverAddress = code;
+			}, () => {
+			});
 		},
 
 		handleEnterKey(event) {

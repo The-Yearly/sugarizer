@@ -26,6 +26,9 @@ const LoginScreen = {
 				<div ref="serverOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;"></div>
 				<input ref="serverAddress" disabled="true" name="server" id="serverbox" type="text" class="input_field locked_field" v-model="details.serverAddress" @keyup="handleEnterKey">
 			</div>
+			<div @click="scanQRCode"style="position: absolute; margin-top: 17px; margin-left: 310px; z-index: 2;" v-if="hasQRCode">
+				<icon id="qrcode" svgfile="./icons/qrcode.svg" :size="42" :x="50" :y="0" isNative="true"></icon>
+			</div>
 		</div>
 		<div id="loginscreen_name" class="column" v-show="index.currentIndex === 1">
 			<div class="firstscreen_text" id="name">{{$t('Name')}}</div>
@@ -144,6 +147,7 @@ const LoginScreen = {
 			consentNeed: false,
 			consentPolicy: '',
 			isLoading: false,
+			hasQRCode: sugarizer.constant.platform.android || sugarizer.constant.platform.ios
 		}
 	},
 
@@ -311,6 +315,13 @@ const LoginScreen = {
 			this.$refs.serverAddress.removeAttribute('disabled');
 			this.$refs.serverAddress.focus();
 			this.$refs.serverAddress.select();
+		},
+
+		scanQRCode() {
+			sugarizer.modules.qrcode.scanQRCode((code) => {
+				this.details.serverAddress = code;
+			}, () => {
+			});
 		},
 
 		handleEnterKey(event) {
