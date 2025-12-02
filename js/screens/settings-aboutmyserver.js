@@ -60,7 +60,7 @@ const AboutMyServer = {
 							<div class="aboutserver-policytext" id="loginscreen_cookietext" v-html="$t('CookieConsent')"></div>
 							<div ref="policytext" class="aboutserver-policytext" id="loginscreen_policytext" v-html="$t('PolicyLink')"></div>
 						</div>
-						<div class="ls_right_btn aboutserver-nextbutton" v-if='connectingStep > 0'>
+						<div class="ls_right_absolute_btn aboutserver-nextbutton" v-if='connectingStep > 0'>
 							<icon-button 
 								ref="nextButton"
 								id="next-btn"

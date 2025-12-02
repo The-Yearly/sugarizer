@@ -1015,6 +1015,12 @@ a {
 	right: 50px;
 }
 
+.ls_right_absolute_btn {
+	position: absolute;
+	bottom: 50px;
+	right: 50px;
+}
+
 .ls_icon_btn {
 	width: fit-content;
 }
