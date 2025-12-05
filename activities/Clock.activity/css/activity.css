@@ -262,9 +262,13 @@ canvas {
 }
 
 /* Global time palette styles */
+
 .global-time-palette {
-  padding: 6px 0;
+  padding: 4px 0 8px;
   min-width: 260px;
+  max-width: 520px;        /* desktop max */
+  width: 90vw;            /* responsive */
+  background-color: #000;
 }
 
 .global-time-title {
@@ -275,31 +279,31 @@ canvas {
   margin-bottom: 4px;
 }
 
-
+/* Grid auto-fits columns based on screen width */
 .global-time-list {
   margin: 0;
-  padding: 0;
-  max-height: 260px;
-  overflow-y: auto;
+  padding: 0 8px 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 4px 12px;
+  background-color: #000;
 }
 
+/* Items */
 .global-time-item {
-  padding: 4px 12px;
+  padding: 4px 8px;
   cursor: pointer;
   font-size: 11px;
   color: #ffffff;
- 
+  white-space: nowrap;
 }
-
 
 .global-time-item:hover {
-  background-color: #505050 !important;
-  color: #ffffff !important;
+  background-color: #505050;
 }
-
 
 .global-time-item.active {
-  background-color: #808080 !important;
-  color: #ffffff !important;
+  background-color: #808080;
   border: 1px solid #d0d0d0;
 }
+

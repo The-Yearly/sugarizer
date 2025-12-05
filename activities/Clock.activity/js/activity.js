@@ -118,7 +118,7 @@ define(
         // Global time state (saved in Journal)
         var selectedTimezoneId = "local"; // "local" or IANA timezone id
 
-        // Mapping timezone -> localization keys (must exist in locales/*.ini)
+        // Mapping timezone -> localization keys
         var TIMEZONE_LABEL_KEYS = {
             "local": "TimezoneLocal",
             "Etc/UTC": "TimezoneUTC",
