@@ -2,7 +2,8 @@ define(
   ["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiobuttonsgroup","mustache","moment-with-locales.min","l10n","tutorial","sugar-web/graphics/palette"],
   function (activity,env,radioButtonsGroup,mustache,moment,l10n,tutorial,palette) 
  {
-
+    // Alias localization helper
+    var l10n_s = l10n;
     // Manipulate the DOM only when it is ready.
     requirejs(['domReady!'], function (doc) {
 
@@ -32,7 +33,14 @@ define(
                         if(show_mins) {
                           document.getElementById("show-mins").classList.add("active");
                         }
+
+                        // Restore selected timezone if saved
+                        if (data.selectedTimezoneId) {
+                          selectedTimezoneId = data.selectedTimezoneId;
+                        }
+
                         Clock.face=data.face;
+
                         if(data.face=="simple"){
                             document.getElementById("simple-clock-button").classList.add("active");
                             document.getElementById("nice-clock-button").classList.remove("active");
@@ -107,14 +115,56 @@ define(
         var show_am_pm = false;
         var show_mins = false;
 
-        var selectedTimezone = "local";
+        // Global time state (saved in Journal)
+        var selectedTimezoneId = "local"; // "local" or IANA timezone id
+
+        // Mapping timezone -> localization keys (must exist in locales/*.ini)
+        var TIMEZONE_LABEL_KEYS = {
+            "local": "TimezoneLocal",
+            "Etc/UTC": "TimezoneUTC",
+            "Asia/Kolkata": "TimezoneAsiaKolkata",
+            "Asia/Dubai": "TimezoneAsiaDubai",
+            "Asia/Singapore": "TimezoneAsiaSingapore",
+            "Asia/Bangkok": "TimezoneAsiaBangkok",
+            "Asia/Shanghai": "TimezoneAsiaShanghai",
+            "Asia/Hong_Kong": "TimezoneAsiaHongKong",
+            "Asia/Seoul": "TimezoneAsiaSeoul",
+            "Asia/Tokyo": "TimezoneAsiaTokyo",
+            "Europe/London": "TimezoneEuropeLondon",
+            "Europe/Paris": "TimezoneEuropeParis",
+            "Europe/Rome": "TimezoneEuropeRome",
+            "Europe/Berlin": "TimezoneEuropeBerlin",
+            "Europe/Madrid": "TimezoneEuropeMadrid",
+            "Europe/Moscow": "TimezoneEuropeMoscow",
+            "Africa/Cairo": "TimezoneAfricaCairo",
+            "Africa/Nairobi": "TimezoneAfricaNairobi",
+            "Africa/Johannesburg": "TimezoneAfricaJohannesburg",
+            "America/New_York": "TimezoneAmericaNewYork",
+            "America/Chicago": "TimezoneAmericaChicago",
+            "America/Denver": "TimezoneAmericaDenver",
+            "America/Los_Angeles": "TimezoneAmericaLosAngeles",
+            "America/Toronto": "TimezoneAmericaToronto",
+            "America/Mexico_City": "TimezoneAmericaMexicoCity",
+            "America/Sao_Paulo": "TimezoneAmericaSaoPaulo",
+            "America/Argentina/Buenos_Aires": "TimezoneAmericaBuenosAires",
+            "Australia/Sydney": "TimezoneAustraliaSydney",
+            "Australia/Melbourne": "TimezoneAustraliaMelbourne",
+            "Pacific/Auckland": "TimezonePacificAuckland"
+        };
+
         function getCurrentDate() {
-            if (selectedTimezone === "local") {
+            if (selectedTimezoneId === "local") {
                 return new Date();
             }
-            var localeString = new Date().toLocaleString("en-US", { timeZone: selectedTimezone });
+            var localeString = new Date().toLocaleString("en-US", { timeZone: selectedTimezoneId });
             return new Date(localeString);
         }
+
+        function getSelectedTimezoneLabel() {
+            var key = TIMEZONE_LABEL_KEYS[selectedTimezoneId] || "TimezoneLocal";
+            return l10n_s.get(key);
+        }
+
 
         function Clock() {
             this.face = "simple";
@@ -247,86 +297,98 @@ define(
                 that.drawBackground();
             });
 
+            
             var globalTimeButton = document.getElementById("global-time-button");
             if (globalTimeButton) {
                 var globalTimePalette = new palette.Palette(globalTimeButton);
 
                 var paletteContent = document.createElement("div");
-                paletteContent.innerHTML = `
-                <div style="padding:8px;min-width:230px;">
-                  <label for="timezone-select">Choose location:</label><br/>
-                  <select id="timezone-select">
+                paletteContent.className = "global-time-palette";
 
-                    <option value="local">Local Time</option>
-                    <option value="Etc/UTC">UTC</option>
+                var title = document.createElement("div");
+                title.className = "global-time-title";
+                title.textContent = l10n_s.get("ChooseLocation");
+                paletteContent.appendChild(title);
 
-                    <optgroup label="Asia">
-                      <option value="Asia/Kolkata">India (Kolkata)</option>
-                      <option value="Asia/Dubai">Dubai</option>
-                      <option value="Asia/Singapore">Singapore</option>
-                      <option value="Asia/Bangkok">Bangkok</option>
-                      <option value="Asia/Shanghai">Shanghai</option>
-                      <option value="Asia/Hong_Kong">Hong Kong</option>
-                      <option value="Asia/Seoul">Seoul</option>
-                      <option value="Asia/Tokyo">Tokyo</option>
-                    </optgroup>
+                // container for items
+                var list = document.createElement("div");
+                list.className = "global-time-list";
 
-                    <optgroup label="Europe">
-                      <option value="Europe/London">London</option>
-                      <option value="Europe/Paris">Paris</option>
-                      <option value="Europe/Rome">Rome</option>
-                      <option value="Europe/Berlin">Berlin</option>
-                      <option value="Europe/Madrid">Madrid</option>
-                      <option value="Europe/Moscow">Moscow</option>
-                    </optgroup>
+                function addTimezoneItem(id) {
+                    var item = document.createElement("div");
+                    item.className = "global-time-item";
+                    item.textContent = l10n_s.get(TIMEZONE_LABEL_KEYS[id]);
+                    if (id === selectedTimezoneId) {
+                        item.classList.add("active");
+                    }
+                    item.addEventListener("click", function () {
+                        selectedTimezoneId = id;
 
-                    <optgroup label="Africa">
-                      <option value="Africa/Cairo">Cairo</option>
-                      <option value="Africa/Nairobi">Nairobi</option>
-                      <option value="Africa/Johannesburg">Johannesburg</option>
-                    </optgroup>
+                        // update active item highlight
+                        var items = list.querySelectorAll(".global-time-item");
+                        for (var i = 0; i < items.length; i++) {
+                            items[i].classList.remove("active");
+                        }
+                        item.classList.add("active");
 
-                    <optgroup label="Americas">
-                      <option value="America/New_York">New York</option>
-                      <option value="America/Chicago">Chicago</option>
-                      <option value="America/Denver">Denver</option>
-                      <option value="America/Los_Angeles">Los Angeles</option>
-                      <option value="America/Toronto">Toronto</option>
-                      <option value="America/Mexico_City">Mexico City</option>
-                      <option value="America/Sao_Paulo">São Paulo</option>
-                      <option value="America/Argentina/Buenos_Aires">Buenos Aires</option>
-                    </optgroup>
-
-                    <optgroup label="Australia / Pacific">
-                      <option value="Australia/Sydney">Sydney</option>
-                      <option value="Australia/Melbourne">Melbourne</option>
-                      <option value="Pacific/Auckland">Auckland</option>
-                    </optgroup>
-
-                  </select>
-                </div>
-                `;
+                        globalTimePalette.popDown();
+                    });
+                    list.appendChild(item);
+                }
 
 
+                
+                addTimezoneItem("local");
+                addTimezoneItem("Etc/UTC");
+
+                addTimezoneItem("Asia/Kolkata");
+                addTimezoneItem("Asia/Dubai");
+                addTimezoneItem("Asia/Singapore");
+                addTimezoneItem("Asia/Bangkok");
+                addTimezoneItem("Asia/Shanghai");
+                addTimezoneItem("Asia/Hong_Kong");
+                addTimezoneItem("Asia/Seoul");
+                addTimezoneItem("Asia/Tokyo");
+
+                addTimezoneItem("Europe/London");
+                addTimezoneItem("Europe/Paris");
+                addTimezoneItem("Europe/Rome");
+                addTimezoneItem("Europe/Berlin");
+                addTimezoneItem("Europe/Madrid");
+                addTimezoneItem("Europe/Moscow");
+
+                addTimezoneItem("Africa/Cairo");
+                addTimezoneItem("Africa/Nairobi");
+                addTimezoneItem("Africa/Johannesburg");
+
+                addTimezoneItem("America/New_York");
+                addTimezoneItem("America/Chicago");
+                addTimezoneItem("America/Denver");
+                addTimezoneItem("America/Los_Angeles");
+                addTimezoneItem("America/Toronto");
+                addTimezoneItem("America/Mexico_City");
+                addTimezoneItem("America/Sao_Paulo");
+                addTimezoneItem("America/Argentina/Buenos_Aires");
+
+                addTimezoneItem("Australia/Sydney");
+                addTimezoneItem("Australia/Melbourne");
+                addTimezoneItem("Pacific/Auckland");
+
+                paletteContent.appendChild(list);
                 globalTimePalette.setContent([paletteContent]);
-
-                var timezoneSelect = paletteContent.querySelector("#timezone-select");
-                timezoneSelect.addEventListener("change", function () {
-                    selectedTimezone = timezoneSelect.value;
-                    globalTimePalette.popDown();
-                });
             }
-            
+
             var date = getCurrentDate();
             var hours = date.getHours();
-            if (hours<12){
+            if (hours < 12) {
               this.toggleAMPM = true;
             } else {
               this.toggleAMPM = false;
             }
         }
 
-        function setTranslatedStrings() {
+
+          function setTranslatedStrings() {
             document.getElementById("simple-clock-button").title = l10n_s.get("SimpleClock");
             document.getElementById("nice-clock-button").title = l10n_s.get("NiceClock");
             document.getElementById("write-time-button").title = l10n_s.get("WriteTime");
@@ -337,7 +399,13 @@ define(
             document.getElementById("text-time").innerHTML = l10n_s.get("WhatTime");
             document.getElementById("show-am-pm").title = l10n_s.get("ShowAmPmTitle");
             document.getElementById("show-mins").title = l10n_s.get("ShowMinsTitle");
+
+            var globalTimeBtn = document.getElementById("global-time-button");
+            if (globalTimeBtn) {
+                globalTimeBtn.title = l10n_s.get("GlobalTime");
+            }
         }
+
 
         Clock.prototype.start = function (face) {
             this.updateSizes();
@@ -463,26 +531,35 @@ define(
         }
 
         // Update text and hand angles using the current time.
-        Clock.prototype.update = function () {
+          Clock.prototype.update = function () {
             var date = getCurrentDate();
             var hours = date.getHours();
             var minutes = date.getMinutes();
             var seconds = date.getSeconds();
-            if (show_am_pm){
-              this.displayTime(hours, minutes, seconds);
+
+            var displayHours;
+            if (show_am_pm) {
+                displayHours = hours;
             } else {
-              if (hours==0) {
-                this.displayTime(hours+12, minutes, seconds);
-              } else if (hours <= 12) {
-                this.displayTime(hours, minutes, seconds);
-              } else {
-                this.displayTime(hours-12, minutes, seconds);
-              }
+                if (hours == 0) {
+                    displayHours = hours + 12;
+                } else if (hours <= 12) {
+                    displayHours = hours;
+                } else {
+                    displayHours = hours - 12;
+                }
             }
+
+            // Only show timezone name when non-local
+            var suffix = "";
+            if (selectedTimezoneId !== "local") {
+                suffix = " (" + getSelectedTimezoneLabel() + ")";
+            }
+
+            this.displayTime(displayHours, minutes, seconds, suffix);
             this.displayDate(date);
 
             this.handAngles.hours = Math.PI / 6 * (hours % 12) + Math.PI / 360 * minutes;
-
             this.handAngles.minutes = Math.PI / 30 * minutes + Math.PI / 1800 * seconds;
             this.handAngles.seconds = Math.PI / 30 * seconds;
             this.drawBackground();
@@ -1199,7 +1276,8 @@ define(
               handAngles : clock.handAngles,
               timeToBeDisplayed : clock.timeToBeDisplayed,
               show_am_pm: show_am_pm,
-              show_mins: show_mins
+              show_mins: show_mins,
+              selectedTimezoneId: selectedTimezoneId
             }
             activity.getDatastoreObject().setDataAsText(stateObj);
             activity.getDatastoreObject().save(function (error) {
