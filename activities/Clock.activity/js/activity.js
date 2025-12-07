@@ -1,13 +1,4 @@
-define([
-    "sugar-web/activity/activity",
-    "sugar-web/env",
-    "sugar-web/graphics/radiobuttonsgroup",
-    "mustache",
-    "moment-with-locales.min",
-    "l10n",
-    "tutorial",
-    "sugar-web/graphics/palette"
-], function (activity, env, radioButtonsGroup, mustache, moment, l10n, tutorial, palette) {
+define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiobuttonsgroup","mustache","moment-with-locales.min","l10n","tutorial","sugar-web/graphics/palette"], function (activity,env,radioButtonsGroup,mustache,moment, l10n, tutorial, palette) {
 
     // Alias localization helper
     var l10n_s = l10n;
