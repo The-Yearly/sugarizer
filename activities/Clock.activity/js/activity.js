@@ -1,7 +1,14 @@
-define(
-  ["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiobuttonsgroup","mustache","moment-with-locales.min","l10n","tutorial","sugar-web/graphics/palette"],
-  function (activity,env,radioButtonsGroup,mustache,moment,l10n,tutorial,palette) 
- {
+define([
+    "sugar-web/activity/activity",
+    "sugar-web/env",
+    "sugar-web/graphics/radiobuttonsgroup",
+    "mustache",
+    "moment-with-locales.min",
+    "l10n",
+    "tutorial",
+    "sugar-web/graphics/palette"
+], function (activity, env, radioButtonsGroup, mustache, moment, l10n, tutorial, palette) {
+
     // Alias localization helper
     var l10n_s = l10n;
     // Manipulate the DOM only when it is ready.
@@ -296,7 +303,6 @@ define(
                 show_mins = document.getElementById("show-mins").classList.contains("active");
                 that.drawBackground();
             });
-
             
             var globalTimeButton = document.getElementById("global-time-button");
             if (globalTimeButton) {
@@ -388,7 +394,7 @@ define(
         }
 
 
-          function setTranslatedStrings() {
+        function setTranslatedStrings() {
             document.getElementById("simple-clock-button").title = l10n_s.get("SimpleClock");
             document.getElementById("nice-clock-button").title = l10n_s.get("NiceClock");
             document.getElementById("write-time-button").title = l10n_s.get("WriteTime");
@@ -405,7 +411,6 @@ define(
                 globalTimeBtn.title = l10n_s.get("GlobalTime");
             }
         }
-
 
         Clock.prototype.start = function (face) {
             this.updateSizes();
@@ -508,7 +513,7 @@ define(
             this.clockContainerElem.style.width = this.size + "px";
             this.clockContainerElem.style.height = this.size + "px";
 
-			this.clockCanvasElem.style.width = (this.size+4) + "px";
+            this.clockCanvasElem.style.width = (this.size + 4) + "px";
 
             this.margin = this.size * 0.02;
             this.radius = (this.size - (2 * this.margin)) / 2;
@@ -531,7 +536,7 @@ define(
         }
 
         // Update text and hand angles using the current time.
-          Clock.prototype.update = function () {
+        Clock.prototype.update = function () {
             var date = getCurrentDate();
             var hours = date.getHours();
             var minutes = date.getMinutes();
@@ -540,14 +545,12 @@ define(
             var displayHours;
             if (show_am_pm) {
                 displayHours = hours;
+            } else if (hours == 0) {
+                displayHours = hours + 12;
+            } else if (hours <= 12) {
+                displayHours = hours;
             } else {
-                if (hours == 0) {
-                    displayHours = hours + 12;
-                } else if (hours <= 12) {
-                    displayHours = hours;
-                } else {
-                    displayHours = hours - 12;
-                }
+                displayHours = hours - 12;
             }
 
             // Only show timezone name when non-local
@@ -658,7 +661,7 @@ define(
                   ctx.fillStyle = this.colors.black;
                 }
               } else {
-                if (hours<12){
+                if (hours < 12) {
                   ctx.strokeStyle = this.colors.black;
                   ctx.fillStyle = this.colors.white;
                 } else {
