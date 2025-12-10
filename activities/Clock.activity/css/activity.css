@@ -251,24 +251,23 @@ canvas {
   }
 }
 
-@media only screen and (max-width: 735px) {
-  #show-mins {
-    display: none;
-  }
-}
-
-@media only screen and (max-width: 678px) {
-  #show-am-pm {
-    display: none;
-  }
-}
-
-@media only screen and (max-width: 640px) {
+@media only screen and (max-width: 900px) {
   #main-toolbar #global-time-button {
     display: none;
   }
 }
 
+@media only screen and (max-width: 780px) {
+  #show-mins {
+    display: none;
+  }
+}
+
+@media only screen and (max-width: 720px) {
+  #show-am-pm {
+    display: none;
+  }
+}
 
 /* Global time palette styles */
 

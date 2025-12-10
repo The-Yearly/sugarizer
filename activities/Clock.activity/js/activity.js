@@ -343,24 +343,12 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                 (function () {
                     var localItem = document.createElement("div");
                     localItem.className = "global-time-item";
+                    localItem.setAttribute("data-timezone-id", "local");
                     localItem.textContent = l10n_s.get(TIMEZONE_LABEL_KEYS["local"]);
-                    if (selectedTimezoneId === "local") {
-                        localItem.classList.add("active");
-                    }
+
                     localItem.addEventListener("click", function () {
                         selectedTimezoneId = "local";
-
-                        var cities = list.querySelectorAll(".global-time-city");
-                        for (var c = 0; c < cities.length; c++) {
-                            cities[c].classList.remove("active");
-                        }
-
-                        var items = list.querySelectorAll(".global-time-item");
-                        for (var i = 0; i < items.length; i++) {
-                            items[i].classList.remove("active");
-                        }
-                        localItem.classList.add("active");
-
+                        refreshActiveCityHighlight();
                         globalTimePalette.popDown();
                     });
                     list.appendChild(localItem);
@@ -416,19 +404,32 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                 });
 
                 function refreshActiveCityHighlight() {
+                    var items = list.querySelectorAll(".global-time-item");
+                    for (var j = 0; j < items.length; j++) {
+                        items[j].classList.remove("active");
+                    }
                     var cities = list.querySelectorAll(".global-time-city");
+                    var activeRow = null;
                     for (var i = 0; i < cities.length; i++) {
                         var span = cities[i];
                         if (span.getAttribute("data-timezone-id") === selectedTimezoneId) {
                             span.classList.add("active");
+                            activeRow = span.parentNode;
                         } else {
                             span.classList.remove("active");
                         }
                     }
 
-                    var items = list.querySelectorAll(".global-time-item");
-                    for (var j = 0; j < items.length; j++) {
-                        items[j].classList.remove("active");
+                    // Special case: local time row
+                    if (selectedTimezoneId === "local") {
+                        var localLine = list.querySelector('.global-time-item[data-timezone-id="local"]');
+                        if (localLine) {
+                            activeRow = localLine;
+                        }
+                    }
+
+                    if (activeRow) {
+                        activeRow.classList.add("active");
                     }
                 }
 
@@ -499,6 +500,7 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
 
                 paletteContent.appendChild(list);
                 globalTimePalette.setContent([paletteContent]);
+                refreshActiveCityHighlight();
             }
 
             var date = getCurrentDate();
@@ -705,61 +707,62 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
         }
 
         Clock.prototype.displayTime = function (hours, minutes, seconds, txt) {
-          if (!txt) { txt = ""; }
-          var zeroFill = function (number) {
-              if (number === undefined || number === "") {
-                  return "";
-              }
-              return ('00' + number).substr(-2);
-          };
+            if (!txt) { txt = ""; }
+            var zeroFill = function (number) {
+                if (number === undefined || number === "") {
+                    return "";
+                }
+                return ('00' + number).substr(-2);
+            };
 
-          var wasHidden =
-              (this.textTimeElem.style.display === "" ||
-               this.textTimeElem.style.display === "none");
+            var wasHidden =
+                (this.textTimeElem.style.display === "" ||
+                this.textTimeElem.style.display === "none");
 
-          var template =
-              '<span style="color: {{ colors.hours }}">{{ hours }}' +
-              '</span>' +
-              ':<span style="color: {{ colors.minutes }}">{{ minutes }}' +
-              '</span>' +
-              (this.writeSeconds ? ':<span style="color: {{ colors.seconds }}">{{ seconds }}</span>' : '');
+            var template =
+                '<span style="color: {{ colors.hours }}">{{ hours }}' +
+                '</span>' +
+                ':<span style="color: {{ colors.minutes }}">{{ minutes }}' +
+                '</span>' +
+                (this.writeSeconds ? ':<span style="color: {{ colors.seconds }}">{{ seconds }}</span>' : '');
 
-          var suffixHtml = '';
-          if (txt) {
-              suffixHtml =
-                  '<span style="color: {{ colors.yellow }}">' +
-                  ' ' + txt +
-                  '</span>';
-          }
+            var suffixHtml = '';
+            if (txt) {
+                suffixHtml =
+                    '<span style="color: {{ colors.yellow }}">' +
+                    ' ' + txt +
+                    '</span>';
+            }
 
-          if (this.writeTime && (hours !== "" || minutes !== "")) {
-              var templateData = {
-                  'colors': this.colors,
-                  'hours': zeroFill(hours),
-                  'minutes': zeroFill(minutes),
-                  'seconds': zeroFill(seconds)
-              };
-              this.textTimeElem.innerHTML =
-                  mustache.render(template, templateData) +
-                  mustache.render(suffixHtml, templateData);
-              this.textTimeElem.style.display = "block";
-          } else if (txt) {
-              // No digital time, but a timezone label exists: show only the label
-              this.textTimeElem.innerHTML =
-                  mustache.render(suffixHtml, { colors: this.colors });
-              this.textTimeElem.style.display = "block";
-          } else {
-              this.textTimeElem.innerHTML = "";
-              this.textTimeElem.style.display = "none";
-          }
+            if (this.writeTime && (hours !== "" || minutes !== "")) {
+                var templateData = {
+                    'colors': this.colors,
+                    'hours': zeroFill(hours),
+                    'minutes': zeroFill(minutes),
+                    'seconds': zeroFill(seconds)
+                };
+                this.textTimeElem.innerHTML =
+                    mustache.render(template, templateData) +
+                    mustache.render(suffixHtml, templateData);
+                this.textTimeElem.style.display = "block";
+            } else if (txt) {
+                this.textTimeElem.innerHTML =
+                    mustache.render(suffixHtml, { colors: this.colors });
+                this.textTimeElem.style.display = "block";
+            } else {
+                this.textTimeElem.innerHTML = "";
+                this.textTimeElem.style.display = "none";
+            }
 
-          // If we just made the line visible for the first time,
-          // recompute layout so the clock leaves room for it.
-          if (txt && wasHidden && this.textTimeElem.style.display === "block") {
-              this.updateSizes();
-              this.drawBackground();
-          }
-        }
+            var isHidden =
+                (this.textTimeElem.style.display === "" ||
+                this.textTimeElem.style.display === "none");
+
+            if ((txt && wasHidden && !isHidden) || (!txt && !wasHidden && isHidden)) {
+                this.updateSizes();
+                this.drawBackground();
+            }
+        };
 
         Clock.prototype.displayDate = function (date) {
           if (this.writeDate) {
