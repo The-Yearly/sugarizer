@@ -441,6 +441,26 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
 
                     var groupDiv = document.createElement("div");
                     groupDiv.className = "global-time-item";
+                    groupDiv.setAttribute("data-cycle-index", "0");
+
+                    groupDiv.addEventListener("click", function () {
+                      var cities = this.querySelectorAll(".global-time-city");
+                      if (!cities.length) return;
+
+                      var index = parseInt(this.getAttribute("data-cycle-index"), 10) || 0;
+
+                      // Cycle through cities
+                      selectedTimezoneId = cities[index].getAttribute("data-timezone-id");
+
+                      index++;
+                      if (index >= cities.length) index = 0;
+
+                      this.setAttribute("data-cycle-index", index);
+
+                      refreshActiveCityHighlight();
+                      globalTimePalette.popDown();
+                    });
+
 
                     var offsetSpan = document.createElement("span");
                     offsetSpan.className = "global-time-offset";
@@ -459,10 +479,10 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                             }
 
                             citySpan.addEventListener("click", function (event) {
-                                event.stopPropagation();
-                                selectedTimezoneId = tzIdInner;
-                                refreshActiveCityHighlight();
-                                globalTimePalette.popDown();
+                                // Don't let the city pick directly, just use the row cycling
+                                event.preventDefault();
+                                // Trigger the same behavior as clicking the line
+                                groupDiv.click();
                             });
 
                             groupDiv.appendChild(citySpan);
@@ -663,7 +683,10 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                 }
             }
 
-            var suffix = labelText + " (" + offsetLabel + ")";
+            var suffix = "";
+            if (selectedTimezoneId !== "local") {
+              suffix = labelText + " (" + offsetLabel + ")";
+            }
 
             // Show digits only when writeTime=true, but ALWAYS show suffix
             this.displayTime(

@@ -298,18 +298,12 @@ canvas {
   display: inline-block;
   padding: 2px 4px;
   border-radius: 2px;
-  cursor: pointer;
+  cursor: inherit;       
 }
 
 .global-time-city:hover {
-  outline: 2px solid #ffffff;
+  outline: none;
 }
-
-.global-time-city.active {
-  background-color: #808080;
-  border: 1px solid #d0d0d0;
-}
-
 
 /* Items */
 .global-time-item {
@@ -332,4 +326,31 @@ canvas {
   background-color: #000;
   column-count: 2;
   column-gap: 32px;
+}
+
+.global-time-item:hover {
+  background-color: transparent;
+  outline: 2px solid #ffffff;
+  outline-offset: -2px;
+}
+
+@media only screen and (max-width: 768px) {
+  .global-time-palette {
+    min-width: 0;
+    max-width: none;
+    width: calc(100vw - 32px);
+    box-sizing: border-box;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .global-time-list {
+    column-count: 1;
+    column-gap: 16px;
+    padding: 0 8px 4px;
+  }
+
+  .global-time-item {
+    font-size: 12px;
+  }
 }
