@@ -575,10 +575,14 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
         }
 
         Clock.prototype.changeWriteTime = function (writeTime) {
-            this.writeTime = writeTime;
+            this.writeTime = writeTime;           
             if (this.setTime || this.setTimeGame) {
                 this.writeTimeInSetTime();
+            } else {
+                this.update();  
             }
+            this.updateSizes();
+            this.drawBackground();
         }
 
         Clock.prototype.changeWriteDate = function (writeDate) {
@@ -1264,6 +1268,8 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
               this.classList.toggle('active');
               var active = this.classList.contains('active');
               clock.changeWriteTime(active);
+              clock.updateSizes();
+              clock.drawBackground();
             }
         };
 
@@ -1272,6 +1278,8 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
               this.classList.toggle('active');
               var active = this.classList.contains('active');
               clock.changeWriteDate(active);
+              clock.updateSizes();
+              clock.drawBackground();
         };
 
         var writeSecondsButton = document.getElementById("write-seconds-button");
