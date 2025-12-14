@@ -53,6 +53,7 @@
   "TutoShowMinsContent": "Click this icon to display minutes in Simple Clock.",
   "GlobalTime": "Global time",
   "ChooseLocation": "Choose location",
+  "TutoGlobalTimeContent": "Click this icon to open Global Time mode. In this mode, you can choose a city from around the world and the clock will display the current time for that location.",
 
   "TimezoneLocal": "Local time",
   "TimezoneUTC": "UTC",
