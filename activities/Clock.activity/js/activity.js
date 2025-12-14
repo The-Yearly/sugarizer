@@ -22,6 +22,9 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                 console.log("New instance");
             } else {
                 activity.getDatastoreObject().loadAsText(function(error, metadata, data) {
+                    if (data.selectedTimezoneId) {
+                        restoredTimezoneId = data.selectedTimezoneId;
+                    }
                     if (error==null && data!=null) {
                         show_am_pm = data.show_am_pm;
                         show_mins = data.show_mins;
@@ -115,6 +118,7 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
 
         // Global time state (saved in Journal)
         var selectedTimezoneId = "local"; // "local" or IANA timezone id
+        var restoredTimezoneId = null;
 
         // Mapping timezone -> localization keys
         var TIMEZONE_LABEL_KEYS = {
@@ -327,6 +331,9 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
             var globalTimeButton = document.getElementById("global-time-button");
             if (globalTimeButton) {
                 var globalTimePalette = new palette.Palette(globalTimeButton);
+                globalTimeButton.addEventListener("click", function () {
+                    refreshActiveCityHighlight();
+                });
 
                 var paletteContent = document.createElement("div");
                 paletteContent.className = "global-time-palette";
@@ -433,6 +440,19 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
                     }
                 }
 
+                function syncCycleIndexWithSelectedTimezone() {
+                    var rows = list.querySelectorAll(".global-time-item[data-cycle-index]");
+                    for (var r = 0; r < rows.length; r++) {
+                        var cities = rows[r].querySelectorAll(".global-time-city");
+                        for (var i = 0; i < cities.length; i++) {
+                            if (cities[i].getAttribute("data-timezone-id") === selectedTimezoneId) {
+                                rows[r].setAttribute("data-cycle-index", i);
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 for (var oi = 0; oi < offsets.length; oi++) {
                     var offsetMinutes = offsets[oi];
                     var tzIds = groupsByOffset[offsetMinutes.toString()];
@@ -500,6 +520,7 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
 
                 paletteContent.appendChild(list);
                 globalTimePalette.setContent([paletteContent]);
+                syncCycleIndexWithSelectedTimezone();
                 refreshActiveCityHighlight();
             }
 
@@ -1244,6 +1265,9 @@ define(["sugar-web/activity/activity","sugar-web/env","sugar-web/graphics/radiob
         // Create the clock.
 
         var clock = new Clock();
+        if (restoredTimezoneId) {
+            selectedTimezoneId = restoredTimezoneId;
+        }
         clock.start();
 
         // UI controls.
