@@ -222,10 +222,10 @@ const HomeScreen = {
 			let objectId = null;
 			let name = this.$t("NameActivity", { name: activity.name });
 			let entries = sugarizer.modules.journal.getByActivity(activity.id);
-			for (let i = 0 ; i < entries.length ; i++) {
-				objectId = entries[i].objectId;
-				name = entries[i].metadata.title;
-				break;
+			if (entries.length > 0) {
+				entries.sort((a, b) => new Date(b.metadata.timestamp) - new Date(a.metadata.timestamp));
+				objectId = entries[0].objectId;
+				name = entries[0].metadata.title;
 			}
 			const help = activity.id === sugarizer.modules.tutorial.activityId;
 			sugarizer.modules.activities.runActivity(activity, objectId, name, undefined, help, 'home_view');
