@@ -5,10 +5,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
-### Changed
-- Rewrite of Sugarizer Core using Vue.js
+### Added
 - Human Body activity
 - Stickman activity
+- Add "Global Time" feature to Clock activity with timezone selection #1825
+
+### Changed
+- Rewrite of Sugarizer Core using Vue.js
 
 ### Fixed
 - Bug in Jappy activity editor during initial rendering #1738
