@@ -114,6 +114,7 @@ let sugarizer = {
 		let browserAgent = navigator.userAgent;
 		let browserVersion = '' + parseFloat(navigator.appVersion);
 		let browserMajorVersion = parseInt(navigator.appVersion, 10);
+		let browserName = ""; // declare locally
 		let Offset, OffsetVersion, ix;
 		if ((OffsetVersion = browserAgent.indexOf("Chrome")) != -1) {
 			browserVersion = browserAgent.substring(OffsetVersion + 7);
