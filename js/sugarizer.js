@@ -113,7 +113,6 @@ let sugarizer = {
 	getBrowserVersion() {
 		let browserAgent = navigator.userAgent;
 		let browserVersion = '' + parseFloat(navigator.appVersion);
-		let browserMajorVersion = parseInt(navigator.appVersion, 10);
 		let Offset, OffsetVersion, ix;
 		if ((OffsetVersion = browserAgent.indexOf("Chrome")) != -1) {
 			browserVersion = browserAgent.substring(OffsetVersion + 7);
@@ -131,11 +130,6 @@ let sugarizer = {
 		}
 		if ((ix = browserVersion.indexOf(" ")) != -1) {
 			browserVersion = browserVersion.substring(0, ix);
-		}
-		browserMajorVersion = parseInt('' + browserVersion, 10);
-		if (isNaN(browserMajorVersion)) {
-			browserVersion = '' + parseFloat(navigator.appVersion);
-			browserMajorVersion = parseInt(navigator.appVersion, 10);
 		}
 		return browserVersion;
 	},
