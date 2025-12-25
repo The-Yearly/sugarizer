@@ -113,35 +113,23 @@ let sugarizer = {
 	getBrowserVersion() {
 		let browserAgent = navigator.userAgent;
 		let browserVersion = '' + parseFloat(navigator.appVersion);
-		let browserMajorVersion = parseInt(navigator.appVersion, 10);
 		let Offset, OffsetVersion, ix;
 		if ((OffsetVersion = browserAgent.indexOf("Chrome")) != -1) {
 			browserVersion = browserAgent.substring(OffsetVersion + 7);
 		} else if ((OffsetVersion = browserAgent.indexOf("Firefox")) != -1) {
-			browserName = "Firefox";
 			browserVersion = browserAgent.substring(OffsetVersion + 8);
 		} else if ((OffsetVersion = browserAgent.indexOf("Safari")) != -1) {
-			browserName = "Safari";
 			browserVersion = browserAgent.substring(OffsetVersion + 7);
 			if ((OffsetVersion = browserAgent.indexOf("Version")) != -1)
 				browserVersion = browserAgent.substring(OffsetVersion + 8);
 		} else if ((Offset = browserAgent.lastIndexOf(' ') + 1) < (OffsetVersion = browserAgent.lastIndexOf('/'))) {
-			browserName = browserAgent.substring(Offset, OffsetVersion);
 			browserVersion = browserAgent.substring(OffsetVersion + 1);
-			if (browserName.toLowerCase() == browserName.toUpperCase()) {
-				browserName = navigator.appName;
-			}
 		}
 		if ((ix = browserVersion.indexOf(";")) != -1) {
 			browserVersion = browserVersion.substring(0, ix);
 		}
 		if ((ix = browserVersion.indexOf(" ")) != -1) {
 			browserVersion = browserVersion.substring(0, ix);
-		}
-		browserMajorVersion = parseInt('' + browserVersion, 10);
-		if (isNaN(browserMajorVersion)) {
-			browserVersion = '' + parseFloat(navigator.appVersion);
-			browserMajorVersion = parseInt(navigator.appVersion, 10);
 		}
 		return browserVersion;
 	},
