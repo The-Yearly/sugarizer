@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - CSV View data not updated in chart activity without saving #1809
 - Undo button for Gears activity #838
 - Replace Enyo by vue.js #257
+- UUID v4 generation bug: incorrect bitwise operation forces variant to 8 #1840
 
 ## [1.9.0] - 2025-03-25
 ### Added
