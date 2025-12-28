@@ -16,12 +16,13 @@ define(["sugar-web/datastore"], function(datastore) {
 	// Save user settings
 	settings.setUser = function(data) {
 		var sugar = localStorage.getItem("sugar_settings");
+		var currentSettings = {};
 		if (sugar !== null && sugar !== undefined && sugar !== "{}") {
-			settings = JSON.parse(sugar);
+			currentSettings = JSON.parse(sugar);
 			for (var key in data) {
-				settings[key] = data[key];
+				currentSettings[key] = data[key];
 			}
-			localStorage.setItem('sugar_settings', JSON.stringify(settings));
+			localStorage.setItem('sugar_settings', JSON.stringify(currentSettings));
 		} else {
 			localStorage.setItem('sugar_settings', JSON.stringify(data));
 		}
