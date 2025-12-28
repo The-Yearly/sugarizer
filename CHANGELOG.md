@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Undo button for Gears activity #838
 - Replace Enyo by vue.js #257
 - UUID v4 generation bug: incorrect bitwise operation forces variant to 8 #1840
+- Variable Shadowing - Overwrites Module Object #1846
 
 ## [1.9.0] - 2025-03-25
 ### Added
