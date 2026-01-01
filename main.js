@@ -27,8 +27,7 @@ function saveFile(file, arg, sender) {
 	if (arg.text) {
 		buf = arg.text;
 	} else {
-		var data = arg.binary.replace(/^data:.+;base64,/, "");
-		buf = new Buffer(data, "base64");
+		buf = Buffer.from(arg.binary, "base64");
 	}
 	fs.writeFile(file, buf, function (err) {
 		sender.send("save-file-reply", { err: err, filename: file });
