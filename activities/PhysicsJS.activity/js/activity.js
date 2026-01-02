@@ -423,7 +423,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				} else if (savedObject.type == "rectangle") {
 					newOptions.width = savedObject.width;
 					newOptions.height = savedObject.height;
-				} else if (savedObject.type = "convex-polygon") {
+				} else if (savedObject.type == "convex-polygon") {
 					newOptions.vertices = savedObject.vertices;
 				}
 				return Physics.body(savedObject.type, newOptions);
