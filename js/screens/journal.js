@@ -3,124 +3,126 @@ const Journal = {
 	template: `
 	<transition name="fade" appear>
 	<div ref="journal-view" class="journal-view">
-		<div class="toolbar" v-show="checkboxSelected === 0">
-			<div class="tool_leftitems journal-toolleft">
-				<searchfield
-					ref="searchfield"
-					tabindex="0"
-					@input-changed="searchChanged"
-					:placeholder="$t('SearchJournal')"
-				/>
-				<icon
-					id="favoritebutton"
-					svgfile="./icons/emblem-favorite.svg"
-					isNative="true"
-					:color="filterFavorite ? buddycolor : undefined"
-					:size="constant.iconSizeList"
-					:title="$t('FilterFavorite')"
-					@click="toggleFilterValue('filterFavorite')"
-				/>
-				<icon
-					id="assignmentbutton"
-					svgfile="./icons/assignment.svg"
-					isNative="true"
-					:color="filterAssignment ? buddycolor : undefined"
-					:size="constant.iconSizeList"
-					:title="$t('FilterAssignment')"
-					@click="toggleFilterValue('filterAssignment')"
-				/>
-				<filter-box 
-					ref="typepalette"
-					name="typepalette"
-					id="typepalette"
-					:options="typePalette"
-					@filter-selected="activityFilterSelected"
-					:title="$t('FilterByType')"
-				></filter-box>
-				<filter-box 
-					ref="datepalette"
-					id="datepalette"
-					name="datepalette"
-					:options="datePalette"
-					@filter-selected="dateFilterSelected"
-					:title="$t('FilterByTime')"
-				></filter-box>
-				<filter-box 
-					ref="sortpalette"
-					id="sortpalette"
-					name="sortpalette"
-					:options="sortPalette"
-					@filter-selected="sortSelected"
-					:title="$t('Sort')"
-				></filter-box>
-				<hr />
-				<icon
-					id="fromdevicebutton"
-					class="toolbutton"
-					svgfile="./icons/copy-from-device.svg"
-					isNative="true"
-					:size="constant.iconSizeList"
-					:title="$t('CopyFromDevice')"
-					@click="fromDeviceSelected"
-				/>
-				<hr />
-				<icon
-					class="toolbutton"
-					id="toolbar-help-btn"
-					svgfile="./icons/help.svg"
-					isNative="true"
-					:size="47"
-					:color="768"
-					:title="$t('Tutorial')"
-					isNative="true"
-					@click="startTutorial"
-				></icon>
-			</div>
-			<div class="tool_rightitems">
-				<icon
-					class="toolbutton"
-					id="journal_home_button"
-					svgfile="./icons/view-radial.svg" 
-					isNative="true"
-					:size="47"
-					:title="$t('FavoritesView')"
-					isNative="true"
-					@click="$emit('closeJournal')"
-				></icon>
-			</div>
-		</div>
-		<div class="toolbar" v-show="checkboxSelected > 0" :class="{ 'toolbar-disabled': showWarning }">
-			<div class="tool_leftitems" style="gap: 12px">
-				<icon
-					id="unselallbutton"
-					svgfile="./icons/select-none.svg"
-					isNative="true"
-					:size="constant.iconSizeList"
-					:title="$t('UnselectAll')"
-					@click="unselectAll"
-				/>
-				<icon
-					id="selallbutton"
-					svgfile="./icons/select-all.svg"
-					isNative="true"
-					:size="constant.iconSizeList"
-					:title="$t('SelectAll')"
-					@click="selectAll"
-				/>
-				<hr />
-				<div v-for="operation in operations" v-show="operation.show()" :key="operation.id">
+		<div class="toolbar" :class="{ 'toolbar-disabled': showWarning && checkboxSelected > 0 }">
+			<template v-if="checkboxSelected === 0 && !isOperating">
+				<div class="tool_leftitems journal-toolleft">
+					<searchfield
+						ref="searchfield"
+						tabindex="0"
+						@input-changed="searchChanged"
+						:placeholder="$t('SearchJournal')"
+					/>
 					<icon
-						:id="operation.id"
-						:svgfile="operation.svgfile"
+						id="favoritebutton"
+						svgfile="./icons/emblem-favorite.svg"
+						isNative="true"
+						:color="filterFavorite ? buddycolor : undefined"
+						:size="constant.iconSizeList"
+						:title="$t('FilterFavorite')"
+						@click="toggleFilterValue('filterFavorite')"
+					/>
+					<icon
+						id="assignmentbutton"
+						svgfile="./icons/assignment.svg"
+						isNative="true"
+						:color="filterAssignment ? buddycolor : undefined"
+						:size="constant.iconSizeList"
+						:title="$t('FilterAssignment')"
+						@click="toggleFilterValue('filterAssignment')"
+					/>
+					<filter-box 
+						ref="typepalette"
+						name="typepalette"
+						id="typepalette"
+						:options="typePalette"
+						@filter-selected="activityFilterSelected"
+						:title="$t('FilterByType')"
+					></filter-box>
+					<filter-box 
+						ref="datepalette"
+						id="datepalette"
+						name="datepalette"
+						:options="datePalette"
+						@filter-selected="dateFilterSelected"
+						:title="$t('FilterByTime')"
+					></filter-box>
+					<filter-box 
+						ref="sortpalette"
+						id="sortpalette"
+						name="sortpalette"
+						:options="sortPalette"
+						@filter-selected="sortSelected"
+						:title="$t('Sort')"
+					></filter-box>
+					<hr />
+					<icon
+						id="fromdevicebutton"
+						class="toolbutton"
+						svgfile="./icons/copy-from-device.svg"
 						isNative="true"
 						:size="constant.iconSizeList"
-						:title="$t(operation.titleKey)"
-						@click="handleOperation(operation)"
+						:title="$t('CopyFromDevice')"
+						@click="fromDeviceSelected"
 					/>
+					<hr />
+					<icon
+						class="toolbutton"
+						id="toolbar-help-btn"
+						svgfile="./icons/help.svg"
+						isNative="true"
+						:size="47"
+						:color="768"
+						:title="$t('Tutorial')"
+						isNative="true"
+						@click="startTutorial"
+					></icon>
 				</div>
-				<hr />
-				<span>{{ $t("Selected_one", {count: checkboxSelected, total: processedJournal.length}) }}</span>
-			</div>
+				<div class="tool_rightitems">
+					<icon
+						class="toolbutton"
+						id="journal_home_button"
+						svgfile="./icons/view-radial.svg" 
+						isNative="true"
+						:size="47"
+						:title="$t('FavoritesView')"
+						isNative="true"
+						@click="$emit('closeJournal')"
+					></icon>
+				</div>
+			</template>
+			<template v-else>
+				<div class="tool_leftitems" style="gap: 12px">
+					<icon
+						id="unselallbutton"
+						svgfile="./icons/select-none.svg"
+						isNative="true"
+						:size="constant.iconSizeList"
+						:title="$t('UnselectAll')"
+						@click="unselectAll"
+					/>
+					<icon
+						id="selallbutton"
+						svgfile="./icons/select-all.svg"
+						isNative="true"
+						:size="constant.iconSizeList"
+						:title="$t('SelectAll')"
+						@click="selectAll"
+					/>
+					<hr />
+					<div v-for="operation in operations" v-show="operation.show()" :key="operation.id">
+						<icon
+							:id="operation.id"
+							:svgfile="operation.svgfile"
+							isNative="true"
+							:size="constant.iconSizeList"
+							:title="$t(operation.titleKey)"
+							@click="handleOperation(operation)"
+						/>
+					</div>
+					<hr />
+					<span>{{ $t("Selected_one", {count: checkboxSelected, total: processedJournal.length}) }}</span>
+				</div>
+			</template>
 		</div>
 		<transition name="fade" appear>
 			<div class="journal-warningbox" v-show="showWarning">
@@ -321,6 +323,7 @@ const Journal = {
 			checkboxSelected: 0,
 			showWarning: false,
 			isLoading: false,
+			isOperating: false,
 		};
 	},
 
@@ -414,6 +417,7 @@ const Journal = {
 				titleKey: "CopyToLocal",
 				show: () => this.journalType !== this.constant.journalLocal,
 				action: this.copyToLocal,
+				refresh: true,
 			},
 			{
 				id: "copycloudonebutton",
@@ -421,7 +425,8 @@ const Journal = {
 				titleKey: "CopyToPrivate",
 				show: () =>
 					this.journalType !== this.constant.journalRemotePrivate,
-				action: this.copyToRemote,
+				action: this.copyToPrivate,
+				refresh: true,
 			},
 			{
 				id: "copycloudallbutton",
@@ -430,6 +435,7 @@ const Journal = {
 				show: () =>
 					this.journalType !== this.constant.journalRemoteShared,
 				action: this.copyToShared,
+				refresh: true,
 			},
 			{
 				id: "copydevicebutton",
@@ -437,6 +443,7 @@ const Journal = {
 				titleKey: "CopyToDevice",
 				show: () => true,
 				action: this.copyToDevice,
+				refresh: true,
 			},
 			{
 				id: "duplicatebutton",
@@ -472,6 +479,8 @@ const Journal = {
 	methods: {
 		setupJournalEntries() {
 			this.processedJournal = this.journal.map((entry, index) => {
+				entry.isChecked = entry.isChecked || false;
+				entry.isEditingTitle = entry.isEditingTitle || false;
 				if (entry.metadata.buddy_color) {
 					entry.color = sugarizer.modules.xocolor.findIndex(
 						entry.metadata.buddy_color
@@ -695,25 +704,27 @@ const Journal = {
 		},
 		async confirmOperation() {
 			this.showWarning = false;
+			const operation = this.currentOperation;
+			const selectedEntries = this.processedJournal.filter(e => e.isChecked);
+			
 			this.checkboxSelected = 0;
-			for (entry of this.processedJournal) {
-				if (
-					entry.isChecked &&
-					this.currentOperation &&
-					this.currentOperation.action
-				) {
-					entry.isChecked = false;
-					await this.currentOperation.action(entry, true);
+			selectedEntries.forEach(entry => entry.isChecked = false);
+			this.isOperating = true;
+			
+			for (let entry of selectedEntries) {
+				if (operation && operation.action) {
+					await operation.action(entry, true);
 				}
 			}
+			this.isOperating = false;
 			sugarizer.modules.humane.log(
 				this.$t(
-					this.currentOperation.id === "removebutton"
+					operation.id === "removebutton"
 						? "Erasing"
 						: "Copying"
 				)
 			);
-			if (this.currentOperation.refresh)
+			if (operation.refresh)
 				await this.filterJournalEntries();
 		},
 
