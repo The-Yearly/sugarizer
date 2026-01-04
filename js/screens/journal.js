@@ -972,7 +972,7 @@ const Journal = {
 		},
 
 		showLocalJournal() {
-			if (this.journalType === this.constant.journalType) return;
+			if (this.journalType === this.constant.journalLocal) return;
 			this.trace("show_journal", "local");
 			this.journalType = this.constant.journalLocal;
 			this.journalId = null;
