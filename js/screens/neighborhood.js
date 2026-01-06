@@ -67,7 +67,7 @@ const Neighborhood = {
 				<div> {{ serverErr.msg }} </div>
 				<icon-button
 					:text="serverErr.btnText"
-					:id="error-action"
+					:id="'error-action'"
 					:svgfile="serverErr.btnIcon"
 					:color="1024"
 					:size="28"
@@ -642,7 +642,7 @@ const Neighborhood = {
 
 		//prettier-ignore
 		joinActivity(activity, sharedId) {
-			sugarizer.modules.stats.trace("neighborhood_view", "click", "logoff");
+			sugarizer.modules.stats.trace("neighborhood_view", "click", "join_activity");
 			sugarizer.modules.activities.runActivity(activity, null, activity.name, sharedId, false, 'neighborhood_view');
 		},
 		//prettier-ignore
