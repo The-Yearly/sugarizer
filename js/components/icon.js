@@ -56,6 +56,7 @@ const Icon ={
 			disabledData: this.disabled ? this.disabled: false,
 			_originalColor: { fill: null, stroke: null},
 			_element: null,
+			_errorHandler: null,
 			fallback: false
 		}
 	},
@@ -77,6 +78,20 @@ const Icon ={
 				await vm._createIcon(vm.svgfile, vm.colorData, vm.sizeData);
 			})();
 		}
+	},
+	unmounted() {
+		// Clean up event listeners
+		if (this._element && this._errorHandler) {
+			const useElement = this._element.querySelector('use');
+			if (useElement) {
+				useElement.removeEventListener('error', this._errorHandler);
+			}
+		}
+		// Clear DOM references
+		this._element = null;
+		this._svg = null;
+		this._originalColor = null;
+		this._errorHandler = null;
 	},
 	computed: {
 		gensvg: function() {
@@ -221,9 +236,10 @@ const Icon ={
 			}
 
 			var useElement = document.createElementNS(svgElement.namespaceURI,"use");
-			useElement.addEventListener('error', function() {
+			this._errorHandler = function() {
 				console.log(svgfile+' error');
-			}) // Error loading SVG file
+			};
+			useElement.addEventListener('error', this._errorHandler); // Error loading SVG file
 
 			var xref = svgfile+"#icon";
 			useElement.setAttribute("xlink:href",xref);
