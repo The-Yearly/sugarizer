@@ -103,6 +103,12 @@ const ListView = {
 		this.getUser();
 	},
 
+	beforeUnmount() {
+		if (this.timer) {
+			window.clearTimeout(this.timer);
+		}
+	},
+
 	computed: {
 		sortedActivities() {
 			return this.sortByName(this.activities);
@@ -144,7 +150,7 @@ const ListView = {
 			}
 
 			this.$refs.popup.hide();
-			sugarizer.modules.user.update({"favorites": this.favactivities }).then((user) => {
+			sugarizer.modules.user.update({ "favorites": this.favactivities }).then((user) => {
 				const iconRef = this.$refs["star" + activity.id][0];
 				if (iconRef.colorData == this.buddycolor) {
 					iconRef.colorData = 256;
@@ -206,9 +212,9 @@ const ListView = {
 
 		async showPopupTimer(e) {
 			if (this.timer != null) {
-				window.clearInterval(this.timer);
+				window.clearTimeout(this.timer);
 			}
-			this.timer = window.setInterval(this.showPopup.bind(this), this.constant.timerPopupDuration, e);
+			this.timer = window.setTimeout(this.showPopup.bind(this), this.constant.timerPopupDuration, e);
 		},
 
 		async showPopup(e) {
@@ -217,7 +223,7 @@ const ListView = {
 				this.removeCurrentPopup();
 			}
 			this.popupShown = true;
-			window.clearInterval(this.timer);
+			window.clearTimeout(this.timer);
 			this.timer = null;
 			await this.computePopup();
 			if (e.target.tagName == 'svg') {
@@ -242,9 +248,9 @@ const ListView = {
 
 		async removePopupTimer(e) {
 			if (this.timer != null) {
-				window.clearInterval(this.timer);
+				window.clearTimeout(this.timer);
 			}
-			this.timer = window.setInterval(this.removePopup.bind(this), this.constant.timerPopupDuration, e);
+			this.timer = window.setTimeout(this.removePopup.bind(this), this.constant.timerPopupDuration, e);
 		},
 
 		async removePopup(e) {
@@ -256,7 +262,7 @@ const ListView = {
 		removeCurrentPopup() {
 			this.$refs.popup.hide();
 			this.popupShown = false;
-			window.clearInterval(this.timer);
+			window.clearTimeout(this.timer);
 			this.timer = null;
 		},
 
@@ -269,7 +275,7 @@ const ListView = {
 			}
 		},
 		clearSearchField() {
-			this.$emit('clear-searchfield'); 
+			this.$emit('clear-searchfield');
 		},
 		startActivitiesTutorial(startFromIndex) {
 			sugarizer.modules.tutorial.startTutorial(sugarizer.constant.activities, {
