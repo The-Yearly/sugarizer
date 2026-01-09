@@ -114,90 +114,32 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 			}
 
 			var waterBehavior = Physics.behavior('water', function (parent) {
+				return {
+					behave: function (data) {
+						if (!WATER.enabled) return;
+						var bodies = data.bodies;
+						for (var i = 0; i < bodies.length; i++) {
+							var body = bodies[i];
+							// only apply if body is inside water region
+							if (body.state.pos.y < WATER.y) continue;
+							const v = body.state.vel;
+							// 1️⃣ Drag (slows motion)
+							body.applyForce({
+								x: -v.x * WATER.drag * body.mass,
+								y: -v.y * WATER.drag * body.mass
+							});
+							// 2️⃣ Buoyancy (counter gravity)
+							const buoyancy = WATER.density - body.density;
+							body.applyForce({
+								x: 0,
+								y: -buoyancy * body.mass * WATER.lift
+							});
+							// 3️⃣ Rotational damping
+							body.state.angular.vel *= 0.9;
+						}
+					}};
+				});
 
-  return {
-    behave: function (data) {
-
-      if (!WATER.enabled) return;
-
-      var bodies = data.bodies;
-
-      for (var i = 0; i < bodies.length; i++) {
-        var body = bodies[i];
-
-        // only apply if body is inside water region
-        if (body.state.pos.y < WATER.y) continue;
-
-        const v = body.state.vel;
-
-        // 1️⃣ Drag (slows motion)
-        body.applyForce({
-          x: -v.x * WATER.drag * body.mass,
-          y: -v.y * WATER.drag * body.mass
-        });
-
-        // 2️⃣ Buoyancy (counter gravity)
-        const buoyancy = WATER.density - body.density;
-
-        body.applyForce({
-            x: 0,
-            y: -buoyancy * body.mass * WATER.lift
-          });
-        
-
-        // 3️⃣ Rotational damping
-        body.state.angular.vel *= 0.9;
-      }
-    }
-  };
-});
-
-
-
-
-
-
-// 			Physics.behavior('water', function (parent) {
-//     return {
-//         init: function (options) {
-//             parent.init.call(this);
-//         },
-//         connect: function (world) {
-//             world.on('integrate:velocities', this.behave, this);
-//         },
-//         disconnect: function (world) {
-//             world.off('integrate:velocities', this.behave, this);
-//         },
-//         behave: function (data) {
-//     if (!watermode) return;
-
-//     var bodies = data.bodies;
-//     var gravityConstant = 0.0004; // Matches your setGravity value
-
-//     for (var i = 0; i < bodies.length; i++) {
-//         var body = bodies[i];
-//         if (body.awaitingdensityInput || body.treatment === 'static') continue;
-
-//         // Use your custom values, falling back to 1 if not defined
-//         var rho_obj = body.customDensity || 1;
-//         var volume = body.customVolume || 1; 
-        
-//         // BUOYANCY FORMULA:
-// 		var buoyancyAcc = (waterDensity / rho_obj - 1) * gravityConstant;
-
-//         // Apply upward force (negative Y)
-//         body.state.acc.vadd(Physics.vector(0, -buoyancyAcc));
-
-//         // SIMPLE DRAG
-//         var dragCoeff = 0.03; // "water thickness"
-// 		body.state.acc.x -= (dragCoeff * body.state.vel.x);
-// 		body.state.acc.y -= (dragCoeff * body.state.vel.y);
-
-//     }
-// }
-
-//     };
-// });
 
 
 			// resize events
