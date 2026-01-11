@@ -94,6 +94,8 @@ const ListView = {
 			constant: {
 				timerPopupDuration: 1000,
 			},
+			move_scrollbar: true, // Flag to control scroll restoration
+			scrollbar_session_value: 0, // Saved scroll position from user preferences
 		}
 	},
 
@@ -101,6 +103,22 @@ const ListView = {
 
 	mounted() {
 		this.getUser();
+		
+		// Setup scroll event listener to save scroll position (like original PR #948)
+		const container = document.getElementById('canvas');
+		if (container) {
+			container.addEventListener('scroll', this.onScroll);
+		}
+	},
+
+	beforeUnmount() {
+		// Remove scroll event listener
+		const container = document.getElementById('canvas');
+		if (container) {
+			container.removeEventListener('scroll', this.onScroll);
+		}
+		
+		this.move_scrollbar = false;
 	},
 
 	computed: {
@@ -128,25 +146,17 @@ const ListView = {
 				this.favactivities = sugarizer.modules.activities.getFavoritesName();
 				this.activitiesLoaded = true;
 				
+				this.scrollbar_session_value = user.scrollValue || 0;
+				
 				// Restore scroll position AFTER activities are loaded
 				this.$nextTick(() => {
-					const shouldRestore = localStorage.getItem('listview_should_restore');
-					
-					if (shouldRestore === 'true') {
+					if (this.scrollbar_session_value > 0 && this.move_scrollbar) {
 						const container = document.getElementById('canvas');
-						const savedPosition = localStorage.getItem('listview_scroll_position');
-						
-						if (container && savedPosition) {
+						if (container) {
 							// Use a small delay to ensure content is fully rendered
 							setTimeout(() => {
-								const scrollValue = parseInt(savedPosition, 10);
-								container.scrollTop = scrollValue;
-								
-								// Clear the flag so we don't restore on next mount
-								localStorage.removeItem('listview_should_restore');
+								container.scrollTop = this.scrollbar_session_value;
 							}, 100);
-						} else {
-							localStorage.removeItem('listview_should_restore');
 						}
 					}
 				});
@@ -199,14 +209,36 @@ const ListView = {
 		},
 
 		launchActivity(activity) {
-			// Save scroll position before launching activity
+			// Save scroll position to user preferences before launching activity
 			const container = document.getElementById('canvas');
 			if (container) {
 				const scrollPos = container.scrollTop;
-				localStorage.setItem('listview_scroll_position', scrollPos);
-				localStorage.setItem('listview_should_restore', 'true'); // Flag to indicate we should restore
-			} 
+				sugarizer.modules.user.update({ scrollValue: scrollPos });
+			}
 			sugarizer.modules.activities.runActivity(activity, null, activity.title, undefined, false, 'list_view');
+		},
+
+		onScroll(event) {
+			if (!this.move_scrollbar) {
+				const container = event.target;
+				const scrollPos = Math.ceil(container.scrollTop);
+				const maxScroll = Math.ceil(container.scrollHeight - container.clientHeight);
+				
+				const scrollValue = scrollPos > maxScroll ? maxScroll : scrollPos;
+				sugarizer.modules.user.update({ scrollValue: scrollValue });
+			}
+			
+			if (this.move_scrollbar) {
+				const container = event.target;
+				const currentScroll = Math.ceil(container.scrollTop);
+				
+				// Stop automatic scrolling once we reach or pass the saved position
+				if (currentScroll >= this.scrollbar_session_value) {
+					this.move_scrollbar = false;
+				} else {
+					container.scrollTop = this.scrollbar_session_value;
+				}
+			}
 		},
 
 		computePopup() {
