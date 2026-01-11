@@ -61,16 +61,22 @@ define(["activity/ol","print","util","colormyworld","humane","flag","l10n"],
 				});
 
 				if (clickedFeature) {
-					var currentStyle = clickedFeature.getStyle();
+					var selectedColor = colormyworld.getRGBColorString();
+					var style = clickedFeature.getStyle();
 
-					if (currentStyle) {
+					var currentFill = null;
+					if (style && style.getFill()) {
+						currentFill = style.getFill().getColor();
+					}
+
+					if (currentFill && currentFill === selectedColor) {
 						clickedFeature.setStyle(null);
-					} else {
-						var color = colormyworld.getRGBColorString() || 'rgb(100, 200, 255)';
+					} 
+					else {
 						var strokeColor = (typeof DEFAULT_STROKE !== 'undefined') ? DEFAULT_STROKE : '#333333';
 
 						var newStyle = new ol.style.Style({
-							fill: new ol.style.Fill({ color: color }),
+							fill: new ol.style.Fill({ color: selectedColor }),
 							stroke: new ol.style.Stroke({ color: strokeColor, width: 1.5 })
 						});
 						clickedFeature.setStyle(newStyle);
@@ -78,7 +84,15 @@ define(["activity/ol","print","util","colormyworld","humane","flag","l10n"],
 				}
 
 				if (!FOUND) {
-					colormyworld.set_background(null);
+					var selectedColor = colormyworld.getRGBColorString();
+					var currentBg = colormyworld.background_color;
+
+					if (currentBg === selectedColor) {
+						colormyworld.set_background('rgb(0,120,255)');
+					} 
+					else {
+						colormyworld.set_background(selectedColor);
+					}
 				}
 			} else {
 				colormyworld.check_feature(evt.pixel);
