@@ -127,6 +127,29 @@ const ListView = {
 				});
 				this.favactivities = sugarizer.modules.activities.getFavoritesName();
 				this.activitiesLoaded = true;
+				
+				// Restore scroll position AFTER activities are loaded
+				this.$nextTick(() => {
+					const shouldRestore = localStorage.getItem('listview_should_restore');
+					
+					if (shouldRestore === 'true') {
+						const container = document.getElementById('canvas');
+						const savedPosition = localStorage.getItem('listview_scroll_position');
+						
+						if (container && savedPosition) {
+							// Use a small delay to ensure content is fully rendered
+							setTimeout(() => {
+								const scrollValue = parseInt(savedPosition, 10);
+								container.scrollTop = scrollValue;
+								
+								// Clear the flag so we don't restore on next mount
+								localStorage.removeItem('listview_should_restore');
+							}, 100);
+						} else {
+							localStorage.removeItem('listview_should_restore');
+						}
+					}
+				});
 			}, (error) => {
 				throw new Error('Unable to load the user, error ' + error);
 			});
@@ -176,6 +199,13 @@ const ListView = {
 		},
 
 		launchActivity(activity) {
+			// Save scroll position before launching activity
+			const container = document.getElementById('canvas');
+			if (container) {
+				const scrollPos = container.scrollTop;
+				localStorage.setItem('listview_scroll_position', scrollPos);
+				localStorage.setItem('listview_should_restore', 'true'); // Flag to indicate we should restore
+			} 
 			sugarizer.modules.activities.runActivity(activity, null, activity.title, undefined, false, 'list_view');
 		},
 
