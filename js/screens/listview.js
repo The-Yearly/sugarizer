@@ -4,7 +4,7 @@
 
 const ListView = {
 	name: 'ListView',
-	template: `<transition-group name="fade" appear>
+	template: `<transition-group name="fade" appear @after-enter="restoreScroll">
 					<div class="listview" v-for="(activity, index) in sortedActivities" :key="activity.id">
 						<div class="listview_left" >
 							<icon
@@ -94,7 +94,7 @@ const ListView = {
 			constant: {
 				timerPopupDuration: 1000,
 			},
-			move_scrollbar: true, // Flag to control scroll restoration
+			scrollRestored: false, 
 			scrollbar_session_value: 0, // Saved scroll position from user preferences
 		}
 	},
@@ -104,7 +104,7 @@ const ListView = {
 	mounted() {
 		this.getUser();
 		
-		// Setup scroll event listener to save scroll position (like original PR #948)
+		// Setup scroll event listener to save scroll position 
 		const container = document.getElementById('canvas');
 		if (container) {
 			container.addEventListener('scroll', this.onScroll);
@@ -117,8 +117,6 @@ const ListView = {
 		if (container) {
 			container.removeEventListener('scroll', this.onScroll);
 		}
-		
-		this.move_scrollbar = false;
 	},
 
 	computed: {
@@ -137,33 +135,33 @@ const ListView = {
 
 	methods: {
 		async getUser() {
-			sugarizer.modules.user.get().then((user) => {
-				this.buddycolor = user.color;
-				sugarizer.modules.activities.updateFavorites(user.favorites);
-				this.activities = sugarizer.modules.activities.get().filter((activity) => {
-					return activity.name.toUpperCase().includes(this.filter.toUpperCase())
-				});
-				this.favactivities = sugarizer.modules.activities.getFavoritesName();
-				this.activitiesLoaded = true;
-				
-				this.scrollbar_session_value = user.scrollValue || 0;
-				
-				// Restore scroll position AFTER activities are loaded
-				this.$nextTick(() => {
-					if (this.scrollbar_session_value > 0 && this.move_scrollbar) {
-						const container = document.getElementById('canvas');
-						if (container) {
-							// Use a small delay to ensure content is fully rendered
-							setTimeout(() => {
-								container.scrollTop = this.scrollbar_session_value;
-							}, 100);
-						}
-					}
-				});
-			}, (error) => {
-				throw new Error('Unable to load the user, error ' + error);
-			});
+			const user = await sugarizer.modules.user.get();
+
+			this.buddycolor = user.color;
+			this.scrollbar_session_value = user.scrollValue || 0;
+
+			sugarizer.modules.activities.updateFavorites(user.favorites);
+
+			this.activities = sugarizer.modules.activities.get().filter(a =>
+				a.name.toUpperCase().includes(this.filter.toUpperCase())
+			);
+			this.favactivities = sugarizer.modules.activities.getFavoritesName();
+
+			this.activitiesLoaded = true;
 		},
+
+				
+				
+		restoreScroll() {
+			if (this.scrollRestored) return;
+			this.scrollRestored = true;
+
+			const container = document.getElementById('canvas');
+			if (container && this.scrollbar_session_value > 0) {
+				container.scrollTop = this.scrollbar_session_value;
+			}
+		},
+				
 
 		async toggleFavorite(activity) {
 			sugarizer.modules.stats.trace('list_view', 'switch_favorite', activity.id, null);
@@ -219,26 +217,13 @@ const ListView = {
 		},
 
 		onScroll(event) {
-			if (!this.move_scrollbar) {
-				const container = event.target;
-				const scrollPos = Math.ceil(container.scrollTop);
-				const maxScroll = Math.ceil(container.scrollHeight - container.clientHeight);
-				
-				const scrollValue = scrollPos > maxScroll ? maxScroll : scrollPos;
-				sugarizer.modules.user.update({ scrollValue: scrollValue });
-			}
-			
-			if (this.move_scrollbar) {
-				const container = event.target;
-				const currentScroll = Math.ceil(container.scrollTop);
-				
-				// Stop automatic scrolling once we reach or pass the saved position
-				if (currentScroll >= this.scrollbar_session_value) {
-					this.move_scrollbar = false;
-				} else {
-					container.scrollTop = this.scrollbar_session_value;
-				}
-			}
+			const container = event.target;
+			const scrollPos = Math.ceil(container.scrollTop);
+			const maxScroll = Math.ceil(container.scrollHeight - container.clientHeight);
+
+			sugarizer.modules.user.update({
+				scrollValue: Math.min(scrollPos, maxScroll)
+			});
 		},
 
 		computePopup() {
