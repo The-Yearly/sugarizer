@@ -113,19 +113,19 @@ define(["lib/i18next.min.js", "lib/i18next-vue.js"], function (
 		if (bytes === undefined) return "-";
 		var formatted = "";
 		if (bytes > 1048576) {
-			formated =
+			formatted =
 				(bytes / 1024 / 1024).toFixed() +
 				" " +
 				i18next.t("ShortForMegabytes");
 		} else if (bytes > 1024) {
-			formated =
+			formatted =
 				(bytes / 1024).toFixed() + " " + i18next.t("ShortForKilobytes");
 		} else if (bytes == 0) {
-			formated = "-";
+			formatted = "-";
 		} else {
-			formated = bytes + " " + i18next.t("ShortForBytes");
+			formatted = bytes + " " + i18next.t("ShortForBytes");
 		}
-		return formated;
+		return formatted;
 	};
 
 	return {
