@@ -134,21 +134,22 @@ const ListView = {
 	},
 
 	methods: {
-		async getUser() {
-			const user = await sugarizer.modules.user.get();
 
-			this.buddycolor = user.color;
-			this.scrollbar_session_value = user.scrollValue || 0;
-
-			sugarizer.modules.activities.updateFavorites(user.favorites);
-
-			this.activities = sugarizer.modules.activities.get().filter(a =>
-				a.name.toUpperCase().includes(this.filter.toUpperCase())
-			);
-			this.favactivities = sugarizer.modules.activities.getFavoritesName();
-
-			this.activitiesLoaded = true;
-		},
+		   async getUser() {
+			   try {
+				   const user = await sugarizer.modules.user.get();
+				   this.buddycolor = user.color;
+				   this.scrollbar_session_value = user.scrollValue || 0;
+				   sugarizer.modules.activities.updateFavorites(user.favorites);
+				   this.activities = sugarizer.modules.activities.get().filter(a =>
+					   a.name.toUpperCase().includes(this.filter.toUpperCase())
+				   );
+				   this.favactivities = sugarizer.modules.activities.getFavoritesName();
+				   this.activitiesLoaded = true;
+			   } catch (error) {
+				   throw new Error('Unable to get the user, error ' + error);
+			   }
+		   },
 
 				
 				
