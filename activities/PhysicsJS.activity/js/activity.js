@@ -52,6 +52,8 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 
 		Physics({ timestep: 6 }, function (world) {
 
+			window.world = world;
+
 			// bounds of the window
 			var viewWidth = innerWidth
 				,viewportBounds = Physics.aabb(0-outerWidth, toolbarHeight, innerWidth+outerWidth, innerHeight)
@@ -100,45 +102,101 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				,restitution: 0.2
 				,cof: 0.8
 			});
-
+			// Change your WATER object to this:
+			const WATER_PERCENTAGE = 0.60; // 40% of the screen will be water
 			const WATER = {
-				y: 400,        // water surface Y
+				// This calculates the line where water starts
+				y: innerHeight - (innerHeight * WATER_PERCENTAGE), 
 				density: 0.0011,
-				drag: 0.02,
+				drag: 0.02,lift: 0.9,
 				lift: 0.9,
 				enabled: false
 			};
-			// Water behavior
-			function isInWater(body) {
-				return body.state.pos.y > WATER.y;
-			}
+
+			
+
+			const DENSITY_MAP = {
+				VERY_LIGHT: 0.0008,
+				LIGHT: 0.0009,
+				MEDIUM: 0.0012,
+				HEAVY: 0.0018,
+				VERY_HEAVY: 0.0025
+			};
+			function getDensityBySize(body) {
+				if (body.geometry.name === 'circle') {
+					const r = body.radius;
+					if (r < 50) return DENSITY_MAP.VERY_LIGHT;
+					else if (r < 60 && r >= 50) return DENSITY_MAP.LIGHT;
+					else if (r >= 100) return DENSITY_MAP.VERY_HEAVY;
+					else if (r > 80) return DENSITY_MAP.HEAVY;
+					else return DENSITY_MAP.MEDIUM;
+				} 
+    
+				if (body.geometry.name === 'rectangle') {
+					const size = Math.max(body.geometry.width, body.geometry.height);
+					if (size < 50) return DENSITY_MAP.VERY_LIGHT;
+					else if (size < 70) return DENSITY_MAP.LIGHT;
+					else if (size > 80) return DENSITY_MAP.HEAVY;
+					else if (size >= 100) return DENSITY_MAP.VERY_HEAVY;
+					else return DENSITY_MAP.MEDIUM;
+				}
+
+				if (body.geometry.name === 'convex-polygon') {
+					const q=body.geometry.vertices[0];
+					const polyRadius = Math.sqrt(q.x * q.x + q.y * q.y);
+					if (polyRadius < 50) {
+						return DENSITY_MAP.VERY_LIGHT;
+					} else if (polyRadius < 70 && polyRadius >= 50) {
+						return DENSITY_MAP.LIGHT;
+					} else if (polyRadius > 80) {
+						return DENSITY_MAP.HEAVY;
+					} else if (polyRadius >= 100) {
+						return DENSITY_MAP.VERY_HEAVY;
+					}
+					else{
+						return DENSITY_MAP.MEDIUM;
+					}
+				}
+				return DENSITY_MAP.MEDIUM; 
+				}
+
+
 
 			var waterBehavior = Physics.behavior('water', function (parent) {
 				return {
 					behave: function (data) {
 						if (!WATER.enabled) return;
 						var bodies = data.bodies;
+						const gravityAcc = 0.0004; 
 						for (var i = 0; i < bodies.length; i++) {
 							var body = bodies[i];
-							// only apply if body is inside water region
 							if (body.state.pos.y < WATER.y) continue;
+							body.density = getDensityBySize(body);
 							const v = body.state.vel;
-							// 1️⃣ Drag (slows motion)
+							// Dynamic Drag
+							const dragFactor = (body.density > WATER.density) ? WATER.drag * 0.5 : WATER.drag;
 							body.applyForce({
-								x: -v.x * WATER.drag * body.mass,
-								y: -v.y * WATER.drag * body.mass
+								x: -v.x * dragFactor * body.mass,
+								y: -v.y * dragFactor * body.mass
 							});
-							// 2️⃣ Buoyancy (counter gravity)
-							const buoyancy = WATER.density - body.density;
+							// Archimedes Buoyancy Buoyancy Force = Weight of displaced water
+							// Formula: F = -(Density_Water / Density_Body) * Weight_of_Body
+							const displacementRatio = WATER.density / body.density;
+							const weight = body.mass * gravityAcc;
+							const buoyancyForceY = -(displacementRatio * weight);
 							body.applyForce({
 								x: 0,
-								y: -buoyancy * body.mass * WATER.lift
+								y: buoyancyForceY * WATER.lift
 							});
-							// 3️⃣ Rotational damping
-							body.state.angular.vel *= 0.9;
+							// If density is higher than water, adding a little extra downward push
+							if (body.density > WATER.density) {
+								body.applyForce({ x: 0, y: 0.001 * body.mass });
+							}
+							body.state.angular.vel *= 0.95;
 						}
-					}};
-				});
+					}
+				};
+			});
 
 
 
@@ -155,6 +213,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					edgeBounce.setAABB(viewportBounds);
 					innerWidth = body.offsetWidth;
 					innerHeight = body.offsetHeight;
+					WATER.y = innerHeight - (innerHeight * WATER_PERCENTAGE);
 					zoom();
 				}, 500);
 
@@ -227,6 +286,11 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				newtonMode = !newtonMode;
 				if (newtonMode) {
 					world.remove(gravity);
+					world.remove(waterBehavior);
+					WATER.enabled = false;
+					watermode = false; 
+					waterButton.classList.remove('active');
+					document.getElementById('viewport').classList.remove('water-mode');
 					world.add(newton);
 					appleButton.classList.add('active');
 					gravityButton.disabled = true;
@@ -242,6 +306,10 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
     			watermode = !watermode;
     			if (watermode) {
 					WATER.enabled = true;
+					newtonMode = false;
+					world.remove(newton);
+					appleButton.classList.remove('active');
+					world.add(gravity);
 					world.add(waterBehavior);
         			waterButton.classList.add('active');
 					gravityButton.disabled = true;
@@ -253,7 +321,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					gravityButton.disabled = false;
         			document.getElementById('viewport').classList.remove('water-mode');
     			}
-			});
+			}, true);
 
 			function accelerationChanged(accelerationEvent) {
 				if (!sensorMode) return;
@@ -346,61 +414,24 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				else if (newtype == -1) document.getElementById("clear-button").classList.add('active');
 			}
 
-			const DENSITY = {
-                light:  [0.0004, 0.0008],
-                medium: [0.0009, 0.0014],
-                heavy:  [0.0015, 0.0022]
-            };
-
-			function rand(min, max) {
-				return Math.random() * (max - min) + min;
-			}
-
-			function pickDensity(range) {
-				return rand(DENSITY[range][0], DENSITY[range][1]);
-			}
-
-			function circleSizeFactor(r) {
-                return Math.min((r - 20) / (90 - 20), 1);
-            }
-
-			function rectangleSizeFactor(l) {
-				return Math.min((l - 50) / (120 - 50), 1);
-			}
-
-			function polySizeFactor(radius) {
-				return (radius - 20) / (70 - 20);
-			}
-
-			function densityFromSize(factor) {
-				if (factor < 0.33) return pickDensity("light");
-				if (factor < 0.66) return pickDensity("medium");
-				return pickDensity("heavy");
-			}
-
-
-
+			
 
 			function dropInBody(type, pos){
 
 				var body;
 				var c;
-				var d;
 
 				switch (type){
 
 						// add a circle
 					case 0:
 						c = colors[random(0, colors.length-1)];
-						var r= random(20,90);
-						d = densityFromSize(circleSizeFactor(r));
 						body = Physics.body('circle',{
 							x: pos.x
 							,y: pos.y
 							,vx: random(-5, 5)/100
-							,radius: r
+							,radius: 40
 							,restitution: 0.9
-							,density: d
 							,styles: {
 								fillStyle: c[0]
 								,strokeStyle: c[1]
@@ -413,16 +444,14 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 						// add a square
 					case 1:
 						c = colors[random(0, colors.length-1)];
-						var l = random(50, 150);
-						d= densityFromSize(rectangleSizeFactor(l));
+						var l = random(0, 70)
 						body = Physics.body('rectangle',{
-							width: l
-							,height: l
+							width: 50+l
+							,height: 50+l
 							,x: pos.x
 							,y: pos.y
 							,vx: random(-5, 5)/100
 							,restitution: 0.9
-							,density: d
 							,styles: {
 								fillStyle: c[0]
 								,strokeStyle: c[1]
@@ -438,16 +467,13 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					case 3:
 						var s = (type == 2 ? 3 : random( 5, 10 ));
 						c = colors[ random(0, colors.length-1) ];
-						var polyRadius = random(20, 70);
-						d= densityFromSize(polySizeFactor(polyRadius));
 						body = Physics.body('convex-polygon',{
-							vertices: Physics.geometry.regularPolygonVertices( s, polyRadius )
+							vertices: Physics.geometry.regularPolygonVertices( s, 30 )
 							,x: pos.x
 							,y: pos.y
 							,vx: random(-5, 5)/100
 							,angle: random( 0, 2 * Math.PI )
 							,restitution: 0.9
-							,density: d
 							,styles: {
 								fillStyle: c[0]
 								,strokeStyle: c[1]
@@ -459,6 +485,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				}
 
 				body.treatment = "static";
+				body.density = getDensityBySize(body);
 				world.add( body );
 				return body;
 			}
@@ -529,7 +556,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				} else if (savedObject.type == "rectangle") {
 					newOptions.width = savedObject.width;
 					newOptions.height = savedObject.height;
-				} else if (savedObject.type = "convex-polygon") {
+				} else if (savedObject.type == "convex-polygon") {
 					newOptions.vertices = savedObject.vertices;
 				}
 				return Physics.body(savedObject.type, newOptions);
@@ -646,17 +673,16 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 								object.radius = Math.max(40, distance);
 							} else if (object.type == "rectangle") {
 								object.width = object.height = Math.max(50, distance);
-							} else if (object.type = "convex-polygon") {
+							} else if (object.type == "convex-polygon") {
 								object.vertices = Physics.geometry.regularPolygonVertices( object.vertices.length, Math.max(30, distance));
 							}
-							var saveddensity = createdBody.density || 1;
 							world.removeBody(createdBody);
 							var v1 = new Physics.vector(createdStart.x, 0);
 							var v2 = new Physics.vector(pos.x-createdStart.x, pos.y-createdStart.y);
 							object.angle = -v1.angle(v2);
 							createdBody = deserializeObject(object);
 							createdBody.treatment = watermode ? "dynamic" : "static";
-							applyDensityFromdensity(createdBody, saveddensity);
+							
 							world.add(createdBody);
 						}
 					}
