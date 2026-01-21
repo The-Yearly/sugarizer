@@ -204,7 +204,8 @@ define(["sugar-web/activity/activity","sugar-web/datastore","sugar-web/env","tex
             };
             toonModel.showWait();
             if (editMode) {
-                toonModel.initPreviews();
+                // Wait for all previews to be generated before showing sort view
+                toonModel.initPreviews(function(){;
                 // resize the canvas
                 sortCanvas.width = window.innerWidth - sugarCellSize * 2;
                 var boxWidth = sortCanvas.width / toonModel.getData()['boxs'].length;
@@ -212,14 +213,17 @@ define(["sugar-web/activity/activity","sugar-web/datastore","sugar-web/env","tex
                 sortCanvas.style.left = ((window.innerWidth - sortCanvas.width) / 2) + "px";
                 sortCanvas.style.top = ((window.innerHeight - sortCanvas.height) / 2) + "px";
                 toonModel.initSort(sortCanvas);
+                toonModel.hideWait();
+                    // switch editMode
+                    editMode = !editMode;
+                });
             } else {
                 toonModel.finishSort();
                 toonModel.init();
+                toonModel.hideWait();
+                // switch editMode
+                editMode = ! editMode;
             };
-            toonModel.hideWait();
-            // switch editMode
-            editMode = ! editMode;
-
         });
 
         var cleanAllButton = document.getElementById("clean-all-button");
