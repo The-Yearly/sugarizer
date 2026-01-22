@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - UUID v4 generation bug: incorrect bitwise operation forces variant to 8 #1840
 - Variable Shadowing - Overwrites Module Object #1846
 - Use of '=' instead of '==' in if else statement in Physics game activity.js #1870
+- Camera remains active when toggling off in QRCode activity (Web/Desktop) #1911
 
 ## [1.9.0] - 2025-03-25
 ### Added
