@@ -135,9 +135,8 @@ const ListView = {
 
 	methods: {
 
-		   async getUser() {
-			   try {
-				   const user = await sugarizer.modules.user.get();
+		   getUser() {
+			   sugarizer.modules.user.get().then((user) => {
 				   this.buddycolor = user.color;
 				   this.scrollbar_session_value = user.scrollValue || 0;
 				   sugarizer.modules.activities.updateFavorites(user.favorites);
@@ -146,9 +145,9 @@ const ListView = {
 				   );
 				   this.favactivities = sugarizer.modules.activities.getFavoritesName();
 				   this.activitiesLoaded = true;
-			   } catch (error) {
+			   }, (error) => {
 				   throw new Error('Unable to get the user, error ' + error);
-			   }
+			   });
 		   },
 
 				
