@@ -2,15 +2,26 @@ const TypingEffect = {
 	props: ["usersTyping"],
 	template: `
 		<div class="loader-container">
-			<div class="dots" v-if="Object.keys(usersTyping).length > 0">
+			<div class="dots" v-if="keys.length > 0">
 			  <span class="dot"></span>
 			  <span class="dot"></span>
 			  <span class="dot"></span>
 			</div>
 			<div>
-			    <div v-html="typingString"></div>
+				<div v-if="keys.length === 1">
+					<strong>{{ usersTyping[keys[0]].name }}</strong> {{ l10n.stringIs }} {{ l10n.stringTyping }}
+				</div>
+				<div v-else-if="keys.length === 2">
+					<strong>{{ usersTyping[keys[0]].name }}</strong> {{ l10n.stringAnd }} <strong>{{ usersTyping[keys[1]].name }}</strong> {{ l10n.stringAre }} {{ l10n.stringTyping }}
+				</div>
+				<div v-else-if="keys.length > 2">
+					<span v-for="(key, index) in keys.slice(0, -1)" :key="key">
+						<strong>{{ usersTyping[key].name }}</strong><span v-if="index < keys.length - 2">, </span>
+					</span>
+					<span> {{ l10n.stringAnd }} <strong>{{ usersTyping[keys[keys.length - 1]].name }}</strong> {{ l10n.stringAre }} {{ l10n.stringTyping }}</span>
+				</div>
 			</div>
-		<div>
+		</div>
 	`,
 	data() {
 		return {
@@ -33,22 +44,8 @@ const TypingEffect = {
 		);
 	},
 	computed: {
-		typingString() {
-			const l10n = this.l10n;
-			let users = this.usersTyping;
-			let keys = Object.keys(users);
-			if (keys.length <= 0) {
-				return "";
-			} else if (keys.length === 1) {
-				return `<strong>${users[keys[0]].name}</strong> ${l10n.stringIs} ${l10n.stringTyping}`;
-			} else if (keys.length === 2) {
-				return `<strong>${users[keys[0]].name}</strong> ${l10n.stringAnd} <strong>${users[keys[1]].name}</strong> ${l10n.stringAre} ${l10n.stringTyping}`;
-			} else {
-				const lastKey = keys.pop();
-				console.log(keys, lastKey);
-				const usersList = keys.map((key) => `<strong>${users[key].name}</strong>`).join(", ");
-				return `${usersList}, ${l10n.stringAnd} <strong>${users[lastKey].name}</strong> ${l10n.stringAre} ${l10n.stringTyping}`;
-			}
+		keys() {
+			return Object.keys(this.usersTyping);
 		},
 	},
 	methods: {},
