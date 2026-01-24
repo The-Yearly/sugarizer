@@ -8,18 +8,119 @@ body {
   width: 100%;
 }
 
-#viewport.water-mode::after {
+#viewport {
+    height: 100vh;
+    width: 100%;
+    position: relative;
+}
+
+/* Bottom water (default) */
+#viewport.water-mode[data-water-region="bottom"]::after {
     content: "";
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
-    /* This must match (WATER_PERCENTAGE * 100) in activity.js */
-    height: 60%;          
+    height: 60%;
     background: rgba(0, 150, 255, 0.3);
-    border-top: 2px solid rgba(0, 200, 255, 0.5); /* Adds a "surface" line */
+    border-top: 2px solid rgba(0, 200, 255, 0.5);
     pointer-events: none;
-    z-index: 2; /* Ensures it sits above the background but below UI */
+    z-index: 2;
+}
+
+/* Top water */
+#viewport.water-mode[data-water-region="top"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    background: rgba(0, 150, 255, 0.3);
+    border-bottom: 2px solid rgba(0, 200, 255, 0.5);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Right water */
+#viewport.water-mode[data-water-region="right"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 60%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    border-left: 2px solid rgba(0, 200, 255, 0.5);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Left water */
+#viewport.water-mode[data-water-region="left"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 60%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    border-right: 2px solid rgba(0, 200, 255, 0.5);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Triangular regions using clip-path */
+#viewport.water-mode[data-water-region="bottom-right"]::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    clip-path: polygon(40% 100%, 100% 100%, 100% 40%);
+    pointer-events: none;
+    z-index: 2;
+}
+
+#viewport.water-mode[data-water-region="bottom-left"]::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    clip-path: polygon(0 40%, 0 100%, 60% 100%);
+    pointer-events: none;
+    z-index: 2;
+}
+
+#viewport.water-mode[data-water-region="top-right"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    clip-path: polygon(40% 0, 100% 0, 100% 60%);
+    pointer-events: none;
+    z-index: 2;
+}
+
+#viewport.water-mode[data-water-region="top-left"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 150, 255, 0.3);
+    clip-path: polygon(0 0, 60% 0, 0 60%);
+    pointer-events: none;
+    z-index: 2;
 }
 
 

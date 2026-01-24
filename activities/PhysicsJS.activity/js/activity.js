@@ -27,6 +27,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 		var newtonMode = false;
 		var resizeTimer = null;
 		var watermode = false;
+		var currentGravity = { x: 0, y: 0.0004 };
 
 
 		if (useragent.indexOf('android') != -1 || useragent.indexOf('iphone') != -1 || useragent.indexOf('ipad') != -1 || useragent.indexOf('ipod') != -1 || useragent.indexOf('mozilla/5.0 (mobile') != -1) {
@@ -102,16 +103,95 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				,restitution: 0.2
 				,cof: 0.8
 			});
-			// Change your WATER object to this:
-			const WATER_PERCENTAGE = 0.60; // 40% of the screen will be water
+
+			
+			
+			const WATER_PERCENTAGE = 0.60; // fraction of screen water covers
 			const WATER = {
-				// This calculates the line where water starts
-				y: innerHeight - (innerHeight * WATER_PERCENTAGE), 
+				enabled: false,
+				region: null,      // 'bottom', 'top', 'left', 'right', 'bottom-right', etc
+				boundary: null,    // {x1,y1,x2,y2} for rectangles, {p1,p2,p3} for triangles
 				density: 0.0011,
-				drag: 0.02,lift: 0.9,
+				drag: 0.02,
 				lift: 0.9,
-				enabled: false
+				
+				updateBoundary: function() {
+					const w = innerWidth, h = innerHeight;
+					const px = currentGravity.x, py = currentGravity.y;
+					// Reset
+					this.boundary = null;
+					this.region = null;
+					
+					if (Math.abs(px) < 0.0001 && py > 0) {
+						this.region = 'bottom';
+						this.boundary = { x1: 0, y1: h*(1-WATER_PERCENTAGE), x2: w, y2: h };
+					} else if (Math.abs(px) < 0.0001 && py < 0) { 
+						this.region = 'top';
+						this.boundary = { x1: 0, y1: 0, x2: w, y2: h*WATER_PERCENTAGE };
+					} else if (px > 0 && Math.abs(py) < 0.0001) { 
+						this.region = 'right';
+						this.boundary = { x1: w*(1-WATER_PERCENTAGE), y1: 0, x2: w, y2: h };
+					} else if (px < 0 && Math.abs(py) < 0.0001) { 
+						this.region = 'left';
+						this.boundary = { x1: 0, y1: 0, x2: w*WATER_PERCENTAGE, y2: h };
+					} else if (px > 0 && py > 0) { 
+						this.region = 'bottom-right';
+						this.boundary = {
+							p1: {x: w*(1-WATER_PERCENTAGE), y: h}, 
+							p2: {x: w, y: h}, 
+							p3: {x: w, y: h*(1-WATER_PERCENTAGE)}
+						};
+					} else if (px < 0 && py > 0) { 
+						this.region = 'bottom-left';
+						this.boundary = {
+							p1: {x: 0, y: h*(1-WATER_PERCENTAGE)}, 
+							p2: {x: 0, y: h}, 
+							p3: {x: w*WATER_PERCENTAGE, y: h}
+						};
+					} else if (px > 0 && py < 0) { 
+						this.region = 'top-right';
+						this.boundary = {
+							p1: {x: w*(1-WATER_PERCENTAGE), y: 0}, 
+							p2: {x: w, y: 0}, 
+							p3: {x: w, y: h*WATER_PERCENTAGE}
+						};
+					} else if (px < 0 && py < 0) { 
+						this.region = 'top-left';
+						this.boundary = {
+							p1: {x: 0, y: 0}, 
+							p2: {x: w*WATER_PERCENTAGE, y: 0}, 
+							p3: {x: 0, y: h*WATER_PERCENTAGE}
+						};
+					}
+					const viewport = document.getElementById('viewport');
+					if (viewport && this.region) {
+						viewport.setAttribute('data-water-region', this.region);
+					}
+				},
+				isInside: function(body) {
+					if (!this.boundary) return false;
+					const x = body.state.pos.x;
+					const y = body.state.pos.y;
+					// Rectangle check
+					if (this.boundary.x1 !== undefined) {
+						return x >= this.boundary.x1 && x <= this.boundary.x2 &&
+						y >= this.boundary.y1 && y <= this.boundary.y2;
+					}
+					// Triangle check using barycentric coordinates
+					if (this.boundary.p1) {
+						const {p1, p2, p3} = this.boundary;
+						const denom = (p2.y - p3.y)*(p1.x - p3.x) + (p3.x - p2.x)*(p1.y - p3.y);
+						const a = ((p2.y - p3.y)*(x - p3.x) + (p3.x - p2.x)*(y - p3.y)) / denom;
+						const b = ((p3.y - p1.y)*(x - p3.x) + (p1.x - p3.x)*(y - p3.y)) / denom;
+						const c = 1 - a - b;
+						return a >= 0 && b >= 0 && c >= 0;
+					}
+					return false;
+				}
 			};
+
+
+
 
 			
 
@@ -159,7 +239,8 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				}
 				return DENSITY_MAP.MEDIUM; 
 				}
-
+			
+				
 
 
 			var waterBehavior = Physics.behavior('water', function (parent) {
@@ -167,10 +248,14 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					behave: function (data) {
 						if (!WATER.enabled) return;
 						var bodies = data.bodies;
-						const gravityAcc = 0.0004; 
+						const gravityAccX = currentGravity.x || 0;
+						const gravityAccY = currentGravity.y || 0; 
+						const g=0.0004;
+						const gravityAcc = Math.sqrt(gravityAccX * gravityAccX + gravityAccY * gravityAccY);
+
 						for (var i = 0; i < bodies.length; i++) {
 							var body = bodies[i];
-							if (body.state.pos.y < WATER.y) continue;
+							if (!WATER.isInside(body)) continue;
 							body.density = getDensityBySize(body);
 							const v = body.state.vel;
 							// Dynamic Drag
@@ -182,19 +267,32 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 							// Archimedes Buoyancy Buoyancy Force = Weight of displaced water
 							// Formula: F = -(Density_Water / Density_Body) * Weight_of_Body
 							const displacementRatio = WATER.density / body.density;
-							const weight = body.mass * gravityAcc;
-							const buoyancyForceY = -(displacementRatio * weight);
+							const weight = body.mass * g;
+							let buoyancyForceX=0;
+							let buoyancyForceY=0;
+							if(gravityAccX > 0){
+								buoyancyForceX = -(displacementRatio * weight);
+							} else if(gravityAccX < 0){ 
+								buoyancyForceX = (displacementRatio * weight);
+							}
+							if(gravityAccY > 0){
+								buoyancyForceY = -(displacementRatio * weight);
+							} else if(gravityAccY < 0){
+								buoyancyForceY = (displacementRatio * weight);
+							}
 							body.applyForce({
-								x: 0,
+								x: buoyancyForceX * WATER.lift,
 								y: buoyancyForceY * WATER.lift
 							});
 							// If density is higher than water, adding a little extra downward push
 							if (body.density > WATER.density) {
-								body.applyForce({ x: 0, y: 0.001 * body.mass });
+								body.applyForce({ x: gravityAccX*body.mass*0.2, y:  gravityAccY*body.mass*0.2 });
 							}
 							body.state.angular.vel *= 0.95;
 						}
+						
 					}
+					
 				};
 			});
 
@@ -213,7 +311,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					edgeBounce.setAABB(viewportBounds);
 					innerWidth = body.offsetWidth;
 					innerHeight = body.offsetHeight;
-					WATER.y = innerHeight - (innerHeight * WATER_PERCENTAGE);
+					WATER.updateBoundary();
 					zoom();
 				}, 500);
 
@@ -312,13 +410,14 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					world.add(gravity);
 					world.add(waterBehavior);
         			waterButton.classList.add('active');
-					gravityButton.disabled = true;
+					gravityButton.disabled = false;
+					WATER.updateBoundary();
         			document.getElementById('viewport').classList.add('water-mode');
     			} else {
 					world.remove(waterBehavior);
 					WATER.enabled = false;
         			waterButton.classList.remove('active');
-					gravityButton.disabled = false;
+					gravityButton.disabled = true;
         			document.getElementById('viewport').classList.remove('water-mode');
     			}
 			}, true);
@@ -624,6 +723,9 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				acc = { x: acc.x * reverse, y: acc.y * reverse };
 				document.getElementById("gravity-button").style.backgroundImage = "url(icons/gravity"+(reverse == -1 ? (value+4)%8 : value)+".svg)";
 				gravity.setAcceleration(acc);
+				currentGravity.x = acc.x;
+				currentGravity.y = acc.y;
+				WATER.updateBoundary();
 				world.wakeUpAll();
 				gravityMode = value;
 			}
