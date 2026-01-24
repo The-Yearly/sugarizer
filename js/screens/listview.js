@@ -135,8 +135,10 @@ const ListView = {
 
 	methods: {
 
-		   getUser() {
-			   sugarizer.modules.user.get().then((user) => {
+		   async getUser() {
+			   // Keep promise-style error handling while keeping the function async
+			   // Return the underlying promise so callers can await if needed.
+			   return sugarizer.modules.user.get().then((user) => {
 				   this.buddycolor = user.color;
 				   this.scrollbar_session_value = user.scrollValue || 0;
 				   sugarizer.modules.activities.updateFavorites(user.favorites);
@@ -146,6 +148,7 @@ const ListView = {
 				   this.favactivities = sugarizer.modules.activities.getFavoritesName();
 				   this.activitiesLoaded = true;
 			   }, (error) => {
+				   // preserve original rejection semantics
 				   throw new Error('Unable to get the user, error ' + error);
 			   });
 		   },
