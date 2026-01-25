@@ -417,7 +417,7 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					world.remove(waterBehavior);
 					WATER.enabled = false;
         			waterButton.classList.remove('active');
-					gravityButton.disabled = true;
+					gravityButton.disabled = false;
         			document.getElementById('viewport').classList.remove('water-mode');
     			}
 			}, true);
