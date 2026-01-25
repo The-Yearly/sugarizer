@@ -117,6 +117,9 @@ body {
     z-index: 2;
 }
 
+#main-toolbar{
+  z-index: 3;
+}
 
 #main-toolbar #activity-button {
   background-image: url(../activity/activity-icon.svg);
