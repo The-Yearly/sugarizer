@@ -3,78 +3,77 @@
  */
 
 const ListView = {
-	name: 'ListView',
+name: 'ListView',
 	template: `<transition-group name="fade" appear @after-enter="restoreScroll">
-					<div class="listview" v-for="(activity, index) in sortedActivities" :key="activity.id">
-						<div class="listview_left" >
-							<icon
-								:ref="'star' + activity.id"
-								:id="'star' + activity.id"
-								svgfile="./icons/star.svg"
-								:color="getStarColor(activity)"
-								:size="22"
-								:x=10
-								:y=0
-								@click="toggleFavorite(activity)"
-								style="padding: 10px;"
+				<div class="listview" v-for="(activity, index) in sortedActivities" :key="activity.id">
+					<div class="listview_left" >
+						<icon
+							:ref="'star' + activity.id"
+							:id="'star' + activity.id"
+							svgfile="./icons/star.svg"
+							:color="getStarColor(activity)"
+							:size="22"
+							:x=10
+							:y=0
+							@click="toggleFavorite(activity)"
+							style="padding: 10px;"
+						></icon>
+						<div style="width:44px">
+							<icon 
+								:id=activity.id
+								:svgfile="activity.directory + '/' + activity.icon"
+								:size="40"
+								isNative="true"
+								v-on:mouseover="showPopupTimer($event)"
+								v-on:mouseleave="removePopupTimer($event)"
+								@click="launchActivity(activity)"
+								style="padding: 2px;"
 							></icon>
-							<div style="width:44px">
-								<icon 
-									:id=activity.id
-									:svgfile="activity.directory + '/' + activity.icon"
-									:size="40"
-									isNative="true"
-									v-on:mouseover="showPopupTimer($event)"
-									v-on:mouseleave="removePopupTimer($event)"
-									@click="launchActivity(activity)"
-									style="padding: 2px;"
-								></icon>
-								</div>
-							
-							<div class="activity-name">{{ activity.name }}</div>
 						</div>
-						<div class="activity-version">Version {{ activity.version }}</div>
+						<div class="activity-name">{{ activity.name }}</div>
+					</div>
+					<div class="activity-version">Version {{ activity.version }}</div>
+					<icon 
+						:id="'help' + activity.id"
+						svgfile="./icons/help-rev.svg"
+						:color="256"
+						:size="44"
+						isNative="true"
+						@click="startActivitiesTutorial(index)"
+					></icon>
+				</div>
+			</transition-group>
+			<div v-if="activities.length === 0">
+				<div v-if="activitiesLoaded" class="no-matching-activities">
+					<div>
 						<icon 
-							:id="'help' + activity.id"
-							svgfile="./icons/help-rev.svg"
-							:color="256"
+							svgfile="./icons/entry-search.svg"
+							:color="768"
 							:size="44"
 							isNative="true"
-							@click="startActivitiesTutorial(index)"
 						></icon>
 					</div>
-				</transition-group>
-					<div v-if="activities.length === 0">
-						<div v-if="activitiesLoaded" class="no-matching-activities">
-							<div>
-								<icon 
-									svgfile="./icons/entry-search.svg"
-									:color="768"
-									:size="44"
-									isNative="true"
-								></icon>
-							</div>
-							<div> {{ $t("NoMatchingActivities") }} </div>
-							<icon-button
-								id="clear-search"
-								svgfile="./icons/dialog-cancel.svg"
-								:size="20"
-								:color="1024"
-								:text="$t('ClearSearch')"
-								@click="clearSearchField"
-							></icon-button>
-						</div>
-					</div>
-					<popup 
-						ref="popup" 
-						v-bind:item="popup"
-					v-on:mouseout="removePopupTimer($event)"
-						v-on:itemis-clicked="itemisClicked($event)"
-					></popup>
-				<div v-if="!activitiesLoaded" class="loading-activities-message">
-					<img src="./images/spinner-light.gif">
+					<div> {{ $t("NoMatchingActivities") }} </div>
+					<icon-button
+						id="clear-search"
+						svgfile="./icons/dialog-cancel.svg"
+						:size="20"
+						:color="1024"
+						:text="$t('ClearSearch')"
+						@click="clearSearchField"
+					></icon-button>
 				</div>
-				`,
+			</div>
+			<popup 
+				ref="popup" 
+				v-bind:item="popup"
+				v-on:mouseout="removePopupTimer($event)"
+				v-on:itemis-clicked="itemisClicked($event)"
+			></popup>
+			<div v-if="!activitiesLoaded" class="loading-activities-message">
+				<img src="./images/spinner-light.gif">
+			</div>
+		`,
 
 	components: {
 		'icon': Icon,
