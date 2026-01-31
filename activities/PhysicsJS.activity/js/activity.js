@@ -44,6 +44,8 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 		var body = document.getElementById("body");
 		var innerWidth = body.offsetWidth;
 		var innerHeight = body.offsetHeight;
+		var prevWidth = innerWidth;
+		var prevHeight = innerHeight;
 		var toolbarHeight = 55;
 		var outerWidth = 0; // Use to determine if items could disappear, could be 300;
 		var init = false;
@@ -299,24 +301,44 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 
 
 			// resize events
+			// Optimized Real-Time Resize
 			window.addEventListener('resize', function () {
-				if (resizeTimer) {
-					clearTimeout(resizeTimer);
-				}
-				resizerTimer = setTimeout(function() {
-					renderer.resize(body.offsetWidth,body.offsetHeight);
-					// as of 0.7.0 the renderer will auto resize... so we just take the values from the renderer
-					viewportBounds = Physics.aabb(0-outerWidth, toolbarHeight, renderer.width+outerWidth, renderer.height);
-					// update the boundaries
-					edgeBounce.setAABB(viewportBounds);
-					innerWidth = body.offsetWidth;
-					innerHeight = body.offsetHeight;
-					WATER.updateBoundary();
-					zoom();
-				}, 500);
+				const newWidth = body.offsetWidth;
+				const newHeight = body.offsetHeight;
+				// 1. Calculate the instantaneous scale ratio
+				const scaleX = newWidth / prevWidth;
+				const scaleY = newHeight / prevHeight;
+				// 2. Update Physics Bounds immediately
+				viewportBounds = Physics.aabb(0 - outerWidth, toolbarHeight, newWidth + outerWidth, newHeight);
+				edgeBounce.setAABB(viewportBounds);
+				// 3. Update all bodies smoothly
+				var physicsBodies = world.getBodies();
+				physicsBodies.forEach(function(b) {
+					// Update positions based on the change ratio
+					b.state.pos.x *= scaleX;
+					b.state.pos.y *= scaleY;
+					// Scale velocity so they don't lose or gain momentum unnaturally
+					b.state.vel.x *= scaleX;
+					b.state.vel.y *= scaleY;
+					b.recalc(); 
+				});
 
-			}, true);
+    // 4. Update the renderer immediately for visual feedback
+    if (renderer) {
+        renderer.resize(newWidth, newHeight);
+    }
 
+    // 5. Update global state for the NEXT resize event
+    innerWidth = newWidth;
+    innerHeight = newHeight;
+    prevWidth = newWidth;
+    prevHeight = newHeight;
+
+    // Update water and force a render frame
+    WATER.updateBoundary();
+    world.wakeUpAll();
+    world.render(); 
+}, true);
 			// handle toolbar buttons
 			document.getElementById("box-button").addEventListener('click', function (e) {
 				currentType = 1;
@@ -601,7 +623,10 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 
 				// Save to datastore
 				var datastoreObject = activity.getDatastoreObject();
-				var jsonData = JSON.stringify({world: objects});
+				var jsonData = JSON.stringify({
+					world: objects
+					,watermode: watermode
+				});
 				datastoreObject.setDataAsText(jsonData);
 				datastoreObject.save(callback);
 			}
@@ -638,6 +663,22 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 						var newBody = deserializeObject(objects[i]);
 						world.add(newBody);
 					}
+					if (data.watermode) {
+						watermode = true;
+						WATER.enabled = true;
+						world.add(waterBehavior);
+						document.getElementById('viewport').classList.add('water-mode');
+						WATER.updateBoundary();
+						waterButton.classList.add('active');
+						gravityButton.disabled = false;
+					} else {
+						watermode = false;
+						WATER.enabled = false;
+						document.getElementById('viewport').classList.remove('water-mode');
+						waterButton.classList.remove('active');
+					}
+
+        
 				});
 			}
 
