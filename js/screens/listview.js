@@ -6,41 +6,41 @@ const ListView = {
 name: 'ListView',
 	template: `<transition-group name="fade" appear @after-enter="restoreScroll">
 				<div class="listview" v-for="(activity, index) in sortedActivities" :key="activity.id">
-					<div class="listview_left" >
-						<icon
-							:ref="'star' + activity.id"
-							:id="'star' + activity.id"
-							svgfile="./icons/star.svg"
-							:color="getStarColor(activity)"
-							:size="22"
-							:x=10
-							:y=0
-							@click="toggleFavorite(activity)"
-							style="padding: 10px;"
-						></icon>
-						<div style="width:44px">
-							<icon 
-								:id=activity.id
-								:svgfile="activity.directory + '/' + activity.icon"
-								:size="40"
-								isNative="true"
-								v-on:mouseover="showPopupTimer($event)"
-								v-on:mouseleave="removePopupTimer($event)"
-								@click="launchActivity(activity)"
-								style="padding: 2px;"
-							></icon>
-						</div>
-						<div class="activity-name">{{ activity.name }}</div>
-					</div>
-					<div class="activity-version">Version {{ activity.version }}</div>
-					<icon 
-						:id="'help' + activity.id"
-						svgfile="./icons/help-rev.svg"
-						:color="256"
-						:size="44"
-						isNative="true"
-						@click="startActivitiesTutorial(index)"
+				<div class="listview_left" >
+					<icon
+						:ref="'star' + activity.id"
+						:id="'star' + activity.id"
+						svgfile="./icons/star.svg"
+						:color="getStarColor(activity)"
+						:size="22"
+						:x=10
+						:y=0
+						@click="toggleFavorite(activity)"
+						style="padding: 10px;"
 					></icon>
+					<div style="width:44px">
+						<icon 
+							:id=activity.id
+							:svgfile="activity.directory + '/' + activity.icon"
+							:size="40"
+							isNative="true"
+							v-on:mouseover="showPopupTimer($event)"
+							v-on:mouseleave="removePopupTimer($event)"
+							@click="launchActivity(activity)"
+							style="padding: 2px;"
+						></icon>
+					</div>
+					<div class="activity-name">{{ activity.name }}</div>
+				</div>
+				<div class="activity-version">Version {{ activity.version }}</div>
+				<icon 
+					:id="'help' + activity.id"
+					svgfile="./icons/help-rev.svg"
+					:color="256"
+					:size="44"
+					isNative="true"
+					@click="startActivitiesTutorial(index)"
+				></icon>
 				</div>
 			</transition-group>
 			<div v-if="activities.length === 0">
