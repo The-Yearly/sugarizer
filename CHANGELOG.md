@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Human Body activity
 - Stickman activity
 - Add "Global Time" feature to Clock activity with timezone selection #1825
+- Add Water mode in Physics activity #1863
 
 ### Changed
 - Rewrite of Sugarizer Core using Vue.js
