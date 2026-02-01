@@ -323,22 +323,20 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 					b.recalc(); 
 				});
 
-    // 4. Update the renderer immediately for visual feedback
-    if (renderer) {
-        renderer.resize(newWidth, newHeight);
-    }
-
-    // 5. Update global state for the NEXT resize event
-    innerWidth = newWidth;
-    innerHeight = newHeight;
-    prevWidth = newWidth;
-    prevHeight = newHeight;
-
-    // Update water and force a render frame
-    WATER.updateBoundary();
-    world.wakeUpAll();
-    world.render(); 
-}, true);
+				// 4. Update the renderer immediately for visual feedback
+				if (renderer) {
+					renderer.resize(newWidth, newHeight);
+				}
+				// 5. Update global state for the NEXT resize event
+				innerWidth = newWidth;
+				innerHeight = newHeight;
+				prevWidth = newWidth;
+				prevHeight = newHeight;
+				// Update water and force a render frame
+				WATER.updateBoundary();
+				world.wakeUpAll();
+				world.render(); 
+			}, true);
 			// handle toolbar buttons
 			document.getElementById("box-button").addEventListener('click', function (e) {
 				currentType = 1;
@@ -423,8 +421,8 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 			}, true);
 			
 			waterButton.addEventListener('click', function () {
-    			watermode = !watermode;
-    			if (watermode) {
+				watermode = !watermode;
+				if (watermode) {
 					WATER.enabled = true;
 					newtonMode = false;
 					world.remove(newton);
@@ -677,8 +675,6 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 						document.getElementById('viewport').classList.remove('water-mode');
 						waterButton.classList.remove('active');
 					}
-
-        
 				});
 			}
 
@@ -875,6 +871,5 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env"], functi
 				}
 			});
 		});
-    });
-
+	});
 });
