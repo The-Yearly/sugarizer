@@ -51,7 +51,9 @@ function runactivity(act,doc,colors,env,datastore,sizepalette,tutorial){
 		function resizeCanvas() {
 			canvas.width = window.innerWidth;
 			canvas.height = window.innerHeight-(+document.getElementById("main-toolbar").style.opacity ? 55 : 0);
-			g.initialiseFromArray();
+			stage.removeAllChildren();
+			g.calculateDimensions();
+			g.initDots(); 
 		}
 		var solveButton = doc.getElementById("solve-button");
 		solveButton.addEventListener('click', function (a) {
