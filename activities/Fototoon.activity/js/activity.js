@@ -151,8 +151,11 @@ define(["sugar-web/activity/activity","sugar-web/datastore","sugar-web/env","tex
 
             // clone the data to remove the images
             var dataWithoutImages = {}
-            dataWithoutImages['version'] = toonModel.getData()['version'];
-            dataWithoutImages['boxs'] = toonModel.getData()['boxs'];
+            var modelData = toonModel.getData();
+            dataWithoutImages['version'] = modelData['version'];
+            dataWithoutImages['boxs'] = modelData['boxs'];
+            dataWithoutImages['canvas_width'] = modelData['canvas_width'];
+            dataWithoutImages['canvas_height'] = modelData['canvas_height'];
 
             dataImages = {};
             for(var key in toonModel.getData()['images']) {
