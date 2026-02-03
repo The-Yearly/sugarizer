@@ -59,6 +59,13 @@ define([], function() {
 		return settings && settings.sharedJournal ? settings.sharedJournal : null;
 	}
 
+	// Validate username - returns true if valid, false if contains HTML characters
+	let validateName = function(name) {
+		// Check for HTML special characters that could enable XSS
+		const htmlChars = /[<>&"']/;
+		return !htmlChars.test(name);
+	}
+
 	// Check if user exists
 	user.checkIfExists = function(baseurl, name) {
 		return new Promise((resolve, reject) => {
@@ -89,6 +96,10 @@ define([], function() {
 
 	// Signup user
 	user.signup = async function(baseurl, name, password, color) {
+		// Validate username - reject if contains HTML characters
+		if (!validateName(name)) {
+			throw new Error("Invalid username: contains forbidden characters");
+		}
 		const signupData = {
 			"name": `${name}`,
 			"password": `${password}`,
@@ -187,6 +198,11 @@ define([], function() {
 	// Update user information
 	user.update = function(data, dataLocal = null) {
 		return new Promise((resolve, reject) => {
+			// Validate username if being updated - reject if contains HTML characters
+			if (data.name && !validateName(data.name)) {
+				reject(new Error("Invalid username: contains forbidden characters"));
+				return;
+			}
 			// update the user locally
 			sugarizer.modules.settings.setUser(dataLocal ? dataLocal : data);
 

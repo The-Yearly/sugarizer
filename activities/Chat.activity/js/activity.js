@@ -132,16 +132,15 @@ const app = Vue.createApp({
 			const distanceFromBottom = this.$refs.msgContainer.scrollHeight - this.$refs.msgContainer.scrollTop - this.$refs.msgContainer.clientHeight;
 			if (distanceFromBottom < 100) this.scrollLatestMsg();
 			else {
-				const escapedName = this.escapeHTML(msgRecieved.userName);
 				switch (msgRecieved.msg) {
 					case 1:
-						this.$refs.SugarPopup.log(`${escapedName} ${this.l10n.stringJoin} ${this.l10n.stringChat}`)
+						this.$refs.SugarPopup.log(`${msgRecieved.userName} ${this.l10n.stringJoin} ${this.l10n.stringChat}`)
 						break;
 					case -1:
-						this.$refs.SugarPopup.log(`${escapedName} ${this.l10n.stringLeave} ${this.l10n.stringChat}`)
+						this.$refs.SugarPopup.log(`${msgRecieved.userName} ${this.l10n.stringLeave} ${this.l10n.stringChat}`)
 						break;
 					default:
-						this.$refs.SugarPopup.log(this.l10n.stringNewMsgFrom + " " + escapedName)
+						this.$refs.SugarPopup.log(this.l10n.stringNewMsgFrom + " " + msgRecieved.userName)
 						break;
 				}
 			}
@@ -212,7 +211,7 @@ const app = Vue.createApp({
 			return this.messages[idx].type === "status" || !prevMsg || prevMsg.type === "status" || prevMsg.userId !== this.messages[idx].userId;
 		},
 
-		onJournalNewInstance() { },
+		onJournalNewInstance() {},
 		onJournalDataLoaded(data, metadata) {
 			this.messages = data.messages;
 			this.scrollLatestMsg();
@@ -270,18 +269,6 @@ const app = Vue.createApp({
 
 		onStop() {
 			this.$refs.SugarJournal.saveData({ messages: this.messages });
-		},
-
-		escapeHTML(str) {
-			return str.replace(/[&<>"']/g, function (m) {
-				return {
-					"&": "&amp;",
-					"<": "&lt;",
-					">": "&gt;",
-					'"': "&quot;",
-					"'": "&#39;",
-				}[m];
-			});
 		},
 	},
 });

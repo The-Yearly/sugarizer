@@ -186,6 +186,11 @@ const AboutMe = {
 				)
 				.then(() => {
 					sugarizer.reload();
+				}, (error) => {
+					if (error.message && error.message.includes("Invalid username")) {
+						this.warning.show = true;
+						this.warning.text = this.$t("InvalidName");
+					}
 				});
 		},
 

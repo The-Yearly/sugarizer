@@ -371,6 +371,11 @@ const LoginScreen = {
 					this.login(this.details.serverAddress, this.details.name, this.details.password);
 				}, (error) => {
 					console.log(error);
+					if (error.message && error.message.includes("Invalid username")) {
+						this.warning.show = true;
+						this.warning.text = this.$t("InvalidName");
+						this.isLoading = false;
+					}
 				});
 			}
 

@@ -40,16 +40,7 @@ define(["sugar-web/graphics/palette","sugar-web/env","sugar-web/activity/activit
 	function generateItemForUser(user) {
 		var element = document.createElement('li');
 		element.setAttribute('id', user.networkId);
-		var img = document.createElement('img');
-		img.style.height = '30px';
-		img.src = generateXOLogoWithColor(user.colorvalue);
-		element.appendChild(img);
-		var div = document.createElement('div');
-		div.style.display = 'inline';
-		div.style.verticalAlign = 'super';
-		div.style.marginLeft = '5px';
-		div.textContent = user.name;
-		element.appendChild(div);
+		element.innerHTML = "<img style='height:30px;' src='" + generateXOLogoWithColor(user.colorvalue) + "'><div style='display:inline;vertical-align:super;margin-left:5px;'>" + user.name + "</div>";
 		return element;
 	}
 	var oldUserChanged = Object.getPrototypeOf(presence).onSharedActivityUserChanged;
