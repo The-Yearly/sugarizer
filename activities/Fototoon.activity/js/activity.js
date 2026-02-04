@@ -41,6 +41,24 @@ define(["sugar-web/activity/activity","sugar-web/datastore","sugar-web/env","tex
         mainCanvas.width = mainCanvas.height * 4 / 3;
         mainCanvas.style.left = ((window.innerWidth - mainCanvas.width) / 2) + "px";
 
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            // Calculate new dimensions
+            var newHeight = window.innerHeight - sugarCellSize - 5;
+            var newWidth = newHeight * 4 / 3;
+
+            // Round to prevent sub-pixel scaling issues with canvas
+            newWidth = Math.floor(newWidth);
+            newHeight = Math.floor(newHeight);
+
+            // Center the canvas
+            mainCanvas.style.left = ((window.innerWidth - newWidth) / 2) + "px";
+
+            // Call the resize method which preserves state
+            toonModel.resize(newWidth, newHeight);
+        });
+
+
         var previousButton = document.getElementById("previous-button");
 		previousButton.title = _("Previous");
         previousButton.addEventListener('click', function (e) {
@@ -151,8 +169,11 @@ define(["sugar-web/activity/activity","sugar-web/datastore","sugar-web/env","tex
 
             // clone the data to remove the images
             var dataWithoutImages = {}
-            dataWithoutImages['version'] = toonModel.getData()['version'];
-            dataWithoutImages['boxs'] = toonModel.getData()['boxs'];
+            var modelData = toonModel.getData();
+            dataWithoutImages['version'] = modelData['version'];
+            dataWithoutImages['boxs'] = modelData['boxs'];
+            dataWithoutImages['canvas_width'] = modelData['canvas_width'];
+            dataWithoutImages['canvas_height'] = modelData['canvas_height'];
 
             dataImages = {};
             for(var key in toonModel.getData()['images']) {
