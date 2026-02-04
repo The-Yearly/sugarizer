@@ -4,7 +4,7 @@
 
 const ListView = {
 	name: 'ListView',
-	template: `<transition-group name="fade" appear>
+	template: `<transition-group name="fade" appear @after-enter="restoreScroll">
 					<div class="listview" v-for="(activity, index) in sortedActivities" :key="activity.id">
 						<div class="listview_left" >
 							<icon
@@ -94,6 +94,8 @@ const ListView = {
 			constant: {
 				timerPopupDuration: 1000,
 			},
+			scrollRestored: false, 
+			scrollbar_session_value: 0, // Saved scroll position from user preferences
 		}
 	},
 
@@ -101,6 +103,19 @@ const ListView = {
 
 	mounted() {
 		this.getUser();
+		// Setup scroll event listener to save scroll position 
+		const container = document.getElementById('canvas');
+		if (container) {
+			container.addEventListener('scroll', this.onScroll);
+		}
+	},
+
+	beforeUnmount() {
+		// Remove scroll event listener
+		const container = document.getElementById('canvas');
+		if (container) {
+			container.removeEventListener('scroll', this.onScroll);
+		}
 	},
 
 	beforeUnmount() {
@@ -125,17 +140,31 @@ const ListView = {
 
 	methods: {
 		async getUser() {
-			sugarizer.modules.user.get().then((user) => {
+			// Keep promise-style error handling while keeping the function async
+			// Return the underlying promise so callers can await if needed.
+			return sugarizer.modules.user.get().then((user) => {
 				this.buddycolor = user.color;
+				this.scrollbar_session_value = user.scrollValue || 0;
 				sugarizer.modules.activities.updateFavorites(user.favorites);
-				this.activities = sugarizer.modules.activities.get().filter((activity) => {
-					return activity.name.toUpperCase().includes(this.filter.toUpperCase())
-				});
+				this.activities = sugarizer.modules.activities.get().filter(a =>
+					a.name.toUpperCase().includes(this.filter.toUpperCase())
+				);
 				this.favactivities = sugarizer.modules.activities.getFavoritesName();
 				this.activitiesLoaded = true;
 			}, (error) => {
-				throw new Error('Unable to load the user, error ' + error);
+				// preserve original rejection semantics
+				throw new Error('Unable to get the user, error ' + error);
 			});
+		},
+
+		restoreScroll() {
+			if (this.scrollRestored) return;
+			this.scrollRestored = true;
+
+			const container = document.getElementById('canvas');
+			if (container && this.scrollbar_session_value > 0) {
+				container.scrollTop = this.scrollbar_session_value;
+			}
 		},
 
 		async toggleFavorite(activity) {
@@ -182,7 +211,23 @@ const ListView = {
 		},
 
 		launchActivity(activity) {
+			// Save scroll position to user preferences before launching activity
+			const container = document.getElementById('canvas');
+			if (container) {
+				const scrollPos = container.scrollTop;
+				sugarizer.modules.user.update({ scrollValue: scrollPos });
+			}
 			sugarizer.modules.activities.runActivity(activity, null, activity.title, undefined, false, 'list_view');
+		},
+
+		onScroll(event) {
+			const container = event.target;
+			const scrollPos = Math.ceil(container.scrollTop);
+			const maxScroll = Math.ceil(container.scrollHeight - container.clientHeight);
+
+			sugarizer.modules.user.update({
+				scrollValue: Math.min(scrollPos, maxScroll)
+			});
 		},
 
 		computePopup() {
