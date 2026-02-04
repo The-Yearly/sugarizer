@@ -308,6 +308,27 @@ define(["easel","sugar-web/datastore","sugar-web/env","l10n","humane"], function
             this._data['previews'] = [];
             this.init();
         };
+        this.resize = function (width, height) {
+            if (this._canvas.width === width && this._canvas.height === height) {
+                return;
+            }
+            // Capture current state from screen before scaling to assume continuity
+            this.updateData();
+
+            var scale = width / this._canvas.width;
+
+            // Update canvas dimensions
+            this._canvas.width = width;
+            this._canvas.height = height;
+
+            // Update underlying data model
+            this._scaleData(this._data, scale);
+            this._data['canvas_width'] = width;
+            this._data['canvas_height'] = height;
+
+            // re-init current box
+            this.comicBox.init(this._data['boxs'][this.activeBox], this._data['images'], (this.activeBox > 0));
+        };
 
         this.showWait = function () {
             this._waitMsg.style.display = 'block';
