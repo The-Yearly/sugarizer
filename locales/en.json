@@ -136,6 +136,7 @@
 	"ChoosePassword": "Choose at least {{min}} images:",
 	"UserLoginInvalid": "Invalid user name or images",
 	"UserAlreadyExist": "User already exist",
+	"InvalidName": "Invalid name",
 	"ServerError": "Server error code {{code}}",
 	"ServerNotSet": "Your server is not set",
 	"AndroidSettings": "Android Settings",
