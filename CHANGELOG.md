@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Use of '=' instead of '==' in if else statement in Physics game activity.js #1870
 - Camera remains active when toggling off in QRCode activity (Web/Desktop) #1911
 - Delete key deleted wrong character in Calculator #1935
+- Fototoon don't handle window resize #559
 
 ## [1.9.0] - 2025-03-25
 ### Added
