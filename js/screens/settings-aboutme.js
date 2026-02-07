@@ -201,6 +201,13 @@ const AboutMe = {
 				this.close('about_me');
 				return;
 			}
+			// Validate username - check for HTML characters
+			const htmlChars = /[<>&"']/;
+			if (htmlChars.test(this.name)) {
+				this.warning.show = true;
+				this.warning.text = this.$t('InvalidName');
+				return;
+			}
 			if (nameChanged && await sugarizer.modules.user.checkIfExists(null, this.name)) {
 				this.warning.show = true;
 				this.warning.text = this.$t('UserAlreadyExist');
