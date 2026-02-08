@@ -42,7 +42,9 @@ function initGui() {
 
   /* Scrolling top prevent any overflow */
   window.scrollTo(0, -1000);
+  PaintApp.clearCanvas();
 
+  
   /* Created a World Canvas As Big As the screen to Keep track of Drawings outside the Window When Resized*/
   PaintApp.prevScreenWidth=parseInt(window.innerWidth);
   PaintApp.prevScreenHeight=parseInt(window.innerHeight) - 55;
