@@ -186,6 +186,11 @@ const AboutMe = {
 				)
 				.then(() => {
 					sugarizer.reload();
+				}, (error) => {
+					if (error.message && error.message.includes("Invalid username")) {
+						this.warning.show = true;
+						this.warning.text = this.$t("InvalidName");
+					}
 				});
 		},
 
@@ -194,6 +199,13 @@ const AboutMe = {
 			const nameChanged = this.nameChanged();
 			if (!nameChanged && this.currentcolor == this.buddycolor) {
 				this.close('about_me');
+				return;
+			}
+			// Validate username - check for HTML characters
+			const htmlChars = /[<>&"']/;
+			if (htmlChars.test(this.name)) {
+				this.warning.show = true;
+				this.warning.text = this.$t('InvalidName');
 				return;
 			}
 			if (nameChanged && await sugarizer.modules.user.checkIfExists(null, this.name)) {

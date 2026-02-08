@@ -266,6 +266,14 @@ const LoginScreen = {
 				}
 
 				else if (this.index.currentIndex === 1 && this.details.name.length > 0) { // name
+					// Validate username - check for HTML characters
+					const htmlChars = /[<>&"']/;
+					if (htmlChars.test(this.details.name)) {
+						this.warning.show = true;
+						this.warning.text = this.$t("InvalidName");
+						this.isLoading = false;
+						return;
+					}
 					if (sugarizer.getClientType() === sugarizer.constant.webAppType || this.details.serverAddress.length > 0) {
 						const info = await sugarizer.modules.server.getServerInformation(this.details.serverAddress);
 						this.consentNeed = info.options['consent-need'];
@@ -371,6 +379,11 @@ const LoginScreen = {
 					this.login(this.details.serverAddress, this.details.name, this.details.password);
 				}, (error) => {
 					console.log(error);
+					if (error.message && error.message.includes("Invalid username")) {
+						this.warning.show = true;
+						this.warning.text = this.$t("InvalidName");
+						this.isLoading = false;
+					}
 				});
 			}
 
