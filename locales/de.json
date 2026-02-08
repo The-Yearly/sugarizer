@@ -135,6 +135,7 @@
 	"ChoosePassword": "Wähle zumindest {{min}} Bilder:",
 	"UserLoginInvalid": "Ungültiger Benutzername oder Bilder",
 	"UserAlreadyExist": "Benutzer existiert bereits",
+	"InvalidName": "Ungültiger Benutzername",
 	"ServerError": "Server error code {{code}}",
 	"ClickToColor": "Klicke um die Farbe zu setzen:",
 	"ServerNotSet": "Dein Server ist noch nicht eingetragen",
