@@ -50,8 +50,8 @@ function initGui() {
   PaintApp.prevScreenHeight=parseInt(window.innerHeight) - 55;
 
   const worldCanvas = document.createElement('canvas');
-  worldCanvas.width = 2000
-  worldCanvas.height = 2000
+  worldCanvas.width = screen.width
+  worldCanvas.height = screen.height
   PaintApp.data.worldCanvas = worldCanvas;
 
 }

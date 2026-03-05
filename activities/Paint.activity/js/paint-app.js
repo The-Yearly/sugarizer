@@ -54,7 +54,6 @@ define([], function() {
     var img = new Image();
     var imgSrc = PaintApp.data.history.undo[PaintApp.data.history.undo.length - 2];
     var imgSrc2 = PaintApp.data.history.undo[PaintApp.data.history.undo.length - 1];
-    console.log(imgSrc,"High Way to hell")
     /* Loading of the image stored in history */
     img.onload = function() {
       worldCtx.save();
@@ -181,7 +180,6 @@ define([], function() {
     try {
       
       var image = canvas.toDataURL();
-      console.log(image,canvas,"Premamam")
     } catch (e) {}
 
     /* If doing a new action, setting redo to an empty list */

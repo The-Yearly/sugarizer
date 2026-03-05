@@ -93,10 +93,14 @@ define(["sugar-web/activity/activity","tutorial","l10n","sugar-web/env","activit
           return;
         }
         var data = JSON.parse(jsonData);
+        console.log(data,"Hi IM here ")
+        PaintApp.data.worldCanvas.width=data.width
+        PaintApp.data.worldCanvas.height=data.height
+        PaintApp.data.worldCanvas.style.width = data.width+"px";
+        PaintApp.data.worldCanvas.style.height = data.height+"px";
         PaintApp.clearCanvas();
         img = new Image();
         img.onload = function() {
-         
           PaintApp.data.worldCanvas.getContext('2d').drawImage(img, 0, 0, data.width, data.height);
           PaintApp.elements.canvas.getContext('2d').drawImage(PaintApp.data.worldCanvas,0,0,window.innerWidth,window.innerHeight-55,0,0,window.innerWidth,window.innerHeight-55);
           PaintApp.saveCanvas();
